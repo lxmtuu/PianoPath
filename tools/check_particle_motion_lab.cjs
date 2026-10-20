@@ -205,7 +205,12 @@ console.log('v2 features');
 }
 
 // ---------------------------------------------------------------- 6. wisp parity
-console.log('wisp parity (GPU draw offset vs WPF integrated sway)');
+// W0 (2026-10-20) shipped the shared curve: the product's stage, AR quads and alignment review all call
+// Stage/WispMotion.cs, and the software stage no longer integrates the sway into velocity. The lab keeps
+// the pre-W0 WPF integrator on purpose — it is the "before" picture the review measured — so this section
+// now checks (a) the lab still reproduces that historical 10.6 px gap, and (b) the curve the lab draws as
+// "current GPU" is the curve the product actually ships.
+console.log('wisp parity (lab keeps the pre-W0 WPF sway as the "before" picture)');
 {
   function wispDrawnX(model, seconds) {
     const panel = freshPanel(model);
@@ -227,8 +232,21 @@ console.log('wisp parity (GPU draw offset vs WPF integrated sway)');
   }
   const gpu = wispDrawnX(lab.MODEL.GPU, .8);
   const wpf = wispDrawnX(lab.MODEL.WPF, .8);
-  check(`the two shipping paths disagree by > 6 px on the same wisp (${(gpu - wpf).toFixed(1)} px)`,
+  check(`the pre-W0 WPF integrator still disagrees with the GPU draw offset by > 6 px (${(gpu - wpf).toFixed(1)} px)`,
     gpu !== null && wpf !== null && Math.abs(gpu - wpf) > 6);
+
+  // The product has one curve now; the lab's "current GPU" column must be that curve, not a stale copy.
+  const fs = require('fs');
+  const curve = fs.readFileSync(path.join(__dirname, '..', 'Stage', 'WispMotion.cs'), 'utf8');
+  const numbers = [
+    ['amplitude grows with turbulence at 26 px/unit', /T\(turbulence\) \* 26/],
+    ['amplitude grows with width from a .45 px base', /\.45f \+ W\(width\)/],
+    ['frequency is 3 + 5 rad/s per unit of turbulence', /3 \+ T\(turbulence\) \* 5/],
+    ['the sway fades in over 1/1.6 s', /\* 1\.6f/],
+  ];
+  for (const [what, pattern] of numbers) check(`WispMotion.cs still carries ${what}`, pattern.test(curve));
+  check('WispMotion.cs clamps turbulence and width instead of extrapolating',
+    /Math\.Clamp\(turbulence, 0, 1\)/.test(curve) && /Math\.Clamp\(width, 0, 1\)/.test(curve));
 }
 
 // ---------------------------------------------------------------- 7. draw path

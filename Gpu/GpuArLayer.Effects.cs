@@ -462,8 +462,7 @@ internal sealed partial class GpuArLayer
         var y = Math.Clamp((simulation.SimulationHitY - particle.Y) * unit, -.2, 2.4);
         if (particle.Wisp)
         {
-            var amp = (5 + look.WispTurbulence * 26) * (.45f + look.WispWidth) * Math.Min(1, particle.Age * 1.6f);
-            x += Math.Sin(particle.Age * (3 + look.WispTurbulence * 5) + particle.Phase) * amp * unit;
+            x += WispMotion.Offset(look.WispTurbulence, look.WispWidth, (float)particle.Age, (float)particle.Phase) * unit;
         }
         var anchorX = layout.CenterX(particle.Pitch) * pose.KeyboardWidthDepthRatio;
         var center = legacyAxes ? new ArVec3(x, .12, -y) : frame.Point(new(anchorX, .12, 0), x - anchorX, y);

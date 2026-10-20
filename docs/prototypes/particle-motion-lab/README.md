@@ -11,6 +11,9 @@ Lab này **mô phỏng lại** công thức trong `Gpu/GpuStageSimulation.Step()
 ## Ba trang
 
 - **`index.html`** — A/B *hiện tại ↔ v2* (và chế độ *GPU ↔ WPF*) cho hệ hạt của chính PianoPath.
+  Cột **WPF** trong chế độ GPU↔WPF là **ảnh chụp trước W0**: nó cộng dao động wisp vào vận tốc, đúng như mã cũ,
+  nên vẫn lệch **10,6 px** so với GPU sau 0,8 s — đó là "trước" để so. Từ W0 (2026-10-20) mã sản phẩm dùng
+  chung `Stage/WispMotion.cs` cho cả hai, nên cột GPU trong lab chính là đường cong đang chạy.
 - **`seemusic.html`** — playground các *kiểu chuyển động* theo ngữ pháp SeeMusic công bố: ba lớp
   Particles / Streaklets / Smoke, tám preset hạt (Default, explode, fast playing, high count, high
   turbulence, long streaklets, straight, twirl) cộng mục Smoke để xem lớp nền, cùng wind / turbulence /

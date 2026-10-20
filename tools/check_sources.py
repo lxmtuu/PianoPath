@@ -962,6 +962,63 @@ def scan_gpu_overlay_evidence():
     return errors
 
 
+def scan_wisp_motion_contract():
+    """The wisp's sideways wander is one curve, and every renderer has to draw that curve.
+
+    Before W0 the same expression lived in four C# files — twice in ``GpuStageSimulation``, once in
+    ``GpuArLayer.Effects`` and once in ``ArParticleAlignmentReview``, the diagnostic that *measures* AR
+    alignment against its own arithmetic. The software stage held a fifth, different version that added the
+    sine to the particle's velocity, so the same mote was drawn 10.6 px apart at 0.8 s and nothing compared
+    them. Unit tests pin the curve's shape; this check pins the wiring, which is the half that drifted.
+
+    Two things are enforced:
+      * the constants live only in ``Stage/WispMotion.cs``;
+      * each consumer calls ``WispMotion.Offset``, including the software stage's draw — a renderer that
+        quietly reintroduces its own sine fails the fast lane instead of drifting in a video.
+    """
+    errors = []
+    curve_path = ROOT / "Stage" / "WispMotion.cs"
+    if not curve_path.exists():
+        return ["Stage/WispMotion.cs is missing; the wisp sway would have no single home again"]
+    consumers = {
+        "Gpu/GpuStageSimulation.cs": 2,
+        "Gpu/GpuArLayer.Effects.cs": 1,
+        "Stage/PianoStage.cs": 1,
+        "Diagnostics/ArParticleAlignmentReview.cs": 1,
+    }
+    for name, expected in consumers.items():
+        path = ROOT / name
+        if not path.exists():
+            errors.append(f"{name} is missing, but it is one of the paths that draws a wisp")
+            continue
+        text = path.read_text(encoding="utf-8")
+        found = text.count("WispMotion.Offset(")
+        if found != expected:
+            errors.append(f"{name}: expected {expected} call(s) to WispMotion.Offset, found {found} — every "
+                          f"renderer of a wisp must draw the shared curve, not its own copy")
+    # Any multiplication of a turbulence value by a literal is somebody's own sway — whatever the variable is
+    # called and however the spaces fall. Passing the setting to WispMotion, dividing it by 100 to normalise it
+    # or reading it through P() is not, so this keys on the `*` and not on the name alone.
+    sway = re.compile(r"(?i)(?:\b\w*turbulence\b)\s*\*")
+    for path in sorted(ROOT.rglob("*.cs")):
+        if "obj" in path.parts or "bin" in path.parts or path == curve_path:
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in enumerate(_code(path.read_text(encoding="utf-8")).split("\n"), 1):
+            if sway.search(line):
+                errors.append(f"{rel}:{number}: multiplies a wisp turbulence value by a literal, which is a "
+                              f"second copy of the sway; WispMotion owns that curve now")
+    # The software stage must not integrate the sway into velocity again: the same sine inside the wisp
+    # update moves the mote faster in slow motion and re-opens the 10.6 px disagreement.
+    stage = ROOT / "Stage" / "PianoStage.cs"
+    if stage.exists():
+        branch = re.search(r"if \(p\.Wisp\)\s*\{(.*?)\}", stage.read_text(encoding="utf-8"), re.S)
+        if branch and "Math.Sin(p.Age" in branch.group(1):
+            errors.append("Stage/PianoStage.cs: the software stage is integrating the wisp sway into velocity "
+                          "again; it must be a draw-time offset, or slow motion moves the mote")
+    return errors
+
+
 def scan_previews_folder():
     folder = ROOT / "docs" / "previews"
     if not folder.exists():
@@ -2004,6 +2061,7 @@ def main():
     errors.extend(scan_readme())
     errors.extend(scan_markdown_tables())
     errors.extend(scan_gpu_overlay_evidence())
+    errors.extend(scan_wisp_motion_contract())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
@@ -2025,6 +2083,7 @@ def main():
     print(f"checked the string tables against one another, against the {keys_used} keys the sources print ({keys_inventory} in the inventory) and against the sources that hold them")
     print("checked the release version of PianoPath.csproj against the installer, both READMEs, both changelogs and every source that prints it")
     print("checked every Markdown table's delimiter row, and the claim about what is still a WPF layer over a GPU frame against the engine that draws it")
+    print("checked that the wisp sway lives in one curve and that the stage, the AR quads and the alignment review all draw it")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")

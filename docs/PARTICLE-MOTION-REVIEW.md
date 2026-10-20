@@ -1,6 +1,6 @@
 # Particle motion review — hiện trạng, số đo và hướng nâng cấp
 
-> **Ngày:** 2026-10-19 · **Nhánh:** `arena/efa69378-pianopath` · **Loại:** đánh giá thiết kế + prototype, **chưa sửa mã sản phẩm**
+> **Ngày:** 2026-10-19 · **Nhánh:** `arena/efa69378-pianopath` · **Loại:** đánh giá thiết kế + prototype; **W0 đã vào mã ngày 2026-10-20** (xem §4.3), phần còn lại chưa động vào
 > **Phạm vi:** chuyển động của hạt trên sân khấu GPU (`Gpu/GpuStageSimulation*.cs`), đường WPF (`Stage/PianoStage.cs`)
 > và bản sao dùng cho AR (`Gpu/GpuArLayer.Effects.cs`). Không đánh giá lại shader vật liệu, bloom hay preset.
 > **Kèm theo:** [Particle Motion Lab](prototypes/particle-motion-lab/index.html) — bản mô phỏng lại công thức
@@ -95,6 +95,8 @@ thang số cho preset cũ nhưng đổi hệ số trong `GpuLook` để 36 ≈ 1
 
 ### 4.3 Wisp: bốn bản sao của một công thức, hai cách hiểu — P0
 
+*Số dòng dưới đây là hiện trạng lúc đo (2026-10-19), trước W0; mã đã đổi, xem đoạn "Sửa — đã làm" cuối mục.*
+
 ```text
 GpuStageSimulation.cs:849-851   (đường art v3)   amp = (5 + turb*26) * (.45 + width) → cộng lúc VẼ
 GpuStageSimulation.cs:969-971   (đường classic)  cùng công thức                    → cộng lúc VẼ
@@ -104,10 +106,18 @@ Stage/PianoStage.cs:620-630                      sin(age*(3+turb*7)) * (8+turb*4
 
 Đo trên cùng một hạt, cùng seed: sau 0,8 s GPU vẽ lệch **10,6 px** so với WPF; biên độ 16,4 px so với 4,9 px;
 tần số 5,75 so với 6,85 rad/s. Vì dao động của GPU nằm ngoài mô phỏng, nó còn **không kéo theo hạt khác**
-và **không có trong trạng thái AR** — AR phải tự tính lại, nên đó là bản sao thứ tư.
+và **không có trong trạng thái AR** — AR phải tự tính lại, nên đó là bản sao thứ tư. Bản sao thứ năm nằm ở
+`Diagnostics/ArParticleAlignmentReview.cs:73`, tức **chính công cụ đo** AR — nó so sản phẩm với số học của nó,
+nên có thể tiếp tục xanh trong khi renderer lệch.
 
-**Sửa:** một `static class WispMotion` (giống `StageLightCurves`) trả về vị trí đã bao gồm dao động, dùng chung
-cho Stage, AR và bản review; xoá mọi phép cộng lúc vẽ.
+**Sửa — đã làm (W0, 2026-10-20):** một `static class WispMotion` (`Stage/WispMotion.cs`, cùng kiểu với
+`StageLightCurves`) trả về offset ngang đã gồm dao động, và cả bốn chỗ đều gọi nó:
+`GpuStageSimulation` ×2, `GpuArLayer.Effects`, `ArParticleAlignmentReview`. WPF **không còn cộng sin vào vận
+tốc** nữa — nó cộng đúng offset đó lúc vẽ, nên đứng yên trong slow-motion và trùng GPU theo từng pixel.
+Hai lớp khoá lại: `WispMotionTests` (8 fact, hình dạng đường cong) và `tools/check_sources.py`
+(`scan_wisp_motion_contract`) — không file nào khác được nhân một giá trị turbulence với hằng số, và cả bốn
+nơi vẽ phải gọi `WispMotion.Offset`. `--verify` đọc sprite thật của simulation và so từng hạt wisp với đường
+cong, nên một bản sao mới sẽ đỏ ngay trên CI thay vì lệch dần trong video.
 
 ### 4.4 Flame không có vật lý — P1
 
@@ -206,7 +216,7 @@ GPU/WPF bằng số thay vì bằng mắt.
 
 | Lát | Nội dung | Vì sao trước | Cổng |
 |---|---|---|---|
-| **W0 · Hợp đồng** | Gom `WispMotion`; tách `particleDt` ở WPF; flame có vật lý | Sửa lỗi, không đổi nghệ thuật; tạo nền để so sánh được | Test so sánh vị trí wisp GPU/WPF; slow-motion không đổi tốc độ live bar |
+| **W0 · Hợp đồng** | **Xong 2026-10-20:** gom `WispMotion` (5 bản sao → 1), WPF bỏ dao động khỏi vận tốc, guard trong `check_sources` + `--verify`. **Còn lại:** tách `particleDt` ở WPF; flame có vật lý | Sửa lỗi, không đổi nghệ thuật; tạo nền để so sánh được | Test so sánh vị trí wisp GPU/WPF; slow-motion không đổi tốc độ live bar |
 | **W1 · Hình dáng dòng chảy** | Emitter sustain riêng (thành phần 1), gió cuốn (thành phần 2), curl theo seed (thành phần 3), khuếch tán (thành phần 4) | 80% cảm giác "flow" mà roadmap P3b hứa; không thêm hạt | Ảnh/clip 3 checkpoint (nhấn/giữ/pedal) ở 100% và 50%; độ rộng dòng ≤ 1,5 phím |
 | **W2 · Vật liệu** | Life curve theo họ (thành phần 5), trễ sinh + spin (thành phần 6), nhiệt độ (thành phần 7) | Làm đám hạt có khối lượng và "chín" | Bảng `LifeCurve` cho 5 họ × 3 look; review ảnh tĩnh + clip |
 | **W3 · Tương tác & tải** | Va chạm (thành phần 8), bảng `exp`/`sin` nếu đo thấy cần; **cân nhắc** `EmissionScale` cho adaptive | Chỉ làm sau khi hình đã chốt | Benchmark `--bench` trên GPU thật (ngoài sandbox này) |

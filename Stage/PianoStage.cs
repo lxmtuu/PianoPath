@@ -666,8 +666,10 @@ internal sealed partial class PianoStage : FrameworkElement
             if (p.Age >= p.Life) { _sparks.RemoveAt(i); continue; }
             if (p.Wisp)
             {
-                var turbulence = _visual.WispTurbulence / 100;
-                p.X += (p.Vx + Math.Sin(p.Age * (3 + turbulence * 7) + p.Phase) * (8 + turbulence * 46) * Math.Min(1, p.Age * 2)) * dt;
+                // The sideways wander is not velocity: it is an offset the renderer adds when it draws the mote,
+                // the same WispMotion.Offset the GPU sprites and the AR quads use. Integrating it here made the
+                // two renderers disagree by 10.6 px after 0.8 s (PARTICLE-MOTION-REVIEW §4.3).
+                p.X += p.Vx * dt;
                 p.Y += p.Vy * dt;
                 var flow = _visual.VectorField / 100 * Math.Sin(p.Y / Math.Max(1, _visual.FieldScale) + _elapsed * _visual.EvolutionSpeed / 100);
                 p.X += flow * dt * 6;
@@ -1892,14 +1894,16 @@ internal sealed partial class PianoStage : FrameworkElement
                 if (!_visual.ShowWisps) continue;
                 var wispAlpha = Alpha(210 * Math.Pow(fade, 1.4) * wispGlow);
                 var wispSize = particle.Size * (1.2 + particle.Age * 1.3);
+                var wispX = particle.X + WispMotion.Offset((float)(_visual.WispTurbulence / 100), (float)(_visual.WispWidth / 100),
+                    (float)particle.Age, (float)particle.Phase);
                 var wispCore = Color.FromArgb(wispAlpha, particle.Color.R, particle.Color.G, particle.Color.B);
                 // Three concentric shells approximate a smooth gaussian falloff, so the wisp reads as a
                 // soft mote of light/smoke instead of a flat disc with a hard rim.
                 var wispMid = Color.FromArgb((byte)(wispAlpha * .42), particle.Color.R, particle.Color.G, particle.Color.B);
                 var wispHalo = Color.FromArgb((byte)(wispAlpha * .16), particle.Color.R, particle.Color.G, particle.Color.B);
-                dc.DrawEllipse(Brush(wispHalo), null, new Point(particle.X, particle.Y), wispSize * 3.2, wispSize * 3.2);
-                dc.DrawEllipse(Brush(wispMid), null, new Point(particle.X, particle.Y), wispSize * 1.9, wispSize * 1.9);
-                dc.DrawEllipse(Brush(wispCore), null, new Point(particle.X, particle.Y), wispSize, wispSize);
+                dc.DrawEllipse(Brush(wispHalo), null, new Point(wispX, particle.Y), wispSize * 3.2, wispSize * 3.2);
+                dc.DrawEllipse(Brush(wispMid), null, new Point(wispX, particle.Y), wispSize * 1.9, wispSize * 1.9);
+                dc.DrawEllipse(Brush(wispCore), null, new Point(wispX, particle.Y), wispSize, wispSize);
                 continue;
             }
             if (!_visual.ShowEmbers) continue;

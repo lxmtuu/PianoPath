@@ -864,8 +864,7 @@ internal sealed partial class GpuStageSimulation
                     var px = x;
                     if (p.Wisp)
                     {
-                        var amp = (5 + look.WispTurbulence * 26) * (.45f + look.WispWidth) * MathF.Min(1, p.Age * 1.6f);
-                        px += MathF.Sin(p.Age * (3 + look.WispTurbulence * 5) + p.Phase) * amp;
+                        px += WispMotion.Offset(look.WispTurbulence, look.WispWidth, p.Age, p.Phase);
                     }
                     sprites.Add(new GpuSpriteInstance
                     {
@@ -984,8 +983,7 @@ internal sealed partial class GpuStageSimulation
                     var gain = glowGain;
                     if (p.Wisp)
                     {
-                        var amp = (5 + look.WispTurbulence * 26) * (.45f + look.WispWidth) * MathF.Min(1, p.Age * 1.6f);
-                        px += MathF.Sin(p.Age * (3 + look.WispTurbulence * 5) + p.Phase) * amp;
+                        px += WispMotion.Offset(look.WispTurbulence, look.WispWidth, p.Age, p.Phase);
                         gain = .6f + p.Glow * 1.6f;
                         fade = MathF.Min(1, u * 6) * (1 - u);
                     }

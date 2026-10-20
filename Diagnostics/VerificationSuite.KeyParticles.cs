@@ -66,6 +66,7 @@ internal static partial class VerificationSuite
             VerifyHeldParticleArt(layer, ar, view, sprites, quads);
             VerifyRingChannelRouting(layer, ar, view, sprites, quads);
             VerifyEffectBudget();
+            VerifyWispMotionContract();
             VerifyAuxParticleLifecycle(layer, ar, view, sprites, quads);
             VerifyEmitterClockAndClear();
             VerifyTransientFrameEpoch();
@@ -204,6 +205,62 @@ internal static partial class VerificationSuite
             Assert(totals.Min() > 0 && totals.Max() - totals.Min() <= 1,
                 $"{family}: four-second birth totals at 30/60/120/144 FPS must stay within one birth ({string.Join(",", totals)}); not identical trajectories.");
         }
+    }
+
+    /// <summary>
+    /// W0: the wisp's sideways wander is one formula, and the stage really draws it. Before W0 the same
+    /// expression lived in four files (plus a different one in the software stage that integrated it as
+    /// velocity), so the two renderers drifted 10.6 px apart after 0.8 s with nothing to notice it. This
+    /// reads the sprites the shipping simulation builds and compares each wisp's drawn X with
+    /// <see cref="WispMotion.Offset"/>, rather than re-deriving the formula here.
+    /// </summary>
+    private static void VerifyWispMotionContract()
+    {
+        var settings = KeyParticleFixtures.Settings(KeyParticleFixtures.All[0]);
+        settings.ShowEmbers = false; settings.ShowFlame = false; settings.ShowHalo = false;
+        settings.ShowImpactRings = false; settings.ShowImpactFlash = false; settings.ShowLightBeams = false;
+        // Only wisps, drawn by the classic path: the held-particle art pass may skip a particle it cannot
+        // resolve, which would break the one-sprite-per-particle order this comparison relies on.
+        settings.HeldParticleArt = false; settings.UpgradedParticleEffects = false; settings.ShowKeys = false;
+        settings.ShowWisps = true; settings.WispAmount = 45; settings.WispTurbulence = 55; settings.WispWidth = 40;
+        var look = ParticleLook(settings);
+        Assert(Math.Abs(look.WispTurbulence - .55f) < 1e-4 && Math.Abs(look.WispWidth - .4f) < 1e-4,
+            "W0: the settings model must still deliver wisp turbulence and width normalised to 0..1, the range WispMotion assumes.");
+        // The documented default peak (PARTICLE-MOTION-REVIEW §4.3: 16.4 px at turbulence 55, width 40).
+        Assert(Math.Abs(WispMotion.Amplitude(.55f, .4f) - 16.4f) < .05f && Math.Abs(WispMotion.AngularFrequency(.55f) - 5.75f) < 1e-3,
+            "W0: the shared wisp amplitude/frequency must stay the ones the review measured, or the document is describing another curve.");
+        Assert(WispMotion.Offset(.55f, .4f, 0, 1.7f) == 0,
+            "W0: a wisp is born on its column; the sway must fade in from zero, not snap the mote sideways on its first frame.");
+
+        var input = new GpuFrameInput { Look = look, StageHeightDip = 720 };
+        var feed = new GpuStageFeed();
+        var sim = new GpuStageSimulation(KeyParticleFixtures.Seed);
+        var sprites = new GpuInstanceList<GpuSpriteInstance>(64);
+        input.Pressed[60] = true;
+        for (var frame = 0; frame < 48; frame++) sim.Step(1.0 / 60, input, feed, 1280);
+        var layout = new GpuSceneLayout(1280, 720, look.KeyboardFraction);
+        sim.BuildSprites(look, layout, sprites);
+        var snap = ParticleSnapshot(sim);
+        var scaleX = layout.Width / sim.SimulationWidth;
+        var wisps = 0;
+        var worst = 0f;
+        // Beams are off and nothing has hit the keys, so the particle loop is the first thing that packs;
+        // key labels, landings and shimmer bars are appended after it.
+        Assert(sprites.Count >= snap.Length,
+            $"W0: with beams, rings, flashes and art flags off, the classic path must pack one sprite per particle before anything else so the frames can be compared in order (sprites {sprites.Count}, particles {snap.Length}).");
+        for (var i = 0; i < snap.Length && i < sprites.Count; i++)
+        {
+            if (!snap[i].Wisp) continue;
+            wisps++;
+            var drawn = sprites[i].PosSize.X;
+            var expected = snap[i].X * scaleX + WispMotion.Offset(look.WispTurbulence, look.WispWidth, snap[i].Age, snap[i].Phase);
+            worst = Math.Max(worst, Math.Abs(drawn - expected));
+        }
+        Assert(wisps == snap.Length && wisps > 0, $"W0: the isolated look must emit wisps and only wisps ({wisps} of {snap.Length} particles).");
+        Assert(worst < 1e-3f,
+            $"W0: every wisp sprite must sit at its simulated column plus WispMotion.Offset — the largest miss was {worst:0.###} px over {wisps} motes.");
+        Assert(ParticleSnapshot(sim).SequenceEqual(snap),
+            "W0: the draw-time offset must not move, age or re-seed a particle; the simulation state AR reads stays the state the stage drew.");
     }
 
     private static void VerifyParticleReleaseCursorClear()
