@@ -121,7 +121,12 @@ public class OptionMatrixPlanTests
         var families = OptionMatrixPlan.PoseSelections.Select(selection => OptionMatrixPlan.PoseFamily(selection.Family)).ToArray();
         Assert.Equal(2, families.Count(family => family.Setting == "ImpactMorph"));
         Assert.Contains(families, family => family.Setting == "ReleaseEffect");
-        Assert.All(families, family => Assert.Null(family.Gate));
+        // The three ownership channels have no switch of their own; the burst family legitimately has one
+        // (every burst value draws), which is exactly why it is not one of the channels under test.
+        var owned = families.Where(family => family.Setting is "ImpactMorph" or "ReleaseEffect").ToArray();
+        Assert.Equal(3, owned.Length);
+        Assert.All(owned, family => Assert.Null(family.Gate));
+        Assert.Equal("ShowEmbers", families.Single(family => family.Setting == "ImpactBurst").Gate);
         Assert.Throws<ArgumentException>(() => OptionMatrixPlan.PoseFamily("nope"));
     }
 

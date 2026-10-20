@@ -206,7 +206,7 @@ internal static class OptionPoseReview
 
     private static void WriteHtmlIndex(string root, IReadOnlyList<Shot> captures)
     {
-        var check = System.Net.WebUtility.HtmlEncode;
+        static string Encode(string value) => System.Net.WebUtility.HtmlEncode(value);
         var body = new System.Text.StringBuilder();
         body.Append("<!doctype html><html lang=\"vi\"><meta charset=\"utf-8\"><title>N12(d) — option × AR pose</title>")
             .Append("<style>body{font:15px system-ui;background:#10141b;color:#e1e9f3;max-width:1500px;margin:24px auto;padding:16px}")
@@ -218,14 +218,14 @@ internal static class OptionPoseReview
             .Append("không phải nghiệm thu mỹ thuật, hardware hay camera thật.</p>");
         foreach (var pose in captures.Select(capture => capture.Pose).Distinct())
         {
-            body.Append($"<h2>{check(pose)}</h2><div class=\"row\">");
+            body.Append($"<h2>{Encode(pose)}</h2><div class=\"row\">");
             foreach (var family in captures.Where(capture => capture.Pose == pose).GroupBy(capture => capture.Family))
             {
                 var on = family.Single(capture => !capture.Neutral);
                 var off = family.Single(capture => capture.Neutral);
-                body.Append($"<figure><figcaption>{check(family.Key)}: {check(on.Value)} — đổi {on.ChangedPixels:N0} px so với tắt</figcaption>")
-                    .Append($"<img loading=\"lazy\" src=\"{check(on.File)}\" alt=\"{check(family.Key)} {check(on.Value)}\">")
-                    .Append($"<figcaption><a href=\"{check(off.File)}\">ảnh tắt cùng pose</a></figcaption></figure>");
+                body.Append($"<figure><figcaption>{Encode(family.Key)}: {Encode(on.Value)} — đổi {on.ChangedPixels:N0} px so với tắt</figcaption>")
+                    .Append($"<img loading=\"lazy\" src=\"{Encode(on.File)}\" alt=\"{Encode(family.Key)} {Encode(on.Value)}\">")
+                    .Append($"<figcaption><a href=\"{Encode(off.File)}\">ảnh tắt cùng pose</a></figcaption></figure>");
             }
             body.Append("</div>");
         }
