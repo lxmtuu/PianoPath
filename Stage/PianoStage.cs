@@ -68,7 +68,10 @@ internal sealed partial class PianoStage : FrameworkElement
     private readonly Color[] _activeKeyColor = new Color[128];
     private readonly double[] _keyHeat = new double[128];
     private readonly double[] _wispBudget = new double[128];
+    private readonly double[] _sparkBudget = new double[128];
     private readonly double[] _flameBudget = new double[128];
+    /// <summary>Births per channel since the last reset; the verification suite reads them back as a rate.</summary>
+    private long _wispBirths, _sparkBirths, _flameBirths;
     /// <summary>Live flame motes, drawn as a stream out of the key line (see <see cref="FlameMotion"/>).</summary>
     private readonly List<FlameMote> _flameMotes = [];
     // ---- Ray-traced keyboard cache ----------------------------------------------------------------
@@ -161,6 +164,8 @@ internal sealed partial class PianoStage : FrameworkElement
             return ActualHeight - KeyboardHeight - top;
         }
     }
+    /// <summary>Particles birthed per channel since the last reset, read back by <c>VerifyWpfEmissionParity</c>.</summary>
+    internal (long Wisps, long Sparks, long Flames) BirthCounts => (_wispBirths, _sparkBirths, _flameBirths);
     /// <summary>Live flame motes; the verification suite reads them back to prove the fallback follows the engine's law.</summary>
     internal int FlameMoteCount => _flameMotes.Count;
     /// <summary>How far the highest live flame mote has climbed from the key line, in stage DIPs (-1 when there is none).</summary>
@@ -359,7 +364,7 @@ internal sealed partial class PianoStage : FrameworkElement
     public void ClearTransient()
     {
         _liveTrails.Clear(); _sparks.Clear(); _rings.Clear(); _flashes.Clear(); _flameMotes.Clear(); Array.Clear(_keyHeat); Array.Clear(_activeKey); _anyHeat = false;
-        Array.Clear(_wispBudget); Array.Clear(_flameBudget);
+        Array.Clear(_wispBudget); Array.Clear(_sparkBudget); Array.Clear(_flameBudget);
         _beatPulse = _energyLevel = 0;
         _simulation.Reset();
         _gpu?.ClearTransient();
@@ -669,7 +674,8 @@ internal sealed partial class PianoStage : FrameworkElement
         _sparks.Clear(); _rings.Clear(); _flashes.Clear(); _liveTrails.Clear(); _flameMotes.Clear();
         _petals.Clear(); _petalCount = -1;
         Array.Clear(_keyHeat);
-        Array.Clear(_wispBudget); Array.Clear(_flameBudget);
+        Array.Clear(_wispBudget); Array.Clear(_sparkBudget); Array.Clear(_flameBudget);
+        _wispBirths = _sparkBirths = _flameBirths = 0;
         _petalRandom = new Random(seed is int value ? unchecked(value * 397 ^ PetalSeed) : PetalSeed);
         _flameRandom = new Random(seed is int flameSeed ? unchecked(flameSeed * 331 ^ FlameSeed) : FlameSeed);
         _random = new Random(seed ?? ParticleSeed);
@@ -692,6 +698,11 @@ internal sealed partial class PianoStage : FrameworkElement
         if (seconds > 0) _fps += (1 / seconds - _fps) * .08;
         var hitY = ActualHeight - KeyboardHeight;
         var lane = ActualWidth / KeyCount;
+        // Nobody sees the software particles while a GPU frame covers the stage — OnRender hands the whole
+        // stage to RenderGpuFrame — so do not simulate them. Without this a held chord integrates thousands of
+        // invisible WPF sparks on the UI thread every second. Credits are cleared as well, so switching engines
+        // cannot release a backlog of births that were never shown.
+        var softwareStage = !(UsesGpuFrame && _gpuBitmap is not null);
         // Flames follow a per-key "heat" value: it rises quickly while the key sounds and cools down after release.
         _anyHeat = false;
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
@@ -700,15 +711,25 @@ internal sealed partial class PianoStage : FrameworkElement
             heat = _activeKey[pitch] ? Math.Min(1, heat + frameSeconds * 7) : Math.Max(0, heat - frameSeconds * 2.4);
             _keyHeat[pitch] = heat;
             if (heat > .01) _anyHeat = true;
-            // Emission follows the frame clock too: the GPU's KeyEmissionBudget.Take accrues on frameDt, so a
-            // slow take stays as dense in wall-clock seconds and the motes merely move slower.
-            if (_activeKey[pitch] && _visual.ShowWisps && _visual.WispAmount > 0 && ActualWidth >= 1) SpawnWisps(pitch, frameSeconds, hitY, lane);
-            else _wispBudget[pitch] = 0;
-            // Flames outlive the key: they are born from cooling heat, exactly as the engine's are. The birth
-            // rate follows the frame clock (a slow take keeps the same density per second) and the motes
-            // themselves move on the particle clock, like every other particle here.
-            if (_visual.ShowFlame && _visual.FlameIntensity > 0 && heat > .01 && ActualWidth >= 1) SpawnFlames(pitch, frameSeconds, heat, hitY, lane);
-            else _flameBudget[pitch] = 0;
+            if (!softwareStage)
+            {
+                _wispBudget[pitch] = 0; _sparkBudget[pitch] = 0; _flameBudget[pitch] = 0;
+            }
+            else
+            {
+                // Emission follows the frame clock too: the GPU's KeyEmissionBudget.Take accrues on frameDt, so a
+                // slow take stays as dense in wall-clock seconds and the motes merely move slower. The rates are
+                // the engine's (HeldEmission), so the fallback is the same stream with a smaller ceiling.
+                if (_activeKey[pitch] && _visual.ShowWisps && _visual.WispAmount > 0 && ActualWidth >= 1) SpawnWisps(pitch, frameSeconds, hitY, lane);
+                else _wispBudget[pitch] = 0;
+                if (_activeKey[pitch] && _visual.ShowEmbers && _visual.ParticleAmount >= 1 && ActualWidth >= 1) SpawnHeldSparks(pitch, frameSeconds, hitY, lane);
+                else _sparkBudget[pitch] = 0;
+                // Flames outlive the key: they are born from cooling heat, exactly as the engine's are. The birth
+                // rate follows the frame clock (a slow take keeps the same density per second) and the motes
+                // themselves move on the particle clock, like every other particle here.
+                if (_visual.ShowFlame && _visual.FlameIntensity > 0 && heat > .01 && ActualWidth >= 1) SpawnFlames(pitch, frameSeconds, heat, hitY, lane);
+                else _flameBudget[pitch] = 0;
+            }
         }
         for (var i = _sparks.Count - 1; i >= 0; i--)
         {
@@ -783,10 +804,9 @@ internal sealed partial class PianoStage : FrameworkElement
 
     private void SpawnWisps(int pitch, double frameSeconds, double hitY, double lane)
     {
-        if (_sparks.Count >= MaxParticles) return;
-        _wispBudget[pitch] += _visual.WispAmount * frameSeconds;
-        var count = (int)_wispBudget[pitch]; if (count <= 0) return;
-        _wispBudget[pitch] -= count;
+        var count = KeyEmissionBudget.Take(ref _wispBudget[pitch], HeldEmission.Wisps(_visual.WispAmount),
+            frameSeconds, MaxParticles - _sparks.Count);
+        if (count <= 0) return;
         var color = AdjustColor(_activeKeyColor[pitch]);
         var x = KeyCenter(pitch) * ActualWidth;
         var life = .35 + _visual.WispHeight / 100 * 1.9;
@@ -802,6 +822,65 @@ internal sealed partial class PianoStage : FrameworkElement
                 Color = _random.NextDouble() < .18 ? Blend(color, Colors.White, .6) : color
             });
         }
+        _wispBirths += count;
+    }
+
+    /// <summary>
+    /// Births the held-key embers the engine has always drawn: the selected burst family, rising from the key
+    /// line for as long as the key sounds. The software stage had no such channel at all, so a sustained note
+    /// on a machine without a GPU showed a bare key with nothing coming off it.
+    /// </summary>
+    private void SpawnHeldSparks(int pitch, double frameSeconds, double hitY, double lane)
+    {
+        var count = KeyEmissionBudget.Take(ref _sparkBudget[pitch], HeldEmission.Sparks(_visual.ParticleAmount),
+            frameSeconds, MaxParticles - _sparks.Count);
+        if (count <= 0) return;
+        var style = _visual.ImpactBurst;
+        if (_visual.ZoneSplit) style = pitch < _visual.ZoneSplitPitch ? "Embers" : "Splash";
+        var color = AdjustColor(_activeKeyColor[pitch]);
+        var x = KeyCenter(pitch) * ActualWidth;
+        var spread = _visual.ParticleSpread / 100 * Math.PI;
+        for (var i = 0; i < count; i++)
+        {
+            var kind = 0; var grav = .55; var dragK = 1.2;
+            var speedScale = 1.0; var lifeScale = 1.0; var sizeScale = 1.0;
+            var particleColor = Blend(color, Colors.White, .24);
+            switch (style)
+            {
+                case "Splash": // gravity 1.35, drag .85, .86x speed, 1.08x life
+                    kind = 1; grav = 1.35; dragK = .85; speedScale = .86; lifeScale = 1.08;
+                    particleColor = Blend(color, Color.FromRgb(148, 209, 255), .48);
+                    break;
+                case "Fireworks": // 1.15x speed, 1.22x life, a random hue per spark
+                    speedScale = 1.15; lifeScale = 1.22; sizeScale = .9;
+                    particleColor = Blend(color, ColorFromHue(_random.NextDouble() * 360), .56);
+                    break;
+                case "Confetti": // kind 2, gravity .38, drag 2.8, 1.75x life
+                    kind = 2; grav = .38; dragK = 2.8; speedScale = .68; lifeScale = 1.75; sizeScale = 1.25;
+                    particleColor = Blend(color, ColorFromHue(_random.NextDouble() * 360), .52);
+                    break;
+                case "Dust": // kind 3, gravity -.1, drag 2.2, .3x speed, 1.8x size
+                    kind = 3; grav = -.1; dragK = 2.2; speedScale = .3; lifeScale = 1.65; sizeScale = 1.8;
+                    particleColor = Blend(Color.FromRgb(184, 171, 153), color, .38);
+                    break;
+            }
+            // Fireworks throws in every direction; everything else fountains up inside the spread cone.
+            var angle = style == "Fireworks"
+                ? _random.NextDouble() * Math.PI * 2
+                : -Math.PI / 2 + (_random.NextDouble() - .5) * spread;
+            var speedVariation = 1 + (_random.NextDouble() - .5) * 2 * _visual.ParticleRandomness / 100;
+            var speed = _visual.ParticleVelocity * Math.Max(.08, speedVariation) * _visual.ParticleSpeed / 100 * speedScale;
+            _sparks.Add(new Spark
+            {
+                X = x + (_random.NextDouble() - .5) * lane * (.3 + _visual.EmitterSize / 100), Y = hitY - 1,
+                Vx = Math.Cos(angle) * speed, Vy = Math.Sin(angle) * speed,
+                Life = Math.Max(.05, _visual.ParticleLife * (1 + (_random.NextDouble() - .5) * 2 * _visual.ParticleLifeRandomness / 100) * lifeScale),
+                Age = 0, Mass = .7, Phase = _random.NextDouble() * Math.PI * 2,
+                Size = Math.Max(.2, _visual.ParticleSize * (1 + (_random.NextDouble() - .5) * 2 * _visual.ParticleSizeRandomness / 100) * sizeScale),
+                Color = particleColor, Kind = kind, Grav = grav, DragK = dragK
+            });
+        }
+        _sparkBirths += count;
     }
 
     /// <summary>
@@ -829,6 +908,7 @@ internal sealed partial class PianoStage : FrameworkElement
                 Phase = _flameRandom.NextDouble() * Math.PI * 2, Tint = tint,
             });
         }
+        _flameBirths += count;
     }
 
     protected override void OnRender(DrawingContext dc)

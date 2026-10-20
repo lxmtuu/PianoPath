@@ -257,6 +257,36 @@ quãng đường hụt ít hơn thời gian.
 
 ### 6.2 Wisp — xem 4.3
 
+### 6.5 Mật độ phát của emitter giữ phím — lệch 4× và thiếu một kênh
+
+Hai đường render đã luôn đồng ý **cái gì** phát ra từ một phím giữ (ember theo họ burst, wisp, flame) nhưng
+không đồng ý **bao nhiêu**:
+
+| Kênh | Engine (`GpuStageSimulation.Step`) | WPF trước 2026-10-20 |
+|---|---|---|
+| Ember khi giữ phím | `ParticleAmount × 1,3`/giây/phím | **không có kênh nào** |
+| Wisp | `WispAmount × 4`/giây/phím (bốn, vì hai sợi xoắn vào nhau) | `WispAmount` — **một phần tư** |
+| Flame | `70 × intensity × heat`/giây/phím | cùng luật (W2, 2026-10-20) |
+
+Hệ quả đúng như ta thấy trong ảnh: cùng một preset, máy có GPU cho một phím phun ember + hai sợi khói xoắn,
+máy không GPU cho một phím trơ với chút hạt lác đác.
+
+**Đã sửa:** `Stage/HeldEmission.cs` giữ hai mật độ ở một chỗ; `SpawnWisps` và `SpawnHeldSparks` (mới) gọi nó và
+dùng chung `KeyEmissionBudget.Take`, nên cách tích luỹ credit, ngưỡng `1e-9` và cách **bỏ** hạt khi pool đầy đều
+giống engine. Engine **giữ nguyên** biểu thức `float` của nó (`look.WispAmount * 4f`,
+`look.ParticleAmount * 1.3f`) để frame đã ghim không đổi bit; guard `scan_held_emission_parity` bắt cả hai phía.
+
+Hai quyết định đi kèm:
+
+- **Trần khác nhau, mật độ giống nhau.** `WpfParticleCap = 2.600` so với 24.000 của GPU vẫn đúng — đó là ngân
+  sách thời gian khung hình, và `EffectBudget` đã ghi đúng như vậy. Cái sai là phát **ít đi** ngay từ đầu.
+- **Không mô phỏng hạt phần mềm khi GPU đang vẽ.** `Advance` trước đây vẫn sinh và tích phân wisp/spark/flame dù
+  `OnRender` đã giao cả sân khấu cho `RenderGpuFrame`. Với mật độ mới, một hợp âm bốn phím sẽ là ~800 hạt vô hình
+  mỗi giây trên luồng UI. Nay phần phát bị bỏ và credit bị xoá, nên đổi engine giữa chừng không xả backlog.
+
+Đo trong `--verify` (`VerifyWpfEmissionParity`): một giây giữ phím ở mặc định sinh **180 wisp / 44 ember /
+45 flame mote**, đúng ba mật độ của engine; tắt từng kênh thì bằng 0.
+
 ### 6.3 Những thứ **không** cần sửa (đã đo)
 
 | Nghi vấn | Kết quả đo | Kết luận |
@@ -276,7 +306,7 @@ GPU/WPF bằng số thay vì bằng mắt.
 
 | Lát | Nội dung | Vì sao trước | Cổng |
 |---|---|---|---|
-| **W0 · Hợp đồng** | **Xong 2026-10-20:** gom `WispMotion` (5 bản sao → 1), WPF bỏ dao động khỏi vận tốc, tách `particleDt` khỏi `frameDt` (`StageClock`), guard trong `check_sources` + `--verify`. **Chuyển sang W2:** vật lý flame — nó **đổi pixel**, mà bằng chứng `flames-v3` đang ghim đúng hình flame hiện tại, nên phải làm cùng lúc với một lần re-baseline có chủ đích, không phải như một refactor | Sửa lỗi, không đổi nghệ thuật; tạo nền để so sánh được | Test so sánh vị trí wisp GPU/WPF; slow-motion không đổi tốc độ live bar |
+| **W0 · Hợp đồng** | **Xong 2026-10-20:** gom `WispMotion` (5 bản sao → 1), WPF bỏ dao động khỏi vận tốc, tách `particleDt` khỏi `frameDt` (`StageClock`), và **mật độ phát** của emitter giữ phím (`HeldEmission` — trước đó WPF phát 1/4 wisp và không có ember), guard trong `check_sources` + `--verify`. **Chuyển sang W2:** vật lý flame — nó **đổi pixel**, mà bằng chứng `flames-v3` đang ghim đúng hình flame hiện tại, nên phải làm cùng lúc với một lần re-baseline có chủ đích, không phải như một refactor | Sửa lỗi, không đổi nghệ thuật; tạo nền để so sánh được | Test so sánh vị trí wisp GPU/WPF; slow-motion không đổi tốc độ live bar |
 | **W1 · Hình dáng dòng chảy** | **Mô hình + số đo xong 2026-10-20:** bốn thành phần (emitter sustain, gió cuốn, curl theo seed, khuếch tán) chạy trong lab dưới `MODEL.FLOW`, có chế độ so sánh trên trang và 12 assertion đo trong `check_particle_motion_lab.cjs` §7. **Chưa vào sản phẩm:** khuếch tán là quá trình có lịch sử nên phải nằm trong integrator của cả ba đường render, tức là đổi pixel của `wisps-v3`/`flames-v3` — cần một lần re-baseline có chủ đích, cùng loại với W2 | 80% cảm giác "flow" mà roadmap P3b hứa; không thêm hạt | **Đo được:** độ rộng 0,14 / 0,41 / 0,49 phím ở ba lát (cổng 1,5 — dòng đang ship đo 1,87), local spread 0,29 so với 0,47, mất 11% độ cao. Còn thiếu ảnh/clip 3 checkpoint trên máy có GPU |
 | **W2 · Vật liệu** | **Nửa đầu xong 2026-10-20:** bản phần mềm vẽ flame bằng đúng luật hạt của engine (`FlameMotion`, guard + 5 fact + `VerifyWpfFlameParity`) thay cho chùm ellipse dán phím. **Còn lại:** vật lý của chính engine (nổi có gia tốc, nở ra khi nguội, nhiệt độ), không tách được khỏi một lần re-baseline `flames-v3` | Làm đám hạt có khối lượng và "chín" | Bảng `LifeCurve` cho 5 họ × 3 look; review ảnh tĩnh + clip |
 | **W3 · Tương tác & tải** | Va chạm (thành phần 8), bảng `exp`/`sin` nếu đo thấy cần; **cân nhắc** `EmissionScale` cho adaptive | Chỉ làm sau khi hình đã chốt | Benchmark `--bench` trên GPU thật (ngoài sandbox này) |

@@ -1097,6 +1097,52 @@ def scan_flame_motion_contract():
     return errors
 
 
+def scan_held_emission_parity():
+    """A held key must let off the same amount on both renderers.
+
+    The engine births ``ParticleAmount * 1.3`` embers and ``WispAmount * 4`` wisps a second for every sounding
+    key. The software stage had no sustained-ember channel and birthed wisps at ``WispAmount`` — a quarter of
+    the engine's — so one preset showed two twisting smoke strands and a stream of embers on a GPU machine and a
+    thin trickle on a bare key without one. ``Stage/HeldEmission.cs`` now holds both rates.
+
+    The engine keeps its own float expressions so the frames pinned by the particle evidence stay identical;
+    this check makes sure nobody changes those numbers without changing the shared helper, and that the fallback
+    still asks the helper instead of inventing a rate. ``EffectBudget`` already allows the two stages different
+    ceilings — that is a frame-time budget, not a smaller rate.
+    """
+    errors = []
+    helper_path = ROOT / "Stage" / "HeldEmission.cs"
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    gpu_path = ROOT / "Gpu" / "GpuStageSimulation.cs"
+    for path in (helper_path, stage_path, gpu_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; it is part of the held-emission contract"]
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    gpu = _code(gpu_path.read_text(encoding="utf-8"))
+    for name in ("Wisps", "Sparks"):
+        if f"HeldEmission.{name}(" not in stage:
+            errors.append(f"Stage/PianoStage.cs: nothing calls HeldEmission.{name}, so the fallback is not emitting "
+                          f"the engine's {name.lower()} rate")
+    for literal, what in (
+        ("look.WispAmount * 4f", "wisp density"),
+        ("look.ParticleAmount * 1.3f", "sustained-ember density"),
+    ):
+        if literal not in gpu:
+            errors.append(f"Gpu/GpuStageSimulation.cs: the held emitter's {what} changed away from '{literal}'; update "
+                          "Stage/HeldEmission.cs in the same commit or one renderer will emit less than the other")
+    for stale, what in (
+        ("_wispBudget[pitch] += _visual.WispAmount", "wisp budget that ignores the x4 rate"),
+        ("(int)_wispBudget[pitch]", "hand-rolled wisp credit instead of KeyEmissionBudget"),
+    ):
+        if stale in stage:
+            errors.append(f"Stage/PianoStage.cs: the old {what} is back; sustained emission goes through "
+                          "KeyEmissionBudget.Take with a HeldEmission rate")
+    if "KeyEmissionBudget.Take(ref _sparkBudget[pitch]" not in stage:
+        errors.append("Stage/PianoStage.cs: the sustained-ember channel is gone again; a held key must stream the "
+                      "selected burst family on the software stage too")
+    return errors
+
+
 def scan_previews_folder():
     folder = ROOT / "docs" / "previews"
     if not folder.exists():
@@ -2142,6 +2188,7 @@ def main():
     errors.extend(scan_wisp_motion_contract())
     errors.extend(scan_stage_clock_contract())
     errors.extend(scan_flame_motion_contract())
+    errors.extend(scan_held_emission_parity())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
@@ -2166,6 +2213,7 @@ def main():
     print("checked that the wisp sway lives in one curve and that the stage, the AR quads and the alignment review all draw it")
     print("checked that slow motion scales the particles on both renderers and leaves the held bar, rings and flashes on the real clock")
     print("checked that the held-key flame keeps the engine's law on the software stage instead of a plume pinned to the key")
+    print("checked that a held key lets off the engine's amount of embers and wisps on both renderers, ceilings aside")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")
