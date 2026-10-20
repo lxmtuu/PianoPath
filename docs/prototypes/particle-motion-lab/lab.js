@@ -267,13 +267,53 @@
   }
 
   // ------------------------------------------------------------------ models
-  var MODEL = { GPU: 'gpu', WPF: 'wpf', V2: 'v2' };
+  var MODEL = { GPU: 'gpu', WPF: 'wpf', V2: 'v2', FLOW: 'flow' };
 
   function v2Flags(flags) {
     return Object.assign({
       curlField: true, dragCurve: true, lifeCurves: true, spin: true, diffusion: true,
       stagger: true, depth: true, floor: false, flamePhysics: true, wispInSim: true
     }, flags || {});
+  }
+
+  // W1 (PARTICLE-MOTION-REVIEW §7): the four flow-shape components of §5 rows 1-4. They are motion only -
+  // the emitter schedule is still shared with the other panels, so a difference between them is the model.
+  var FLOW_TAU = .45;        // s, wind entrainment time constant (row 2)
+  var FLOW_VERTICAL = .12;   // the wind bends the rise; it does not replace it (row 2)
+  var FLOW_DIFFUSION = 46;   // px/s^2 at Diffusion 55 (row 4)
+  var HELD_SPREAD = .22;     // rad cone half-angle for the sustained emitter (row 1)
+  var HELD_SPEED = .45;      // fraction of the burst speed (row 1)
+
+  function flowFlags(flags) {
+    return Object.assign({ sustain: true, wind: true, curl: true, diffusion: 55 }, flags || {});
+  }
+
+  function diffusionAmount(flags) {
+    if (flags.diffusion === false || flags.diffusion === 0) return 0;
+    return typeof flags.diffusion === 'number' ? flags.diffusion : 55;
+  }
+
+  // A divergence-free 2-D wind (curl of a stream function) with a slow upward draught over the keyboard: the
+  // field the column is entrained by. Amplitude follows the Vector field slider so the existing control keeps
+  // meaning.  psi = A sin(kx x + w) cos(ky y - .6w)
+  function flowWind(look, x, y, t) {
+    var s = Math.max(30, look.fieldScale * 2.1), kx = 1 / s, ky = 1 / (s * 1.6);
+    var w = t * (.22 + look.evolutionSpeed * .33);
+    var a = kx * x + w, b = ky * y - w * .6;
+    var amp = 88 * (look.vectorField / 36) * (s / 1.6);
+    return {
+      x: -amp * ky * Math.sin(a) * Math.sin(b),
+      y: -amp * kx * Math.cos(a) * Math.cos(b) - 26
+    };
+  }
+
+  // Small-scale curl, offset per particle by its own fieldSeed: neighbours share the eddy, so the stream
+  // twists together instead of every mote wandering on its own (row 3).
+  function flowCurl(x, y, t, seed) {
+    var s = 34, kx = 1 / s, ky = 1 / (s * 1.25);
+    var a = kx * x + t * .9 + seed * TAU, b = ky * y - t * .66 + seed * 2.4;
+    var amp = 520;
+    return { x: -amp * ky * Math.sin(a) * Math.sin(b), y: -amp * kx * Math.cos(a) * Math.cos(b) };
   }
 
   function fieldV1(look, x, y, t) {
@@ -313,6 +353,26 @@
       p.age += dt;
       if (p.age >= p.life) { panel.particles.splice(i, 1); continue; }
       if (p.age < 0) continue; // staggered birth
+
+      if (model === MODEL.FLOW) {
+        // W1: advect the particle with a coherent wind, add its own eddy, and let it widen as it ages.
+        if (flags.wind) {
+          var fw = flowWind(look, p.x, p.y, panel.clock);
+          var kEntrain = 1 - Math.exp(-dt / FLOW_TAU);
+          p.vx += (fw.x - p.vx) * kEntrain;
+          p.vy += (fw.y - p.vy) * kEntrain * FLOW_VERTICAL;
+        }
+        if (flags.curl) {
+          var fc = flowCurl(p.x, p.y, panel.clock, p.fieldSeed);
+          p.vx += fc.x * dt; p.vy += fc.y * dt;
+        }
+        var diff = diffusionAmount(flags);
+        if (diff > 0) p.vx += (p.fieldSeed - .5) * FLOW_DIFFUSION * (diff / 55) * dt;
+        if (p.kind === 'wisp') p.vy *= Math.exp(-.35 * dt);
+        if (p.kind === 'flame') p.size *= 1 + .9 * dt;   // widens as it cools, ~1.4x over its life
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        continue;
+      }
 
       if (p.kind === 'wisp') {
         if (v2) {
@@ -392,16 +452,16 @@
     while (panel.nextImpact < panel.scenario.impacts.length &&
            panel.scenario.impacts[panel.nextImpact].t <= panel.clock) {
       var ev = panel.scenario.impacts[panel.nextImpact++];
-      for (var b = 0; b < ev.list.length; b++) panel.particles.push(cloneParticle(ev.list[b], v2, flags));
+      for (var b = 0; b < ev.list.length; b++) panel.particles.push(cloneParticle(ev.list[b], v2, flags, model, look));
     }
     while (panel.nextTick < panel.scenario.ticks.length &&
            panel.scenario.ticks[panel.nextTick].t <= panel.clock) {
       var tick = panel.scenario.ticks[panel.nextTick++];
-      for (var c = 0; c < tick.list.length; c++) panel.particles.push(cloneParticle(tick.list[c], v2, flags));
+      for (var c = 0; c < tick.list.length; c++) panel.particles.push(cloneParticle(tick.list[c], v2, flags, model, look));
     }
   }
 
-  function cloneParticle(src, v2, flags) {
+  function cloneParticle(src, v2, flags, model, look) {
     var p = {
       shape: src.shape, kind: src.kind, x: src.x, y: src.y, vx: src.vx, vy: src.vy,
       life: src.life, size: src.size, mass: src.mass, grav: src.grav, dragK: src.dragK,
@@ -414,13 +474,21 @@
       p.vx *= s; p.vy *= s;
       p.size *= 1 - .30 * src.depth;
     }
+    if (model === MODEL.FLOW && flags.sustain !== false && src.kind === 'held' && look) {
+      // Row 1: the sustained emitter is a narrow, slow, upward cone. Same birth, different aim - the burst
+      // emitter that draws the impact shells keeps its wide fan, which is the whole point of splitting them.
+      var speed = Math.sqrt(src.vx * src.vx + src.vy * src.vy) * HELD_SPEED;
+      var off = Math.atan2(src.vx, -src.vy) * (HELD_SPREAD / Math.max(.01, look.particleSpread));
+      p.vx = Math.sin(off) * speed;
+      p.vy = -Math.cos(off) * speed;
+    }
     return p;
   }
 
   function makePanel(model) {
     return {
       model: model, origin: model === MODEL.WPF ? 'wpf' : model === MODEL.GPU ? 'gpu' : null,
-      flags: v2Flags(), particles: [], clock: 0, nextImpact: 0, nextTick: 0,
+      flags: model === MODEL.FLOW ? flowFlags() : v2Flags(), particles: [], clock: 0, nextImpact: 0, nextTick: 0,
       scenario: null, sprites: 0
     };
   }
@@ -485,9 +553,10 @@
   }
 
   function drawPanel(ctx, panel, look) {
-    var v2 = panel.model === MODEL.V2;
+    var flow = panel.model === MODEL.FLOW;
+    var v2 = panel.model === MODEL.V2 || flow;
     var flags = panel.flags;
-    var wispOffset = !(v2 && flags.wispInSim);
+    var wispOffset = !(v2 && flags.wispInSim) && !flow;
     panel.sprites = 0;
 
     ctx.save();
@@ -697,7 +766,7 @@
       look: Object.assign({}, DEFAULT_LOOK),
       family: options.family || 'Embers',
       mode: options.mode || 'ab', // 'ab' = current vs v2, 'parity' = GPU vs WPF
-      panels: [makePanel(MODEL.GPU), makePanel(MODEL.V2)],
+      panels: [makePanel(MODEL.GPU), options.mode === 'flow' ? makePanel(MODEL.FLOW) : makePanel(MODEL.V2)],
       playing: true, loop: 0, speed: 1,
       scenario: null
     };
@@ -705,7 +774,7 @@
       lab.scenario = buildScenario(options.seed || 20261019, lab.look, lab.family);
       lab.panels[0].model = MODEL.GPU;
       lab.panels[0].origin = 'gpu';
-      lab.panels[1].model = lab.mode === 'parity' ? MODEL.WPF : MODEL.V2;
+      lab.panels[1].model = lab.mode === 'parity' ? MODEL.WPF : lab.mode === 'flow' ? MODEL.FLOW : MODEL.V2;
       lab.panels[1].origin = lab.mode === 'parity' ? 'wpf' : null;
       resetPanel(lab.panels[0], lab.scenario);
       resetPanel(lab.panels[1], lab.scenario);
@@ -733,7 +802,10 @@
     keyCenter: keyCenter, noteColor: noteColor,
     buildScenario: buildScenario, makePanel: makePanel, resetPanel: resetPanel,
     stepPanel: stepPanel, drawPanel: drawPanel, render: render, paintScene: paintScene, drawNotes: drawNotes,
-    createLab: createLab, v2Flags: v2Flags, cloneParticle: cloneParticle,
+    createLab: createLab, v2Flags: v2Flags, flowFlags: flowFlags, cloneParticle: cloneParticle,
+    flowWind: flowWind, flowCurl: flowCurl, diffusionAmount: diffusionAmount,
+    FLOW_TAU: FLOW_TAU, FLOW_VERTICAL: FLOW_VERTICAL, FLOW_DIFFUSION: FLOW_DIFFUSION,
+    HELD_SPREAD: HELD_SPREAD, HELD_SPEED: HELD_SPEED,
     sizeOverLife: sizeOverLife, alphaOverLife: alphaOverLife
   };
 

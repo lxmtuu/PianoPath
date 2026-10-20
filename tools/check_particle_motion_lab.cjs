@@ -249,7 +249,192 @@ console.log('wisp parity (lab keeps the pre-W0 WPF sway as the "before" picture)
     /Math\.Clamp\(turbulence, 0, 1\)/.test(curve) && /Math\.Clamp\(width, 0, 1\)/.test(curve));
 }
 
-// ---------------------------------------------------------------- 7. draw path
+// ---------------------------------------------------------------- 7. W1 flow shape
+// PARTICLE-MOTION-REVIEW §7 asks W1 for "a stream, not a rod": a sustained emitter with its own narrow cone,
+// a coherent wind the motes are carried by, a per-particle eddy, and diffusion that widens the stream with
+// age — with the gate "no stream wider than 1.5 keys". The lab's `flow` model is that proposal, and these
+// checks are the numbers the review will quote: the widths are measured as the p10..p90 of the *drawn*
+// horizontal position inside three 20 px horizontal slices of the column, in white-key widths.
+console.log('W1 flow shape (sustained stream, wind entrainment, seed curl, diffusion)');
+{
+  const LANE = lab.STAGE_W / 52;          // one white key
+  const KEY = 60;
+  const KEY_X = lab.keyCenter(KEY);
+  const BIRTHS = 120, SPAN = 1.2;
+
+  function lcg(seed) {
+    let x = seed >>> 0;
+    return () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; };
+  }
+
+  // One key, one sustained stream: 120 motes born evenly over 1.2 s, then measured at t = 1.2 s. The same
+  // descriptors feed every model, so a difference here is the motion model, exactly as in the A/B panels.
+  function stream(model, seed, flags, kind) {
+    const panel = lab.makePanel(model);
+    panel.flags = model === lab.MODEL.FLOW
+      ? lab.flowFlags(flags || {})
+      : Object.assign({}, panel.flags, flags || {});
+    lab.resetPanel(panel, { duration: 0, impacts: [], ticks: [] });
+    const rnd = lcg(seed), births = [];
+    for (let i = 0; i < BIRTHS; i++) {
+      const strand = rnd() < .5 ? 0 : 1;
+      births.push({
+        t: i * SPAN / BIRTHS,
+        src: kind === 'flame' ? {
+          shape: 'flame', kind: 'flame', x: KEY_X, y: lab.HIT_Y - 1,
+          vx: (rnd() - .5) * 14, vy: -(50 + 150 * LOOK.flameHeight) * (.6 + rnd() * .6),
+          life: .22 + LOOK.flameHeight * .45 * (.6 + rnd() * .6),
+          size: (lab.STAGE_W / 88) * (.35 + rnd() * .3),
+          mass: 1.5, grav: 1, dragK: 0, color: [255, 140, 38], phase: rnd() * lab.TAU,
+          spin: 0, depth: 0, fieldSeed: rnd(), delay: 0
+        } : {
+          shape: 'dot', kind: 'wisp', x: KEY_X, y: lab.HIT_Y - 2,
+          vx: (rnd() - .5) * 8, vy: -LOOK.wispSpeed * (.75 + rnd() * .5),
+          life: 1.4 * (.7 + rnd() * .6), size: 1, mass: 1.5, grav: 0, dragK: 0,
+          color: [255, 255, 255], phase: strand * Math.PI + (rnd() - .5) * .5,
+          spin: 0, depth: 0, fieldSeed: rnd(), delay: 0
+        }
+      });
+    }
+    let next = 0;
+    for (let f = 0; f < Math.round(SPAN / STEP); f++) {
+      while (next < births.length && births[next].t <= panel.clock) {
+        const b = births[next++];
+        panel.particles.push(lab.cloneParticle(
+          b.src, model === lab.MODEL.V2 || model === lab.MODEL.FLOW, panel.flags, model, LOOK));
+      }
+      panel.clock += STEP;
+      lab.stepPanel(panel, STEP, LOOK);
+    }
+    return panel;
+  }
+
+  // What the eye sees: the engine adds the wisp sway when it draws. The flow model integrates its own lateral
+  // motion instead, so its position is already the drawn one.
+  function drawnX(p, model) {
+    if (model === lab.MODEL.GPU && p.kind === 'wisp') {
+      const amp = (5 + LOOK.wispTurbulence * 26) * (.45 + LOOK.wispWidth) * Math.min(1, p.age * 1.6);
+      return p.x + Math.sin(p.age * (3 + LOOK.wispTurbulence * 5) + p.phase) * amp;
+    }
+    return p.x;
+  }
+
+  function sliceWidth(panel, model, lo, hi) {
+    const xs = panel.particles
+      .filter(p => { const rise = lab.HIT_Y - p.y; return rise >= lo && rise < hi; })
+      .map(p => drawnX(p, model)).sort((a, b) => a - b);
+    if (xs.length < 5) return null;
+    const q = t => xs[Math.min(xs.length - 1, Math.floor(t * (xs.length - 1)))];
+    return (q(.9) - q(.1)) / LANE;
+  }
+
+  // How much of the lateral spread is *local*: for each mote, the distance from the mean of its two birth
+  // neighbours, over the spread of the whole stream. A rigid rod gives 0; independent jitter gives ~1; a
+  // column that bends as one body stays near 0.2.
+  function localSpread(panel, model) {
+    const ps = panel.particles.slice().sort((a, b) => b.age - a.age);
+    const xs = ps.map(p => drawnX(p, model)), n = xs.length;
+    if (n < 12) return null;
+    const mean = xs.reduce((a, b) => a + b, 0) / n;
+    const sd = Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+    if (sd < .01) return null;
+    let local = 0, count = 0;
+    for (let i = 1; i < n - 1; i++) { local += Math.abs(xs[i] - (xs[i - 1] + xs[i] + xs[i + 1]) / 3); count++; }
+    return (local / count) / sd;
+  }
+
+  const gpu = stream(lab.MODEL.GPU, 20261020);
+  const flow = stream(lab.MODEL.FLOW, 20261020);
+  const slices = p => [sliceWidth(p, lab.MODEL.FLOW, 30, 50), sliceWidth(p, lab.MODEL.FLOW, 70, 90),
+    sliceWidth(p, lab.MODEL.FLOW, 110, 130)];
+  const [low, mid, high] = slices(flow);
+  const shown = [low, mid, high].map(v => v === null ? '--' : v.toFixed(2)).join(' / ');
+
+  check(`every slice of the proposed stream is inside the 1.5-key gate (${shown} keys at 30/80/120 px up)`,
+    low !== null && mid !== null && high !== null && [low, mid, high].every(w => w > 0 && w <= 1.5));
+
+  check(`the stream widens with height instead of staying a rod (${low.toFixed(2)} -> ${high.toFixed(2)} keys)`,
+    high > low * 1.6);
+
+  const gpuLocal = localSpread(gpu, lab.MODEL.GPU);
+  const flowLocal = localSpread(flow, lab.MODEL.FLOW);
+  check(`the column bends as one body, not as independent jitter (local spread ${gpuLocal.toFixed(2)} -> ${flowLocal.toFixed(2)})`,
+    flowLocal !== null && gpuLocal !== null && flowLocal < gpuLocal * .75);
+
+  const rise = p => Math.max(...p.particles.map(q => lab.HIT_Y - q.y));
+  check(`entrainment keeps the rise (${rise(flow).toFixed(0)} px against the engine's ${rise(gpu).toFixed(0)})`,
+    rise(flow) > rise(gpu) * .85);
+
+  const centroid = p => p.particles.reduce((a, q) => a + drawnX(q, lab.MODEL.FLOW), 0) / p.particles.length;
+  check(`the stream stays on its key (centroid ${((centroid(flow) - KEY_X) / LANE).toFixed(2)} keys off centre)`,
+    Math.abs(centroid(flow) - KEY_X) / LANE < 1.5);
+
+  const again = stream(lab.MODEL.FLOW, 20261020);
+  const sig = p => p.particles.map(q => `${q.x.toFixed(5)},${q.y.toFixed(5)}`).join('|');
+  check('the proposed stream is deterministic for a seed', sig(flow) === sig(again));
+
+  const other = stream(lab.MODEL.FLOW, 777);
+  const centroids = p => {
+    const ps = p.particles.slice().sort((a, b) => b.age - a.age);
+    const out = [];
+    for (let i = 0; i + 9 < ps.length; i += 10) {
+      out.push(ps.slice(i, i + 10).reduce((a, q) => a + q.x, 0) / 10);
+    }
+    return out;
+  };
+  const path = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
+  const differentSeed = path(centroids(flow), centroids(other));
+  check(`each seed gets its own eddy field (paths differ by ${differentSeed.toFixed(1)} px)`, differentSeed > 1);
+
+  // Diffusion shows up in the middle of the column, where the motes are old enough for the walk to matter and
+  // still dense enough to measure: it roughly doubles that slice. At the very top the width is dominated by
+  // how much the wind has bent the old, fast motes, so the difference there is much smaller.
+  const noDiffusion = stream(lab.MODEL.FLOW, 20261020, { diffusion: 0 });
+  const narrowMid = sliceWidth(noDiffusion, lab.MODEL.FLOW, 70, 90);
+  check(`diffusion roughly doubles the mid-column width (${narrowMid.toFixed(2)} keys without it, `
+    + `${mid.toFixed(2)} with)`, narrowMid < mid * .7);
+
+  const noWind = stream(lab.MODEL.FLOW, 20261020, { wind: false });
+  check(`without the wind the stream stops moving as one body (local spread ${localSpread(noWind, lab.MODEL.FLOW).toFixed(2)})`,
+    localSpread(noWind, lab.MODEL.FLOW) > flowLocal * 1.5);
+
+  // Row 1: the sustained emitter is its own narrow, slow cone, while the impact shells keep their wide fan.
+  function cone(model) {
+    const panel = lab.makePanel(model);
+    const src = {
+      shape: 'streak', kind: 'held', x: KEY_X, y: lab.HIT_Y - 1, vx: 151, vy: -120,
+      life: .9, size: 1.6, mass: .7, grav: 1, dragK: 1, color: [255, 255, 255],
+      phase: 0, spin: 0, depth: 0, fieldSeed: .5, delay: 0
+    };
+    const p = lab.cloneParticle(src, true, panel.flags, model, LOOK);
+    return { speed: Math.hypot(p.vx, p.vy), off: Math.atan2(p.vx, -p.vy) };
+  }
+  const shippedCone = cone(lab.MODEL.GPU), flowCone = cone(lab.MODEL.FLOW);
+  check(`the sustain emitter is ${(flowCone.off / shippedCone.off).toFixed(2)}x the cone and ${
+    (flowCone.speed / shippedCone.speed).toFixed(2)}x the speed of the impact emitter`,
+    Math.abs(flowCone.off / shippedCone.off - lab.HELD_SPREAD / LOOK.particleSpread) < .02 &&
+    Math.abs(flowCone.speed / shippedCone.speed - lab.HELD_SPEED) < .01);
+
+  // The flame takes the same four components: it must keep its rise and widen as it cools.
+  const gpuFlame = stream(lab.MODEL.GPU, 20261020, null, 'flame');
+  const flowFlame = stream(lab.MODEL.FLOW, 20261020, null, 'flame');
+  const meanSize = p => p.particles.reduce((a, q) => a + q.size, 0) / p.particles.length;
+  check(`the flame keeps its rise and swells as it cools (${rise(flowFlame).toFixed(0)} px vs ${rise(gpuFlame).toFixed(0)}, `
+    + `size ${meanSize(gpuFlame).toFixed(2)} -> ${meanSize(flowFlame).toFixed(2)})`,
+    rise(flowFlame) > rise(gpuFlame) * .85 && meanSize(flowFlame) > meanSize(gpuFlame) * 1.1);
+
+  // The page's third comparison button builds the same object; a mode the browser can pick but the model
+  // cannot build would be a broken prototype.
+  const tiny = { duration: 1, impacts: [], ticks: [] };
+  const harness = lab.createLab({ mode: 'flow', family: 'Embers', seed: 20261019 });
+  let drew = null;
+  try { lab.drawPanel(makeCtx(), harness.panels[1], LOOK); } catch (error) { drew = error; }
+  check('the page can build the flow comparison and draw it',
+    harness.panels[1].model === lab.MODEL.FLOW && harness.panels[1].flags.sustain === true && drew === null,
+    drew && drew.message);
+}
+
+// ---------------------------------------------------------------- 8. draw path
 console.log('draw path');
 {
   const s = scenarioFor('Splash');
@@ -265,7 +450,7 @@ console.log('draw path');
     threw === null && panel.sprites > 0, threw && threw.message);
 }
 
-// ---------------------------------------------------------------- 8. see-style playground
+// ---------------------------------------------------------------- 9. see-style playground
 console.log('see-style motion playground');
 {
   const presets = seeMusic.PRESET_ORDER;

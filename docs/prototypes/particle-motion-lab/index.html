@@ -158,6 +158,7 @@
         <div class="segments" role="group" aria-label="Chế độ so sánh">
           <button id="mode-ab" aria-pressed="true">Hiện tại ↔ v2</button>
           <button id="mode-parity" aria-pressed="false">GPU ↔ WPF</button>
+          <button id="mode-flow" aria-pressed="false">GPU ↔ flow (W1)</button>
         </div>
       </div>
 
@@ -245,7 +246,7 @@
   var lab = window.ParticleLab;
   var look = {};
 
-  var CHIPS = [
+  var CHIPS_V2 = [
     ['curlField', 'Curl field'],
     ['dragCurve', 'Drag curve'],
     ['lifeCurves', 'Life curves'],
@@ -257,6 +258,15 @@
     ['flamePhysics', 'Flame physics'],
     ['wispInSim', 'Wisp in sim']
   ];
+  // W1 has its own four components: PARTICLE-MOTION-REVIEW §5 rows 1-4.
+  var CHIPS_FLOW = [
+    ['sustain', 'Sustain emitter'],
+    ['wind', 'Wind entrainment'],
+    ['curl', 'Seed curl'],
+    ['diffusion', 'Diffusion']
+  ];
+  function chipsForMode(mode) { return mode === 'flow' ? CHIPS_FLOW : CHIPS_V2; }
+  function defaultFlags(mode) { return mode === 'flow' ? lab.flowFlags() : lab.v2Flags(); }
 
   var state = {
     mode: 'ab', family: 'Embers', playing: true, speed: 1,
@@ -275,21 +285,24 @@
     chips: document.getElementById('chips')
   };
 
-  CHIPS.forEach(function (entry) {
-    var key = entry[0];
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = entry[1];
-    button.dataset.flag = key;
-    button.setAttribute('aria-pressed', state.flags[key] === false ? 'false' : 'true');
-    button.addEventListener('click', function () {
-      var on = button.getAttribute('aria-pressed') !== 'true';
-      button.setAttribute('aria-pressed', on ? 'true' : 'false');
-      state.flags[key] = on;
-      reset();
+  function buildChips() {
+    ctl.chips.innerHTML = '';
+    chipsForMode(state.mode).forEach(function (entry) {
+      var key = entry[0];
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = entry[1];
+      button.dataset.flag = key;
+      button.setAttribute('aria-pressed', state.flags[key] === false || state.flags[key] === 0 ? 'false' : 'true');
+      button.addEventListener('click', function () {
+        var on = button.getAttribute('aria-pressed') !== 'true';
+        button.setAttribute('aria-pressed', on ? 'true' : 'false');
+        state.flags[key] = on ? (key === 'diffusion' ? 55 : true) : false;
+        reset();
+      });
+      ctl.chips.appendChild(button);
     });
-    ctl.chips.appendChild(button);
-  });
+  }
 
   function setLook() {
     look = Object.assign({}, lab.DEFAULT_LOOK, {
@@ -317,11 +330,17 @@
     return c;
   }
 
+  var lastMode = null;
   function reset() {
     setLook();
+    if (state.mode !== lastMode) {           // a different model means a different set of components
+      state.flags = defaultFlags(state.mode);
+      buildChips();
+      lastMode = state.mode;
+    }
     engine = lab.createLab({ family: state.family, seed: 20261019, mode: state.mode });
     engine.look = Object.assign({}, look);
-    // keep the v2 flags the user chose, then rebuild the schedule with this look
+    // keep the flags the user chose, then rebuild the schedule with this look
     engine.panels[1].flags = Object.assign({}, state.flags);
     engine.rebuild();
     engine.playing = state.playing;
@@ -331,12 +350,24 @@
 
   function applyLabels() {
     var parity = state.mode === 'parity';
-    document.getElementById('mode-ab').setAttribute('aria-pressed', parity ? 'false' : 'true');
+    var flow = state.mode === 'flow';
+    document.getElementById('mode-ab').setAttribute('aria-pressed', parity || flow ? 'false' : 'true');
     document.getElementById('mode-parity').setAttribute('aria-pressed', parity ? 'true' : 'false');
+    document.getElementById('mode-flow').setAttribute('aria-pressed', flow ? 'true' : 'false');
     document.getElementById('left-title').textContent = 'Hiện tại · GPU';
     document.getElementById('left-tag').textContent = 'shipping';
     document.getElementById('left-tag').className = 'tag live';
-    if (parity) {
+    if (flow) {
+      document.getElementById('right-title').textContent = 'Đề xuất · W1 flow';
+      document.getElementById('right-tag').textContent = 'proposal';
+      document.getElementById('right-tag').className = 'tag propose';
+      document.getElementById('explain').innerHTML =
+        '<strong>Đang xem gì:</strong> cùng một chuỗi phát, nhưng panel phải chạy bốn thành phần của ' +
+        '<a href="../../PARTICLE-MOTION-REVIEW.md">W1</a>: emitter sustain hẹp và chậm, trường gió cuốn ' +
+        '(hạt bị không khí mang đi), curl nhỏ theo seed từng hạt, và khuếch tán làm dòng nở dần theo tuổi. ' +
+        'Dòng <em>hẹp hơn và cong như một khối</em> thay vì toả ra như pháo hoa; số đo nằm trong ' +
+        '<code>tools/check_particle_motion_lab.cjs</code> (§7).';
+    } else if (parity) {
       document.getElementById('right-title').textContent = 'Hiện tại · WPF fallback';
       document.getElementById('right-tag').textContent = 'shipping';
       document.getElementById('right-tag').className = 'tag live';
@@ -415,6 +446,7 @@
   ctl.replay.addEventListener('click', reset);
   document.getElementById('mode-ab').addEventListener('click', function () { state.mode = 'ab'; reset(); });
   document.getElementById('mode-parity').addEventListener('click', function () { state.mode = 'parity'; reset(); });
+  document.getElementById('mode-flow').addEventListener('click', function () { state.mode = 'flow'; reset(); });
 
   document.addEventListener('keydown', function (event) {
     if (event.code === 'Space') { event.preventDefault(); ctl.play.click(); }

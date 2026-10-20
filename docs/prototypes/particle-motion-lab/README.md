@@ -35,6 +35,10 @@ canvas 2D không mô phỏng hai thứ đó), nên cột
   (GPU cộng dao động lúc vẽ, WPF cộng vào vận tốc) — lưu ý: `lab.js` cố ý giữ integrator WPF **trước W0**,
   còn sản phẩm từ 2026-10-20 đã bỏ dao động khỏi vận tốc và vẽ flame bằng hạt, nên lab mô tả *mô hình cũ*,
   không phải hành vi hiện tại.
+- **GPU ↔ flow (W1)** — mô hình `flow`: bốn thành phần đầu của [PARTICLE-MOTION-REVIEW §5](../../PARTICLE-MOTION-REVIEW.md)
+  (emitter sustain hẹp, gió cuốn, curl theo seed, khuếch tán). Đây là *đề xuất*, chưa có trong sản phẩm: nó chạy
+  bên trong integrator nên đổi pixel của bằng chứng `wisps-v3`/`flames-v3`, tức là cần một lần re-baseline có
+  chủ đích. Các chip bên trái tắt từng thành phần để xem riêng.
 
 ## Thành phần v2 bật/tắt được
 
@@ -53,9 +57,12 @@ node tools/check_particle_motion_lab.cjs
 node tools/check_damper_light.cjs
 ```
 
-Hai script chạy headless: `check_particle_motion_lab.cjs` (36 assertions) kiểm tra lịch phát, tính tất định
-theo seed, độ ổn định 8 s cho cả năm họ hạt, độ nhạy của slider, các tính năng v2, đường vẽ, và playground
-SeeMusic (tám preset, ba lớp, magnetism, wind, twirl). `check_damper_light.cjs` (33 assertions) khoá các con số
+Hai script chạy headless: `check_particle_motion_lab.cjs` (53 assertions) kiểm tra lịch phát, tính tất định
+theo seed, độ ổn định 8 s cho cả năm họ hạt, độ nhạy của slider, các tính năng v2, đường vẽ, playground
+SeeMusic (chín preset, ba lớp, magnetism, wind, twirl), và §7 — phần **đo** của W1: dựng một dòng wisp 1,2 s ở
+một phím rồi in độ rộng p10–p90 theo phím ở ba độ cao, độ "cong như một khối" (local spread), độ cao còn lại,
+và tác dụng riêng của diffusion/wind. Tất cả bằng số, không bằng cảm nhận.
+`check_damper_light.cjs` (33 assertions) khoá các con số
 của [DAMPER-BAR-LIGHT-ANALYSIS.md](../../DAMPER-BAR-LIGHT-ANALYSIS.md): hai mức trước D0 vs 51 mức đề xuất, dead
 zone, thời gian lên/xuống, quãng chạy của lõi, lớp ô LED theo phím, và **khớp từng hằng số** với
 `Camera/ArDampers.cs`. Script hạt cố ý **thất bại** nếu hai mô

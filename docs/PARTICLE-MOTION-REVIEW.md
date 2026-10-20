@@ -176,6 +176,51 @@ nốt, thời điểm MIDI hay preset đã lưu.
 | 8 | Va chạm nhẹ | `if (y > HitY && vy > 0) vy *= −0,32; vx *= 0,78` | `FloorBounce` (0-100) | Splash/shard nảy trên phím |
 | 9 | Slow-motion chỉ cho hạt | WPF: tách `particleDt` khỏi `frameDt` | không có | Đồng bộ hợp đồng đã ghi trong `EFFECTS-REDESIGN.md` §8 |
 
+### 5.1 Bốn thành phần đầu đã dựng thành mô hình `flow` và **đo được**
+
+`docs/prototypes/particle-motion-lab/lab.js` có thêm `MODEL.FLOW`, cùng chế độ **GPU ↔ flow (W1)** trên trang.
+Nó giữ nguyên tiền đề của lab: hai panel nhận **cùng một chuỗi phát**, nên khác biệt nhìn thấy chỉ đến từ mô
+hình. Bốn thành phần đầu của bảng trên được cài đúng như công thức đã ghi:
+
+| # | Trong `lab.js` | Hằng số |
+|---|---|---|
+| 1 | nón hẹp, chậm, thiên lên cho emitter sustain (không đụng chùm impact) | `HELD_SPREAD .22`, `HELD_SPEED .45` |
+| 2 | `v += (wind − v)(1 − e^(−dt/τ))`, wind là curl của một hàm dòng **không phân kỳ** + gió nâng nhẹ | `FLOW_TAU .45`; chiều dọc chỉ nhận 12% (`FLOW_VERTICAL`) để gió **bẻ** dòng chứ không **dập** dòng |
+| 3 | curl nhỏ, lệch pha theo `fieldSeed` từng hạt | biên độ 520 px²/s |
+| 4 | `vx += (seed − 0,5)·46·dt`, nhân theo slider `Diffusion`/55 | `FLOW_DIFFUSION 46` — đúng hằng số trong bảng |
+
+**Số đo** (`node tools/check_particle_motion_lab.cjs` §7; một dòng wisp 1,2 s ở một phím, 120 hạt, đo tại
+t = 1,2 s; "phím" = bề rộng phím trắng; độ rộng là p10–p90 của vị trí **lúc vẽ** trong một lát dày 20 px):
+
+| Đại lượng | GPU đang ship | flow (W1) |
+|---|---|---|
+| Độ rộng lát 30–50 px trên phím | **0,62 phím** | **0,14 phím** |
+| Độ rộng lát 70–90 px | **1,06 phím** | **0,41 phím** |
+| Độ rộng lát 110–130 px | **1,87 phím** | **0,49 phím** |
+| "Cong như một khối" (local spread, thấp = tốt) | 0,47 | **0,29** |
+| Độ cao lớn nhất còn lại | 195 px | 173 px (−11%) |
+| Tâm dòng lệch khỏi phím | −0,79 phím | −0,30 phím |
+| Tắt `Diffusion` → lát giữa | — | 0,21 phím (≈½) |
+| Tắt gió → local spread | — | 0,54 (mất tính khối) |
+| Emitter sustain so với chùm impact | 1,00× nón / 1,00× tốc độ | 0,31× / 0,45× |
+| Flame: độ cao / size trung bình | 82 px / 5,20 | 76 px / 6,47 |
+
+Ba điều đọc được từ bảng, và chúng **đổi cách hiểu cổng nghiệm thu**:
+
+1. **Cổng "≤ 1,5 phím" không phải hiện trạng.** Đo đúng cách (vị trí lúc vẽ, p10–p90) thì dòng wisp đang ship
+   đã rộng **1,87 phím** ở một phần ba trên. Nghĩa là 1,5 phím là mục tiêu *thu hẹp*, không phải "giữ nguyên".
+   W1 đạt 0,49 phím ở cùng lát — dưới cổng gần 3 lần.
+2. **Khác biệt không chỉ là hẹp hơn.** local spread 0,29 so với 0,47: dòng mới cong **như một khối**, còn dòng
+   cũ là hiệu ứng sway ngẫu nhiên từng hạt. Đó chính là cảm giác "flow" mà P3b hứa, và là thứ không thể đo
+   bằng độ rộng.
+3. **Hai thành phần làm hai việc khác nhau.** Tắt diffusion → lát giữa hẹp còn một nửa; tắt gió → dòng mất tính
+   khối (0,54). Vì vậy không thể bỏ thành phần nào mà vẫn giữ hình.
+
+**Hệ quả hợp đồng (quan trọng):** mô hình flow chạy **bên trong integrator**, không phải offset lúc vẽ như W0.
+Khuếch tán là quá trình có lịch sử — không thể tính lại tại thời điểm vẽ. Vì vậy muốn đưa vào sản phẩm thì GPU,
+WPF và AR phải chạy **cùng một** integrator (AR đọc vị trí CPU nên điều này khả thi), và mọi frame của
+`wisps-v3`/`flames-v3` sẽ đổi. Đó là lý do W1 dừng ở mức mô hình + số đo: cần một lần re-baseline có chủ đích.
+
 **Về slider:** đề xuất *không* thêm control nào ở màn hình mặc định. Năm tham số mới (1, 4, 6, 8 và độ
 lạnh của họ) nên nằm sau **Nâng cao**, đúng nguyên tắc "control phổ biến trước" của
 [PRISM-FLOW-DESIGN-ROADMAP](PRISM-FLOW-DESIGN-ROADMAP.md) §5 (Quy tắc thiết kế UI). Bốn control cũ (`Velocity`, `Spread`, `Drag`,
@@ -232,7 +277,7 @@ GPU/WPF bằng số thay vì bằng mắt.
 | Lát | Nội dung | Vì sao trước | Cổng |
 |---|---|---|---|
 | **W0 · Hợp đồng** | **Xong 2026-10-20:** gom `WispMotion` (5 bản sao → 1), WPF bỏ dao động khỏi vận tốc, tách `particleDt` khỏi `frameDt` (`StageClock`), guard trong `check_sources` + `--verify`. **Chuyển sang W2:** vật lý flame — nó **đổi pixel**, mà bằng chứng `flames-v3` đang ghim đúng hình flame hiện tại, nên phải làm cùng lúc với một lần re-baseline có chủ đích, không phải như một refactor | Sửa lỗi, không đổi nghệ thuật; tạo nền để so sánh được | Test so sánh vị trí wisp GPU/WPF; slow-motion không đổi tốc độ live bar |
-| **W1 · Hình dáng dòng chảy** | Emitter sustain riêng (thành phần 1), gió cuốn (thành phần 2), curl theo seed (thành phần 3), khuếch tán (thành phần 4) | 80% cảm giác "flow" mà roadmap P3b hứa; không thêm hạt | Ảnh/clip 3 checkpoint (nhấn/giữ/pedal) ở 100% và 50%; độ rộng dòng ≤ 1,5 phím |
+| **W1 · Hình dáng dòng chảy** | **Mô hình + số đo xong 2026-10-20:** bốn thành phần (emitter sustain, gió cuốn, curl theo seed, khuếch tán) chạy trong lab dưới `MODEL.FLOW`, có chế độ so sánh trên trang và 12 assertion đo trong `check_particle_motion_lab.cjs` §7. **Chưa vào sản phẩm:** khuếch tán là quá trình có lịch sử nên phải nằm trong integrator của cả ba đường render, tức là đổi pixel của `wisps-v3`/`flames-v3` — cần một lần re-baseline có chủ đích, cùng loại với W2 | 80% cảm giác "flow" mà roadmap P3b hứa; không thêm hạt | **Đo được:** độ rộng 0,14 / 0,41 / 0,49 phím ở ba lát (cổng 1,5 — dòng đang ship đo 1,87), local spread 0,29 so với 0,47, mất 11% độ cao. Còn thiếu ảnh/clip 3 checkpoint trên máy có GPU |
 | **W2 · Vật liệu** | **Nửa đầu xong 2026-10-20:** bản phần mềm vẽ flame bằng đúng luật hạt của engine (`FlameMotion`, guard + 5 fact + `VerifyWpfFlameParity`) thay cho chùm ellipse dán phím. **Còn lại:** vật lý của chính engine (nổi có gia tốc, nở ra khi nguội, nhiệt độ), không tách được khỏi một lần re-baseline `flames-v3` | Làm đám hạt có khối lượng và "chín" | Bảng `LifeCurve` cho 5 họ × 3 look; review ảnh tĩnh + clip |
 | **W3 · Tương tác & tải** | Va chạm (thành phần 8), bảng `exp`/`sin` nếu đo thấy cần; **cân nhắc** `EmissionScale` cho adaptive | Chỉ làm sau khi hình đã chốt | Benchmark `--bench` trên GPU thật (ngoài sandbox này) |
 
