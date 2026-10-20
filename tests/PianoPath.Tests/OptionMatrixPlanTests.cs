@@ -105,6 +105,27 @@ public class OptionMatrixPlanTests
     }
 
     [Fact]
+    public void The_ar_pose_slice_uses_values_the_product_offers()
+    {
+        Assert.Equal(5, OptionMatrixPlan.PoseSelections.Count);
+        foreach (var (id, value) in OptionMatrixPlan.PoseSelections)
+        {
+            var family = OptionMatrixPlan.PoseFamily(id);
+            Assert.Contains(value, family.Values);
+            // A neutral value would make the two AR captures identical by construction.
+            Assert.NotEqual(family.Neutral, value);
+            Assert.Contains(value, OptionMatrixPlan.CapturedValues(family));
+        }
+        // The slice exists to cover the three ownership channels in AR: morph particles, the morph flash and
+        // the release ring, all of which draw while every sibling layer switch is off.
+        var families = OptionMatrixPlan.PoseSelections.Select(selection => OptionMatrixPlan.PoseFamily(selection.Family)).ToArray();
+        Assert.Equal(2, families.Count(family => family.Setting == "ImpactMorph"));
+        Assert.Contains(families, family => family.Setting == "ReleaseEffect");
+        Assert.All(families, family => Assert.Null(family.Gate));
+        Assert.Throws<ArgumentException>(() => OptionMatrixPlan.PoseFamily("nope"));
+    }
+
+    [Fact]
     public void Slugs_are_stable_file_names()
     {
         Assert.Equal("speed-lines", OptionMatrixPlan.Slug("Speed Lines"));

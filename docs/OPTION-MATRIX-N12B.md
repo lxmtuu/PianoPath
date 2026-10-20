@@ -74,8 +74,11 @@ Mỗi ảnh được so với baseline của **chính family đó** (cùng cản
 # chỉ ma trận (không chạy toàn suite)
 PianoPath.exe --verify --verify-option-matrix-only --verify-review-out=<thư-mục> --verify-log=<tệp.log>
 
-# hoặc chạy cùng lượt đầy đủ; --verify có --verify-review-out cũng chạy ma trận
+# hoặc chạy cùng lượt đầy đủ; --verify có --verify-review-out cũng chạy ma trận và lát AR/pose
 PianoPath.exe --verify --verify-review-out=<thư-mục>
+
+# chỉ lát AR/pose N12(d) — §8
+PianoPath.exe --verify --verify-option-pose-only --verify-review-out=<thư-mục> --verify-log=<tệp.log>
 ```
 
 Kết quả nằm trong `<thư-mục>/option-matrix/`:
@@ -101,12 +104,16 @@ Chạy trên nhánh push thì cả hai chỉ lên artifact, không vào Git.
   làn tĩnh đỏ ngay, không cần chờ Windows.
 - `tests/PianoPath.Tests/OptionMatrixPlanTests.cs`: ghim 11 trục / 62 giá trị / 64 cảnh / 128 ảnh, quy tắc
   "baseline không chụp hai lần", slug tên tệp, và ngữ nghĩa `ChangedPixels`/`NonBlackPixels`.
-- `Diagnostics/VerificationSuite.cs`: assert `captures == 128` và dòng `PASS` nêu rõ phạm vi.
+- `Diagnostics/VerificationSuite.cs`: assert `captures == 128` (và `30` cho lát AR/pose) cùng dòng `PASS` nêu rõ
+  phạm vi.
+- `OptionMatrixPlanTests`: lát AR/pose chỉ được chọn **giá trị sản phẩm** (không phải `None`/`Fade`), phủ đúng
+  hai kênh morph và kênh release, và không có công tắc riêng — tức cùng điều kiện "tự vẽ" như ma trận phẳng.
 
 ## 6. Không chứng nhận gì
 
 - **Không** phải duyệt mỹ thuật: ảnh để người xem, không có điểm chất lượng tự động.
-- **Không** phủ AR: chưa có pose/camera, nên family AR vẫn `Unverified` như audit §6 ghi.
+- **Không** phủ AR ngoài lát N12(d) ở §8: ba pose đã hiệu chỉnh × năm trục hiệu ứng được chiếu vào ảnh
+  camera; phần còn lại của ma trận (nốt, ambient) vẫn chỉ có bằng chứng ở sân khấu phẳng.
 - **Không** phủ **giá trị số**: amount/speed/size/intensity/curve, seek/reset, round-trip preset.
 - **Không** phủ smart modulator (`VelocityColor`, `OctaveColor`, `PedalGlow`, `TempoSync`, `AudioReactive`,
   `ZoneSplit`) hay theme graph.
@@ -151,3 +158,20 @@ giá trị morph lẫn **cả năm** kiểu release "được nhận nhưng khô
 
 Đổi lại: người dùng chọn Shatter với Sparks tắt giờ **thấy** shard (và bản ghi WPF khớp bản ghi GPU), còn ring
 morph/release sáng theo đúng slider của chúng thay vì theo slider wave.
+
+## 8. N12(d), phần 1 — cùng option đó qua ba pose AR
+
+Ma trận ở mục 2 chỉ chạy renderer sân khấu. Một option có thể vẽ đúng ở đó mà **không** đi qua đường chiếu AR —
+ring thành quad, flash thành billboard, shard bị xoay theo nốt — và không ảnh nào ở mục 2 cho thấy điều đó.
+
+Phần 1 của N12(d) (`Diagnostics/OptionPoseReview.cs`, route `--verify-option-pose-only`) chụp đúng năm trục mà
+nghệ thuật của chúng nằm **trong ảnh camera**: wave, burst, hai kênh morph (hạt và flash) và vòng release. Mỗi
+trục hai lần chụp — **tắt** và **bật** — ở cùng pose, cùng input, cùng seed; ba pose là ba pose đã hiệu chỉnh sẵn
+của review hạt giữ phím (`HeldParticleControlPlan.Views`: reference, oblique, near-overhead), nên không thêm
+fixture camera hay tuyên bố pose mới. Tổng **30 ảnh WARP 1280×720** (artifact `option-pose-n12d`), manifest ghi
+góc pose, sha256 của ảnh camera và số pixel đổi của từng cặp.
+
+Cổng: mỗi giá trị phải đổi **≥ 12 px** so với ảnh tắt **ở từng pose** — cùng ngưỡng với ma trận phẳng. Nếu một
+option chỉ có nhánh ở sân khấu, lượt chạy đỏ ngay tại pose đầu tiên. Ảnh tĩnh, không phải clip; chưa phủ
+ambient/nốt trong AR (sai số chiếu sẽ ảnh hưởng mọi giá trị của một trục như nhau, nên câu hỏi "option có nhánh
+không" đã được ma trận phẳng trả lời) và chưa phủ che tay (N10).

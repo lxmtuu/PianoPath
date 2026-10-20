@@ -1033,11 +1033,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: phase1-visual-review
-          # The option matrix lives in the same folder but has its own small artifact below; excluding it here
-          # keeps this bundle at the size it had before N12(b).
+          # The option matrix and the AR/pose slice live in the same folder but have their own small artifacts
+          # below; excluding them here keeps this bundle at the size it had before N12.
           path: |
             ${{ runner.temp }}/phase1-visual-review/**
             !${{ runner.temp }}/phase1-visual-review/option-matrix/**
+            !${{ runner.temp }}/phase1-visual-review/option-pose/**
           if-no-files-found: warn
           overwrite: true
           retention-days: 2
@@ -1050,6 +1051,18 @@ jobs:
         with:
           name: option-matrix-n12b
           path: ${{ runner.temp }}/phase1-visual-review/option-matrix
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 2
+
+      # N12(d) part 1: 30 AR captures (five effect axes × three calibrated poses × off/on) with the camera
+      # fixture, so the projection half of the audit can be reviewed without the full bundle.
+      - name: Publish the AR/pose option slice (N12(d))
+        if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/main')
+        uses: actions/upload-artifact@v7
+        with:
+          name: option-pose-n12d
+          path: ${{ runner.temp }}/phase1-visual-review/option-pose
           if-no-files-found: warn
           overwrite: true
           retention-days: 2

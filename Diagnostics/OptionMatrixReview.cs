@@ -200,7 +200,7 @@ internal static class OptionMatrixReview
     /// Every family is off in the baseline and exactly one is on per value; the layers that would add a second
     /// channel are pinned rather than inherited from a preset, so a preset edit cannot change the matrix.
     /// </summary>
-    private static PianoVisualSettings Settings(OptionMatrixPlan.Family family, string? value)
+    internal static PianoVisualSettings Settings(OptionMatrixPlan.Family family, string? value)
     {
         var settings = new PianoVisualSettings
         {
@@ -316,7 +316,7 @@ internal static class OptionMatrixReview
             renderer.StageNoteCount, renderer.StageKeyCount));
     }
 
-    private static void Drive(OptionMatrixPlan.Family family, int frame, Action<int> impact, Action<int> down, Action<int> up)
+    internal static void Drive(OptionMatrixPlan.Family family, int frame, Action<int> impact, Action<int> down, Action<int> up)
     {
         switch (family.Scene)
         {

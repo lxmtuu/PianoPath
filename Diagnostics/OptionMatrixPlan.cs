@@ -82,6 +82,27 @@ internal static class OptionMatrixPlan
     });
 
     /// <summary>
+    /// N12(d) — the AR/pose slice. The flat matrix proves that each value draws in the stage renderer; it
+    /// cannot prove the option survives the calibrated projection, where rings become quads, flashes become
+    /// billboards and particles are re-aimed. These five axes are the ones whose art is drawn into the camera
+    /// image (wave, burst, the two morph channels and the release ring), and each is shot at the three
+    /// calibrated poses with its own off state. The values are product values: <see cref="PoseFamily"/>
+    /// resolves them through <see cref="Families"/>, so a rename fails loudly instead of silently rendering
+    /// the neutral twice.
+    /// </summary>
+    internal static IReadOnlyList<(string Family, string Value)> PoseSelections { get; } = Array.AsReadOnly(new[]
+    {
+        ("impact-wave", "Shockwave"),
+        ("impact-burst", "Fireworks"),
+        ("impact-morph", "Shatter"),   // particle channel
+        ("impact-morph", "Morph"),     // flash channel
+        ("release", "Echo Rings")       // ring channel
+    });
+
+    internal static Family PoseFamily(string id) => Families.SingleOrDefault(family => family.Id == id)
+        ?? throw new ArgumentException($"The AR/pose slice names unknown family '{id}'.", nameof(id));
+
+    /// <summary>
     /// Frames each scene runs before the capture. A family's sample time is the last frame's time, so one
     /// number per scene keeps the reviewed moment and the rendered frames from drifting apart.
     /// </summary>
