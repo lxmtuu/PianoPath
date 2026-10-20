@@ -20,6 +20,15 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 
 ## Unreleased
 
+### Effects
+- **The held-key flame** on machines without a GPU is now the engine's own stream of cooling motes (49 per second per key at the default, white → yellow → orange → red) instead of a motionless ellipse plume pinned to the key top.
+- **Held wisps and embers** now leave the software renderer at the engine's density and sway on the same curve — before, the software path emitted a quarter of the wisps, had no ember channel, and added the sway to velocity, so the motes kept drifting in slow motion.
+- **Note morph, release effects and the morph flash** now draw under their own switch: Shatter, Melt, Absorb, Bounce, Star morph, Snap Back and Echo Rings appear even with *Enable impact wave*, *Impact flash* or *Sparks* off — before, those choices were accepted and then drew nothing.
+- The **Note morph** card in Settings always offers its choices, and **Morph intensity** only appears once a morph is selected.
+
+### Fixes
+- Particle pacing is decoupled from the frame rate: one preset now moves the same at 60 Hz, 144 Hz and in an exported video, instead of speeding up with the refresh rate.
+
 ## 2.2.0 — 2026-10-18
 
 ### AR overlay

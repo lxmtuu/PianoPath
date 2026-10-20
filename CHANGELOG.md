@@ -19,6 +19,15 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
 
 ## Unreleased
 
+### Hiệu ứng
+- **Lửa ở phím đang giữ** trên máy không có GPU giờ là dòng hạt nguội dần đúng luật của engine (49 hạt/giây/phím ở mặc định, trắng → vàng → cam → đỏ), thay cho một chùm ellipse đứng yên dán lên đầu phím.
+- **Wisp và ember khi giữ phím** ở bản phần mềm phát đúng mật độ của engine và lắc theo cùng một đường cong — trước đây bản phần mềm chỉ phát một phần tư số wisp, không có ember, và cộng dao động vào vận tốc nên hạt vẫn trôi khi xem slow-motion.
+- **Note morph, hiệu ứng nhả và flash** tự vẽ theo đúng công tắc của chúng: chọn Shatter, Melt, Absorb, Bounce, Star morph, Snap Back hay Echo Rings vẫn thấy hiệu ứng dù đã tắt *Enable impact wave*, *Impact flash* hay *Sparks* — trước đây các lựa chọn đó được nhận nhưng không vẽ gì.
+- Thẻ **Note morph** trong Settings luôn hiện đủ lựa chọn, và thanh **Morph intensity** chỉ hiện khi đã chọn một kiểu morph.
+
+### Sửa lỗi
+- Nhịp mô phỏng hạt tách khỏi nhịp khung hình: cùng một preset cho cùng một chuyển động ở 60 Hz, 144 Hz và khi xuất video, thay vì nhanh dần theo tần số quét.
+
 ## 2.2.0 — 2026-10-18
 
 ### AR overlay
