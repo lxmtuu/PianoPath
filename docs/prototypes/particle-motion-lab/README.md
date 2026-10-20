@@ -31,8 +31,10 @@ canvas 2D không mô phỏng hai thứ đó), nên cột
 
 - **Hiện tại ↔ v2** — hai panel nhận *cùng một chuỗi phát* (same seed, same birth times, same angles,
   speeds and lifetimes). Mọi khác biệt nhìn thấy đến từ mô hình chuyển động, không từ RNG.
-- **GPU ↔ WPF** — cùng preset, hai đường render đang có trong sản phẩm. Dùng để thấy lệch wisp
-  (GPU cộng dao động lúc vẽ, WPF cộng vào vận tốc).
+- **GPU ↔ WPF** — cùng preset, hai đường render của sản phẩm. Dùng để thấy lệch wisp
+  (GPU cộng dao động lúc vẽ, WPF cộng vào vận tốc) — lưu ý: `lab.js` cố ý giữ integrator WPF **trước W0**,
+  còn sản phẩm từ 2026-10-20 đã bỏ dao động khỏi vận tốc và vẽ flame bằng hạt, nên lab mô tả *mô hình cũ*,
+  không phải hành vi hiện tại.
 
 ## Thành phần v2 bật/tắt được
 

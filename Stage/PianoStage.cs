@@ -671,7 +671,7 @@ internal sealed partial class PianoStage : FrameworkElement
         Array.Clear(_keyHeat);
         Array.Clear(_wispBudget); Array.Clear(_flameBudget);
         _petalRandom = new Random(seed is int value ? unchecked(value * 397 ^ PetalSeed) : PetalSeed);
-        _flameRandom = new Random(seed is int value ? unchecked(value * 331 ^ FlameSeed) : FlameSeed);
+        _flameRandom = new Random(seed is int flameSeed ? unchecked(flameSeed * 331 ^ FlameSeed) : FlameSeed);
         _random = new Random(seed ?? ParticleSeed);
         InvalidateVisual();
     }
