@@ -63,23 +63,28 @@ internal static class OptionPoseReview
 
             var captures = new List<Shot>(ExpectedCaptures);
             foreach (var pose in poses)
-            foreach (var selection in OptionMatrixPlan.PoseSelections)
+            // One off state per family: the morph axis is shot twice at the same pose (its particle channel and
+            // its flash), and both values are compared against the same off frame instead of re-rendering it.
+            foreach (var group in OptionMatrixPlan.PoseSelections.GroupBy(selection => selection.Family))
             {
-                var family = OptionMatrixPlan.PoseFamily(selection.Family);
-                if (!family.Values.Contains(selection.Value))
-                    throw new InvalidDataException($"The {family.Id} pose slice asks for '{selection.Value}', which the family does not offer.");
+                var family = OptionMatrixPlan.PoseFamily(group.Key);
                 var off = Capture(root, renderer, pose, cameras[pose.Id], family, null, "off", neutral: true);
-                var on = Capture(root, renderer, pose, cameras[pose.Id], family, selection.Value,
-                    OptionMatrixPlan.Slug(selection.Value), neutral: false);
-                // The two shots differ in exactly one setting; anything else would make the comparison meaningless.
-                var changed = OptionMatrixPlan.ChangedPixels(off.PixelBytes!, on.PixelBytes!);
-                // The frames of this pair are no longer needed once they have been compared.
                 captures.Add(off with { ChangedPixels = 0, PixelBytes = null });
-                captures.Add(on with { ChangedPixels = changed, PixelBytes = null });
-                if (changed < MinimumChangedPixels)
-                    throw new InvalidDataException(
-                        $"{pose.Id}: {family.Id}/{selection.Value} moved {changed} pixels in AR (floor {MinimumChangedPixels}): " +
-                        "the option draws on the stage but not through the calibrated projection.");
+                foreach (var selection in group)
+                {
+                    if (!family.Values.Contains(selection.Value))
+                        throw new InvalidDataException($"The {family.Id} pose slice asks for '{selection.Value}', which the family does not offer.");
+                    var on = Capture(root, renderer, pose, cameras[pose.Id], family, selection.Value,
+                        OptionMatrixPlan.Slug(selection.Value), neutral: false);
+                    // The two shots differ in exactly one setting; anything else would make the comparison meaningless.
+                    var changed = OptionMatrixPlan.ChangedPixels(off.PixelBytes!, on.PixelBytes!);
+                    // The frames of this pair are no longer needed once they have been compared.
+                    captures.Add(on with { ChangedPixels = changed, PixelBytes = null });
+                    if (changed < MinimumChangedPixels)
+                        throw new InvalidDataException(
+                            $"{pose.Id}: {family.Id}/{selection.Value} moved {changed} pixels in AR (floor {MinimumChangedPixels}): " +
+                            "the option draws on the stage but not through the calibrated projection.");
+                }
             }
 
             if (captures.Count != ExpectedCaptures)
@@ -221,11 +226,11 @@ internal static class OptionPoseReview
             body.Append($"<h2>{Encode(pose)}</h2><div class=\"row\">");
             foreach (var family in captures.Where(capture => capture.Pose == pose).GroupBy(capture => capture.Family))
             {
-                var on = family.Single(capture => !capture.Neutral);
                 var off = family.Single(capture => capture.Neutral);
-                body.Append($"<figure><figcaption>{Encode(family.Key)}: {Encode(on.Value)} — đổi {on.ChangedPixels:N0} px so với tắt</figcaption>")
-                    .Append($"<img loading=\"lazy\" src=\"{Encode(on.File)}\" alt=\"{Encode(family.Key)} {Encode(on.Value)}\">")
-                    .Append($"<figcaption><a href=\"{Encode(off.File)}\">ảnh tắt cùng pose</a></figcaption></figure>");
+                foreach (var on in family.Where(capture => !capture.Neutral))
+                    body.Append($"<figure><figcaption>{Encode(family.Key)}: {Encode(on.Value)} — đổi {on.ChangedPixels:N0} px so với tắt</figcaption>")
+                        .Append($"<img loading=\"lazy\" src=\"{Encode(on.File)}\" alt=\"{Encode(family.Key)} {Encode(on.Value)}\">")
+                        .Append($"<figcaption><a href=\"{Encode(off.File)}\">ảnh tắt cùng pose</a></figcaption></figure>");
             }
             body.Append("</div>");
         }
