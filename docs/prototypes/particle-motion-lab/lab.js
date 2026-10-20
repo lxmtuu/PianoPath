@@ -404,13 +404,14 @@
       }
 
       if (p.kind === 'flame') {
-        var wf = windV2(look, p.x, p.y, panel.clock, p.fieldSeed);
-        p.x += p.vx * dt; p.y += p.vy * dt;
-        p.vx += (Math.sin(p.age * 11 + p.phase) * 55 + wf.x * .25) * dt;
-        p.vy += (-30 + wf.y * .1) * dt;         // buoyancy, decaying with age
+        // W2 candidate, the same four numbers as Stage/FlameMotion.cs (StepV3): same birth as the engine,
+        // then buoyancy, drag on both axes and a fractional swell. No wind yet -- W1 is a separate slice.
+        p.vx += Math.sin(p.age * 11 + p.phase) * 40 * dt;
+        p.vy += -30 * dt;
         p.vx *= Math.exp(-1.7 * dt);
         p.vy *= Math.exp(-.9 * dt);
-        p.size += 46 * dt;                        // a flame widens as it cools
+        p.size *= 1 + .9 * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt;
         continue;
       }
 

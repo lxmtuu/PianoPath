@@ -51,6 +51,66 @@ public class FlameMotionTests
     }
 
     [Fact]
+    public void The_w2_candidate_keeps_the_numbers_the_lab_measured()
+    {
+        // The lab's flame panel (docs/prototypes/particle-motion-lab) is the model this candidate came from,
+        // and check_particle_motion_lab.cjs reads these constants back out of this file. Pin them here too so
+        // the C# build fails on a typo before the review clips are rendered.
+        Assert.Equal(30f, FlameMotion.V3Buoyancy);
+        Assert.Equal(1.7f, FlameMotion.V3Drag);
+        Assert.Equal(.9f, FlameMotion.V3Lift);
+        Assert.Equal(.9f, FlameMotion.V3Swell);
+    }
+
+    [Fact]
+    public void A_w2_mote_accelerates_upward_and_still_slows_down()
+    {
+        // Same birth as the engine's default height: 140 px/s upward. Coasting (v2) would travel 70 px in the
+        // half second this mote lives; buoyancy and drag make it climb less — the stream rises, but the plume
+        // no longer shoots off the keyboard.
+        float x = 0, y = 0, vx = 0, vy = -140, size = 5;
+        const float dt = 1f / 60;
+        for (var step = 0; step < 30; step++) FlameMotion.StepV3(ref x, ref y, ref vx, ref vy, ref size, step * dt, 0, dt);
+        Assert.True(y < -40, $"a flame mote must still climb, but it moved {y:0.0} px");
+        Assert.True(y > -70, $"the candidate must not out-run the shipped rise, but it moved {y:0.0} px");
+        Assert.True(vy < 0, "a live mote is still travelling upward");
+        Assert.True(MathF.Abs(vy) < 140, $"vertical drag must slow the climb, not speed it up (vy {vy:0.0})");
+    }
+
+    [Fact]
+    public void A_w2_mote_swells_as_it_cools_and_its_flicker_saturates()
+    {
+        float x = 0, y = 0, vx = 0, vy = -140, size = 5;
+        const float dt = 1f / 30;
+        var widest = 0f;
+        for (var step = 0; step < 15; step++)
+        {
+            FlameMotion.StepV3(ref x, ref y, ref vx, ref vy, ref size, step * dt, 1.2f, dt);
+            widest = MathF.Max(widest, MathF.Abs(vx));
+        }
+        // Half a second, the life of a default-height mote: e^(.45) is about 1.57x, so it spreads instead of
+        // ballooning to the width of a key.
+        Assert.True(size > 5 * 1.5f && size < 5 * 1.6f, $"unexpected swell: {size:0.00} px");
+        // The sway accelerates at 40 px/s², so lateral drag caps it at 40 / 1.7 px/s instead of letting the
+        // wobble accumulate for the whole life.
+        Assert.True(widest <= 40f / FlameMotion.V3Drag + .01f, $"lateral flicker ran to {widest:0.0} px/s");
+    }
+
+    [Fact]
+    public void The_w2_step_is_a_pure_function_of_its_state()
+    {
+        float x1 = 3, y1 = 7, vx1 = -4, vy1 = -120, size1 = 6, x2 = x1, y2 = y1, vx2 = vx1, vy2 = vy1, size2 = size1;
+        FlameMotion.StepV3(ref x1, ref y1, ref vx1, ref vy1, ref size1, .2f, 2.4f, 1f / 60);
+        FlameMotion.StepV3(ref x2, ref y2, ref vx2, ref vy2, ref size2, .2f, 2.4f, 1f / 60);
+        Assert.Equal(x1, x2);
+        Assert.Equal(y1, y2);
+        Assert.Equal(vx1, vx2);
+        Assert.Equal(vy1, vy2);
+        Assert.Equal(size1, size2);
+        Assert.True(float.IsFinite(x1) && float.IsFinite(vx1) && float.IsFinite(size1), "no step may produce NaN");
+    }
+
+    [Fact]
     public void The_cooling_ramp_starts_white_and_ends_deep_red()
     {
         var start = FlameMotion.Ramp(0);

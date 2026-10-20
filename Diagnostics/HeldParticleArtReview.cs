@@ -51,7 +51,8 @@ internal static class HeldParticleArtReview
             stage.Measure(new Size(1280,720)); stage.Arrange(new Rect(0,0,1280,720)); stage.UpdateLayout();
             var feed = new GpuStageFeed(); feed.SetStageHeight(720);
             feed.SetLook(GpuLook.From(settings,(pitch,track)=>stage.AdjustColor(stage.NoteColor(pitch,track)),
-                stage.KeyboardHeight/stage.ActualHeight,stage.AdjustColor,ar).WithWispV3ForReview(wispV3 && refined).WithFlameV3ForReview(flameV3 && refined));
+                stage.KeyboardHeight/stage.ActualHeight,stage.AdjustColor,ar).WithWispV3ForReview(wispV3 && refined).WithFlameV3ForReview(flameV3 && refined)
+                .WithFlameMotionV3ForReview(flameV3 && refined));
             if (ar)
             {
                 var calibration=ArCalibration.Create(KeyboardLayout.Standard88,
@@ -100,7 +101,7 @@ internal static class HeldParticleArtReview
         {sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA")??"workspace",
             sourceHashes=motionSources.ToDictionary(p=>p,p=>Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
                 File.ReadAllText(Path.Combine(sourceRoot,p)).Replace("\r\n","\n"))))),
-            seed=KeyParticleFixtures.Seed,legacyParticleAxesForReview=true,wispV3ForReview=wispV3,flameV3ForReview=flameV3,flameIntensity=70,pitches=candidateV3?new[]{60,61,64,67}:new[]{60},wispAmount=wispV3?8:32,format="lossless cropped PNG frames; APNG assembled in CI",captures},new JsonSerializerOptions {WriteIndented=true}));
+            seed=KeyParticleFixtures.Seed,legacyParticleAxesForReview=true,wispV3ForReview=wispV3,flameV3ForReview=flameV3,flameMotionV3ForReview=flameV3,flameIntensity=70,pitches=candidateV3?new[]{60,61,64,67}:new[]{60},wispAmount=wispV3?8:32,format="lossless cropped PNG frames; APNG assembled in CI",captures},new JsonSerializerOptions {WriteIndented=true}));
     }
 
     private static void WritePng(string path,byte[] pixels,int width,int height)

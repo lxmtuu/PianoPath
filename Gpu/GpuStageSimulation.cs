@@ -461,6 +461,11 @@ internal sealed partial class GpuStageSimulation
             }
             if (p.Shape == Shape.Flame)
             {
+                if (look.FlameMotionV3ForReview)
+                {
+                    FlameMotion.StepV3(ref p.X, ref p.Y, ref p.Vx, ref p.Vy, ref p.Size, p.Age, p.Phase, particleDt);
+                    continue;
+                }
                 p.X += p.Vx * particleDt; p.Y += p.Vy * particleDt;
                 p.Vx += MathF.Sin(p.Age * 11 + p.Phase) * 40 * particleDt;
                 continue;

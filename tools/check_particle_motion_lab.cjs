@@ -423,6 +423,39 @@ console.log('W1 flow shape (sustained stream, wind entrainment, seed curl, diffu
     + `size ${meanSize(gpuFlame).toFixed(2)} -> ${meanSize(flowFlame).toFixed(2)})`,
     rise(flowFlame) > rise(gpuFlame) * .85 && meanSize(flowFlame) > meanSize(gpuFlame) * 1.1);
 
+  // -------------------------------------------------------------- 7b. W2 flame law
+  // PARTICLE-MOTION-REVIEW 4.4 / W2: buoyant rise, drag and a cooling swell, one law in Stage/FlameMotion.cs.
+  // The numbers below are the C# unit test's (FlameMotionTests), so the prototype and the engine agree.
+  console.log('W2 flame law (buoyancy, drag, swelling)');
+  {
+    const nodePath = require('path');
+    const law = require('fs').readFileSync(nodePath.join(__dirname, '..', 'Stage', 'FlameMotion.cs'), 'utf8');
+    const prototype = require('fs').readFileSync(nodePath.join(__dirname, '..', 'docs', 'prototypes', 'particle-motion-lab', 'lab.js'), 'utf8');
+    for (const [what, text] of [
+      ['buoyancy of 30 px/s^2', 'V3Buoyancy = 30f'],
+      ['lateral drag of 1.7/s', 'V3Drag = 1.7f'],
+      ['vertical drag of .9/s', 'V3Lift = .9f'],
+      ['a swell of .9/s', 'V3Swell = .9f'],
+    ]) check(`FlameMotion.cs keeps the W2 ${what}`, law.includes(text));
+    check('the prototype flame branch uses the same buoyancy, drag and swell as the law',
+      prototype.includes('p.vy += -30 * dt;') && prototype.includes('p.vx *= Math.exp(-1.7 * dt);') &&
+      prototype.includes('p.vy *= Math.exp(-.9 * dt);') && prototype.includes('p.size *= 1 + .9 * dt;'));
+
+    // One default-height mote (140 px/s up, 5 px wide), stepped exactly like StepV3 at 60 fps for half a
+    // second: it climbs less than the coasting 70 px, and it swells to about e^(.45).
+    let x = 0, y = 0, vx = 0, vy = -140, size = 5;
+    const dt = 1 / 60;
+    for (let step = 0; step < 30; step++) {
+      vx += Math.sin(step * dt * 11) * 40 * dt;
+      vy -= 30 * dt;
+      vx *= Math.exp(-1.7 * dt); vy *= Math.exp(-.9 * dt);
+      size *= 1 + .9 * dt;
+      x += vx * dt; y += vy * dt;
+    }
+    check(`the W2 mote climbs ${(-y).toFixed(1)} px and swells to ${size.toFixed(2)} px in half a second`,
+      y < -40 && y > -70 && size > 7.5 && size < 8);
+  }
+
   // The page's third comparison button builds the same object; a mode the browser can pick but the model
   // cannot build would be a broken prototype.
   const tiny = { duration: 1, impacts: [], ticks: [] };

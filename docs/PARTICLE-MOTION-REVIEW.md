@@ -34,7 +34,7 @@ Ngoài ra có một lỗi hợp đồng rõ ràng: **"Physics time factor" ở �
 | Seed | `20261019`; mỗi panel nhận **cùng chuỗi phát** (cùng thời điểm, góc, tốc độ, life) nên khác biệt chỉ do mô hình |
 | Bước thời gian | 1/120 s (đo thêm 30 / 60 / 144 / 240 fps) |
 | Thang | 960×540, bàn phím chiếm 20,5% chiều cao, `HitY` = 429,3 px, lane = 10,9 px |
-| Kiểm tra tự động | `node tools/check_particle_motion_lab.cjs` — 36 assertions, gồm cả kiểm tra lab *không* làm hai mô hình trùng nhau |
+| Kiểm tra tự động | `node tools/check_particle_motion_lab.cjs` — 59 assertions, gồm cả kiểm tra lab *không* làm hai mô hình trùng nhau |
 
 **Giới hạn phải nói rõ:** đây là **bản mô phỏng lại**, không phải ảnh chụp từ ứng dụng. Sandbox không có
 Windows, Direct3D hay `dotnet`, nên **không có** build, không có `--verify`, không có ảnh WARP, không đo FPS
@@ -130,6 +130,15 @@ Ngọn lửa thật cần: nổi lên (gia tốc âm), nở ra khi nguội, tắ
 engine và bản phần mềm bắn hạt theo luật đó: 49 hạt/s/phím ở mặc định (70 × 0,7), bay lên 84–168 px/s, sống
 0,382–0,544 s, size 5,1–9,4 px, nguội trắng → vàng → cam → đỏ thẫm. Vật lý *của engine* (gia tốc nổi, nở ra
 khi nguội) vẫn là W2 vì nó đổi pixel đã ghim trong `flames-v3`.
+
+**Candidate W2 (2026-10-21):** `FlameMotion.StepV3` giữ nguyên sinh/tuổi/phát xạ, chỉ đổi *đường bay*: nổi có
+gia tốc 30 px/s², drag 1,7/s ngang và 0,9/s dọc, size nở 0,9/s (≈1,57× sau nửa giây). Engine gọi đúng hàm đó
+khi `GpuLook.FlameMotionV3ForReview` bật, và cờ này **chỉ** do review chuyển động bật — nên ảnh tĩnh `flames-v3`
+(vẫn phải trùng geometry với v2 để đo ánh sáng) và mọi frame đang ship giữ nguyên đường bay cũ. Số đo: một hạt
+mặc định lên 59,3 px trong 0,5 giây thay vì 70 px khi trôi đều, chao ngang bị chặn ở 23,5 px/s (40 / 1,7) thay
+vì cộng dồn suốt đời hạt. Lab đổi nhánh `flamePhysics` sang đúng bốn số đó; `FlameMotionTests` (+4 fact) và
+`check_particle_motion_lab.cjs` §7b cùng đọc lại hằng số từ mã C#, nên lab, engine và test không thể lệch nhau.
+Chưa bật cho người dùng: `UpgradedParticleEffects` vẫn chỉ chọn vật liệu, chưa chọn chuyển động.
 
 ### 4.5 Đường cong sống gần như tuyến tính — P1
 
@@ -308,7 +317,7 @@ GPU/WPF bằng số thay vì bằng mắt.
 |---|---|---|---|
 | **W0 · Hợp đồng** | **Xong 2026-10-20:** gom `WispMotion` (5 bản sao → 1), WPF bỏ dao động khỏi vận tốc, tách `particleDt` khỏi `frameDt` (`StageClock`), và **mật độ phát** của emitter giữ phím (`HeldEmission` — trước đó WPF phát 1/4 wisp và không có ember), guard trong `check_sources` + `--verify`. **Chuyển sang W2:** vật lý flame — nó **đổi pixel**, mà bằng chứng `flames-v3` đang ghim đúng hình flame hiện tại, nên phải làm cùng lúc với một lần re-baseline có chủ đích, không phải như một refactor | Sửa lỗi, không đổi nghệ thuật; tạo nền để so sánh được | Test so sánh vị trí wisp GPU/WPF; slow-motion không đổi tốc độ live bar |
 | **W1 · Hình dáng dòng chảy** | **Mô hình + số đo xong 2026-10-20:** bốn thành phần (emitter sustain, gió cuốn, curl theo seed, khuếch tán) chạy trong lab dưới `MODEL.FLOW`, có chế độ so sánh trên trang và 12 assertion đo trong `check_particle_motion_lab.cjs` §7. **Chưa vào sản phẩm:** khuếch tán là quá trình có lịch sử nên phải nằm trong integrator của cả ba đường render, tức là đổi pixel của `wisps-v3`/`flames-v3` — cần một lần re-baseline có chủ đích, cùng loại với W2 | 80% cảm giác "flow" mà roadmap P3b hứa; không thêm hạt | **Đo được:** độ rộng 0,14 / 0,41 / 0,49 phím ở ba lát (cổng 1,5 — dòng đang ship đo 1,87), local spread 0,29 so với 0,47, mất 11% độ cao. Còn thiếu ảnh/clip 3 checkpoint trên máy có GPU |
-| **W2 · Vật liệu** | **Nửa đầu xong 2026-10-20:** bản phần mềm vẽ flame bằng đúng luật hạt của engine (`FlameMotion`, guard + 5 fact + `VerifyWpfFlameParity`) thay cho chùm ellipse dán phím. **Còn lại:** vật lý của chính engine (nổi có gia tốc, nở ra khi nguội, nhiệt độ), không tách được khỏi một lần re-baseline `flames-v3` | Làm đám hạt có khối lượng và "chín" | Bảng `LifeCurve` cho 5 họ × 3 look; review ảnh tĩnh + clip |
+| **W2 · Vật liệu** | **Nửa đầu xong 2026-10-20:** bản phần mềm vẽ flame bằng đúng luật hạt của engine (`FlameMotion`, guard + 5 fact + `VerifyWpfFlameParity`) thay cho chùm ellipse dán phím. **Candidate 2026-10-21:** vật lý của chính engine (nổi có gia tốc, drag, nở khi nguội) nằm ở `FlameMotion.StepV3` và chỉ bật trong clip đối chứng `flames-v3/motion`, nên ảnh tĩnh v2/v3 vẫn đo ánh sáng trên cùng geometry. **Còn lại:** chốt candidate (đưa vào preset/`UpgradedParticleEffects`) và màu theo nhiệt độ nếu review đòi | Làm đám hạt có khối lượng và "chín" | Bảng `LifeCurve` cho 5 họ × 3 look; review ảnh tĩnh + clip |
 | **W3 · Tương tác & tải** | Va chạm (thành phần 8), bảng `exp`/`sin` nếu đo thấy cần; **cân nhắc** `EmissionScale` cho adaptive | Chỉ làm sau khi hình đã chốt | Benchmark `--bench` trên GPU thật (ngoài sandbox này) |
 
 `GpuAdaptiveQualityProfile` hiện chỉ hạ bloom và ambient density; master roadmap §11.6 ghi rõ *"particle bursts …
@@ -362,6 +371,6 @@ render đang có — cho thấy lệch ở mục 4.3). Cột trái bật/tắt t
 | `docs/prototypes/particle-motion-lab/index.html` | Lab A/B chạy bằng trình duyệt |
 | `docs/prototypes/particle-motion-lab/lab.js` | Mô hình hiện tại, WPF, và v2; renderer 2D tối giản |
 | `docs/prototypes/particle-motion-lab/README.md` | Cách chạy và giới hạn của prototype |
-| `tools/check_particle_motion_lab.cjs` | 36 assertions headless cho hai prototype |
+| `tools/check_particle_motion_lab.cjs` | 59 assertions headless cho hai prototype, gồm §7b đọc hằng số W2 từ `Stage/FlameMotion.cs` |
 
 Không tệp mã sản phẩm nào bị sửa.

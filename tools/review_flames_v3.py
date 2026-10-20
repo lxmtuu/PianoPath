@@ -25,7 +25,12 @@ def retained(current, prior, motion_current, motion_prior):
         raise ValueError('Accepted Wisps motion changed')
 
 
-def paired(directory,manifest,build=False):
+def paired(directory,manifest,build=False,require_motion_law=False):
+    # The static quartets isolate light with the accepted v2 geometry, so the W2 candidate can only be
+    # reviewed in the motion clips. Those clips are worthless as evidence if they silently ran the old
+    # constant-rise integrator, so the manifest has to say which law drew them.
+    if require_motion_law and not manifest.get('flameMotionV3ForReview'):
+        raise ValueError('Flames motion was captured without the v3 motion law')
     from PIL import Image
     captures={c['name']:c for c in manifest['captures']}
     if set(captures)!={f'flames-{view}-{v}' for view in ('live-stage','ar') for v in ('v2','v3')}:
@@ -60,7 +65,7 @@ def main():
     a=p.parse_args();read=lambda p:json.loads(p.read_text(encoding='utf-8-sig'))
     shared.run(a.directory,a.baseline,a.directory/'review.html',source_root=a.source_root,revision=a.expected_revision,historical=a.historical,family='flames')
     retained(read(a.wisps/'manifest.json'),read(a.prior_wisps),read(a.wisps/'motion/manifest.json'),read(a.prior_wisps_motion))
-    paired(a.directory/'motion',read(a.directory/'motion/manifest.json'),build=True)
+    paired(a.directory/'motion',read(a.directory/'motion/manifest.json'),build=True,require_motion_law=True)
     print('PASS Flames v3: 64 full hashes/16 native crops, paired population/geometry, 240 PNG/APNG frames + 120 lossless paired frames; retained v2 and accepted Wisps unchanged. No art/hardware acceptance.')
 
 

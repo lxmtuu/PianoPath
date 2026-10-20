@@ -48,6 +48,43 @@ internal static class FlameMotion
     internal static double Sway(double age, double phase) => Math.Sin(age * 11 + phase) * 40;
 
     /// <summary>
+    /// Upward acceleration in px/s² for the W2 candidate: hot gas keeps climbing instead of coasting at its
+    /// birth speed. The engine applies it only when the flame motion candidate is on, so the shipped plume is
+    /// still the constant-rise one that the accepted captures pin.
+    /// </summary>
+    internal const float V3Buoyancy = 30f;
+
+    /// <summary>Lateral drag in 1/s for the W2 candidate: the flicker saturates instead of wandering away.</summary>
+    internal const float V3Drag = 1.7f;
+
+    /// <summary>Vertical drag in 1/s for the W2 candidate: the climb slows as the mote cools.</summary>
+    internal const float V3Lift = .9f;
+
+    /// <summary>Fractional growth in 1/s for the W2 candidate: a flame spreads as it cools (~1.57× a life).</summary>
+    internal const float V3Swell = .9f;
+
+    /// <summary>
+    /// One step of the W2 flame candidate in the engine's own units, so the review clips and any future
+    /// software adoption share one law instead of two copies of four numbers.
+    ///
+    /// <para>Birth, life, emission and the cooling ramp are untouched: only the path changes. Buoyancy makes
+    /// the mote accelerate upward, drag keeps the flicker from accumulating, and the size swells with age, so
+    /// the stream reads as fire rising off the key instead of a rigid column. Everything is a pure function of
+    /// the current state, so the motion review stays deterministic.</para>
+    /// </summary>
+    internal static void StepV3(ref float x, ref float y, ref float vx, ref float vy, ref float size,
+        float age, float phase, float dt)
+    {
+        vx += (float)Sway(age, phase) * dt;
+        vy -= V3Buoyancy * dt;
+        vx *= MathF.Exp(-V3Drag * dt);
+        vy *= MathF.Exp(-V3Lift * dt);
+        size *= 1 + V3Swell * dt;
+        x += vx * dt;
+        y += vy * dt;
+    }
+
+    /// <summary>
     /// The cooling ramp: white core to yellow to orange to deep red, indexed by the fraction of the mote's life
     /// it has lived. The engine interpolates the same four stops in linear space before its shader converts;
     /// the software renderer blends in sRGB, so the stops are written here in the space WPF actually draws.

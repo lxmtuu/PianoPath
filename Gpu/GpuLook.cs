@@ -180,6 +180,18 @@ internal sealed class GpuLook
         copy.FlameArtV3ForReview=enabled;
         return copy;
     }
+    /// <summary>
+    /// W2 motion candidate for the held flame, kept apart from the accepted v2 look: buoyant rise, drag and
+    /// a cooling swell (<see cref="FlameMotion.StepV3"/>). It is only set by the motion review, so the static
+    /// light-isolation captures and every shipped frame keep the constant-rise plume.
+    /// </summary>
+    internal bool FlameMotionV3ForReview { get; private set; }
+    internal GpuLook WithFlameMotionV3ForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();
+        copy.FlameMotionV3ForReview=enabled;
+        return copy;
+    }
     internal GpuLook WithWispV3ForReview(bool enabled)
     {
         var copy=(GpuLook)MemberwiseClone();

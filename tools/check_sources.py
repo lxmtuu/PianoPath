@@ -1094,6 +1094,20 @@ def scan_flame_motion_contract():
     if "keyTop - flameH * .42" in stage:
         errors.append("Stage/PianoStage.cs: the anchored flame plume is back (keyTop - flameH * .42); it is the shape "
                       "that never moves and it belongs to no renderer any more")
+    # The W2 candidate (buoyant rise, drag, cooling swell) is one law with one home. If the engine grows its own
+    # copy of the four numbers, the review clips stop measuring the same flame the software stage could adopt.
+    for name in ("V3Buoyancy", "V3Drag", "V3Lift", "V3Swell", "StepV3"):
+        if name not in helper:
+            errors.append(f"Stage/FlameMotion.cs: the flame's W2 {name} is gone, so the motion candidate has no law")
+    if "FlameMotion.StepV3(ref p.X" not in gpu:
+        errors.append("Gpu/GpuStageSimulation.cs: the flame no longer steps through FlameMotion.StepV3, so the "
+                      "review clips and the shared law have diverged")
+    if "look.FlameMotionV3ForReview" not in gpu:
+        errors.append("Gpu/GpuStageSimulation.cs: the W2 flame step lost its review flag; the accepted v2 captures "
+                      "pin the constant-rise plume and must not move")
+    if "p.Vx += MathF.Sin(p.Age * 11 + p.Phase) * 40 * particleDt;" not in gpu:
+        errors.append("Gpu/GpuStageSimulation.cs: the shipped flame integrator changed; that path is pinned by the "
+                      "accepted captures, so the candidate belongs in FlameMotion.StepV3 instead")
     return errors
 
 
