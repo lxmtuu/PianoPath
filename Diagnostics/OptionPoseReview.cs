@@ -158,23 +158,31 @@ internal static class OptionPoseReview
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(source));
         using (var stream = File.Create(path)) encoder.Save(stream);
-        return Convert.ToHexString(SHA256.HashData(pixels));
+        // Hash the pixels as they decode back from the file, not the buffer the renderer held: the manifest has
+        // to name the picture a reviewer opens, and the encoder is allowed to treat alpha differently.
+        var decoded = DecodePixels(path);
+        return Convert.ToHexString(SHA256.HashData(decoded));
     }
 
     private static void VerifyWrittenArtifacts(string root, IReadOnlyList<Shot> captures)
     {
         foreach (var capture in captures)
         {
-            using var stream = File.OpenRead(Path.Combine(root, capture.File));
-            var decoded = PngBitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-            var frame = decoded.Frames[0];
-            if (frame.PixelWidth != Width || frame.PixelHeight != Height)
-                throw new InvalidDataException($"{capture.File} is {frame.PixelWidth}×{frame.PixelHeight}, not {Width}×{Height}.");
-            var pixels = new byte[Width * Height * 4];
-            frame.CopyPixels(pixels, Width * 4, 0);
+            var pixels = DecodePixels(Path.Combine(root, capture.File));
             if (Convert.ToHexString(SHA256.HashData(pixels)) != capture.PixelSha256)
-                throw new InvalidDataException($"{capture.File} does not decode to the pixels that were hashed before writing.");
+                throw new InvalidDataException($"{capture.File} no longer decodes to the pixels the manifest names.");
         }
+    }
+
+    private static byte[] DecodePixels(string path)
+    {
+        using var stream = File.OpenRead(path);
+        var frame = PngBitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+        if (frame.PixelWidth != Width || frame.PixelHeight != Height)
+            throw new InvalidDataException($"{Path.GetFileName(path)} is {frame.PixelWidth}×{frame.PixelHeight}, not {Width}×{Height}.");
+        var pixels = new byte[Width * Height * 4];
+        frame.CopyPixels(pixels, Width * 4, 0);
+        return pixels;
     }
 
     private static void WriteManifest(string root, string adapter, IReadOnlyList<HeldParticleControlPlan.View> poses,
