@@ -137,6 +137,21 @@ internal sealed partial class PianoStage : FrameworkElement
     /// <summary>Capture-only switch: fully bake lit-key tiles before an off-screen review snapshot.</summary>
     internal bool SynchronousReviewKeyTileBake { get; set; }
     public double FirstLiveTrailY => _liveTrails.Count == 0 ? -1 : _liveTrails[0].Age * _visual.NoteFallSpeed;
+    /// <summary>
+    /// How far the highest particle has climbed from the key line, in stage DIPs. The verification suite
+    /// compares two stages that differ only in Physics time, to show that the particle clock really is the
+    /// scaled one while the live bar keeps the frame clock.
+    /// </summary>
+    internal double FurthestSparkTravel
+    {
+        get
+        {
+            if (_sparks.Count == 0) return -1;
+            var top = double.MaxValue;
+            foreach (var spark in _sparks) top = Math.Min(top, spark.Y);
+            return ActualHeight - KeyboardHeight - top;
+        }
+    }
     /// <summary>Length of the visual bar for a pitch: falling notes keep the 28 px spawn offset at the top, rising notes are born at the key line.</summary>
     public double LiveTrailHeightFor(int pitch)
     {
@@ -643,9 +658,14 @@ internal sealed partial class PianoStage : FrameworkElement
         var frameSeconds = Math.Clamp(seconds, 0, .05);
         _sustainLift = ArDampers.Smooth(_sustainLift, _sustainTarget, frameSeconds);
         _simulation.SetSustain(_sustainLift);
-        var dt = frameSeconds * _visual.PhysicsTimeFactor / 100; _elapsed += dt;
-        _simulation.Advance(dt);
-        _beatPulse *= Math.Exp(-6 * dt); _energyLevel *= Math.Exp(-2.2 * dt); // smart-modulator envelopes decay
+        // Two clocks, as the GPU simulation has: the slow-motion slider scales the particles and nothing
+        // else (StageClock.Particle). Everything the eye reads as "the same animation filmed slowly" — live
+        // bars, rings, flashes, key heat, the beat envelope, the ambient clock — keeps the real frame clock,
+        // which is exactly what GpuStageSimulation.Step does with frameDt.
+        var particleDt = StageClock.Particle(frameSeconds, _visual.PhysicsTimeFactor);
+        _elapsed += frameSeconds;
+        _simulation.Advance(frameSeconds);
+        _beatPulse *= Math.Exp(-6 * frameSeconds); _energyLevel *= Math.Exp(-2.2 * frameSeconds); // smart-modulator envelopes decay
         if (seconds > 0) _fps += (1 / seconds - _fps) * .08;
         var hitY = ActualHeight - KeyboardHeight;
         var lane = ActualWidth / KeyCount;
@@ -654,54 +674,57 @@ internal sealed partial class PianoStage : FrameworkElement
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             var heat = _keyHeat[pitch];
-            heat = _activeKey[pitch] ? Math.Min(1, heat + dt * 7) : Math.Max(0, heat - dt * 2.4);
+            heat = _activeKey[pitch] ? Math.Min(1, heat + frameSeconds * 7) : Math.Max(0, heat - frameSeconds * 2.4);
             _keyHeat[pitch] = heat;
             if (heat > .01) _anyHeat = true;
-            if (_activeKey[pitch] && _visual.ShowWisps && _visual.WispAmount > 0 && ActualWidth >= 1) SpawnWisps(pitch, dt, hitY, lane);
+            // Emission follows the frame clock too: the GPU's KeyEmissionBudget.Take accrues on frameDt, so a
+            // slow take stays as dense in wall-clock seconds and the motes merely move slower.
+            if (_activeKey[pitch] && _visual.ShowWisps && _visual.WispAmount > 0 && ActualWidth >= 1) SpawnWisps(pitch, frameSeconds, hitY, lane);
             else _wispBudget[pitch] = 0;
         }
         for (var i = _sparks.Count - 1; i >= 0; i--)
         {
-            var p = _sparks[i]; p.Age += dt;
+            var p = _sparks[i]; p.Age += particleDt;
             if (p.Age >= p.Life) { _sparks.RemoveAt(i); continue; }
             if (p.Wisp)
             {
                 // The sideways wander is not velocity: it is an offset the renderer adds when it draws the mote,
                 // the same WispMotion.Offset the GPU sprites and the AR quads use. Integrating it here made the
                 // two renderers disagree by 10.6 px after 0.8 s (PARTICLE-MOTION-REVIEW §4.3).
-                p.X += p.Vx * dt;
-                p.Y += p.Vy * dt;
+                p.X += p.Vx * particleDt;
+                p.Y += p.Vy * particleDt;
                 var flow = _visual.VectorField / 100 * Math.Sin(p.Y / Math.Max(1, _visual.FieldScale) + _elapsed * _visual.EvolutionSpeed / 100);
-                p.X += flow * dt * 6;
-                p.Vy *= Math.Exp(-.35 * dt);
+                p.X += flow * particleDt * 6;
+                p.Vy *= Math.Exp(-.35 * particleDt);
                 continue;
             }
-            p.X += p.Vx * dt; p.Y += p.Vy * dt;
+            p.X += p.Vx * particleDt; p.Y += p.Vy * particleDt;
             var field = _visual.VectorField / 100 * Math.Sin(p.Y / Math.Max(1, _visual.FieldScale) + _elapsed * _visual.EvolutionSpeed / 100);
-            p.Vx += field * dt * 14;
+            p.Vx += field * particleDt * 14;
             // Thermal buoyancy + micro curl turbulence
             var heatRatio = Math.Clamp(1.0 - p.Age / p.Life, 0, 1);
             var buoyancy = -38.0 * heatRatio * (1.0 / Math.Max(0.2, p.Mass));
-            p.Vy += (_visual.Gravity * p.Grav + buoyancy) * dt;
-            if (p.Kind == 2) p.Vx += Math.Sin(p.Age * 9 + p.Phase) * 60 * dt; // confetti flutter
+            p.Vy += (_visual.Gravity * p.Grav + buoyancy) * particleDt;
+            if (p.Kind == 2) p.Vx += Math.Sin(p.Age * 9 + p.Phase) * 60 * particleDt; // confetti flutter
             var curl = Math.Sin(p.Y * 0.04 + p.Phase + _elapsed * 3.2) * 14.0 * (1.0 - p.Age / p.Life);
-            p.Vx += curl * dt;
-            var damping = Math.Exp(-_visual.Drag / 100 * p.DragK * dt); p.Vx *= damping; p.Vy *= damping;
+            p.Vx += curl * particleDt;
+            var damping = Math.Exp(-_visual.Drag / 100 * p.DragK * particleDt); p.Vx *= damping; p.Vy *= damping;
         }
         for (var i = _rings.Count - 1; i >= 0; i--)
         {
-            var ring = _rings[i]; ring.Age += dt;
+            var ring = _rings[i]; ring.Age += frameSeconds;
             if (ring.Age >= ring.Life) _rings.RemoveAt(i);
         }
         for (var i = _flashes.Count - 1; i >= 0; i--)
         {
-            var flash = _flashes[i]; flash.Age += dt;
+            var flash = _flashes[i]; flash.Age += frameSeconds;
             if (flash.Age >= flash.Life) _flashes.RemoveAt(i);
         }
         for (var i = _liveTrails.Count - 1; i >= 0; i--)
         {
-            var trail = _liveTrails[i]; trail.Age += dt;
-            if (trail.KeyDown) trail.HeldSeconds += dt;
+            // The bar mirrors the note's own duration: a slow-motion setting must not stretch a keypress.
+            var trail = _liveTrails[i]; trail.Age += frameSeconds;
+            if (trail.KeyDown) trail.HeldSeconds += frameSeconds;
             if (_visual.NoteDirection == "Up")
             {
                 // The bar is born at the hit line on the keypress and climbs out of the top of the
@@ -722,10 +745,10 @@ internal sealed partial class PianoStage : FrameworkElement
         InvalidateVisual();
     }
 
-    private void SpawnWisps(int pitch, double dt, double hitY, double lane)
+    private void SpawnWisps(int pitch, double frameSeconds, double hitY, double lane)
     {
         if (_sparks.Count >= MaxParticles) return;
-        _wispBudget[pitch] += _visual.WispAmount * dt;
+        _wispBudget[pitch] += _visual.WispAmount * frameSeconds;
         var count = (int)_wispBudget[pitch]; if (count <= 0) return;
         _wispBudget[pitch] -= count;
         var color = AdjustColor(_activeKeyColor[pitch]);

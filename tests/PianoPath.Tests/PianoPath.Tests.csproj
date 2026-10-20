@@ -40,6 +40,7 @@
     <Compile Include="..\..\Diagnostics\KeyboardKeyLightPlan.cs" Link="Product\Diagnostics\KeyboardKeyLightPlan.cs" />
     <Compile Include="..\..\Gpu\StageLightCurves.cs" Link="Product\Gpu\StageLightCurves.cs" />
     <Compile Include="..\..\Stage\WispMotion.cs" Link="Product\Stage\WispMotion.cs" />
+    <Compile Include="..\..\Stage\StageClock.cs" Link="Product\Stage\StageClock.cs" />
     <Compile Include="..\..\Camera\ArDriftMeter.cs" Link="Product\Camera\ArDriftMeter.cs" />
     <Compile Include="..\..\Gpu\ReleaseParticleAppearance.cs" Link="Product\Gpu\ReleaseParticleAppearance.cs" />
     <Compile Include="..\..\Gpu\BounceParticleAppearance.cs" Link="Product\Gpu\BounceParticleAppearance.cs" />

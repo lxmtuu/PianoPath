@@ -66,7 +66,7 @@ trường nào thay đổi theo tuổi hạt trừ lực nổi và fade tuyến 
 | Va chạm (mặt phím, sàn) | Không có; hạt xuyên qua phím |
 | Nhiệt độ như một biến trạng thái | Chỉ có `(1 - age/life)` dùng cho lực nổi |
 | `Mass` | Chỉ dùng cho lực nổi; không có quán tính |
-| Đồng bộ GPU ↔ WPF ↔ AR | Lệch ở wisp và ở phạm vi slow-motion |
+| Đồng bộ GPU ↔ WPF ↔ AR | **Đã sửa 2026-10-20:** wisp dùng chung một đường cong và slow-motion chỉ còn tác dụng lên hạt (W0) |
 
 ## 4. Vấn đề cụ thể (có dẫn chứng)
 
@@ -184,7 +184,7 @@ Có thể gom thành một profile dữ liệu (như `PrismFlowPalette`) — `Co
 
 ### 6.1 "Physics time factor" của WPF làm chậm cả sân khấu — lỗi hợp đồng
 
-`Stage/PianoStage.cs:602`: `var dt = Math.Clamp(seconds, 0, .05) * PhysicsTimeFactor / 100;` rồi dùng `dt` cho
+Trước W0, `Stage/PianoStage.cs:602`: `var dt = Math.Clamp(seconds, 0, .05) * PhysicsTimeFactor / 100;` rồi dùng `dt` cho
 **mọi thứ**: `_elapsed` (nền động), `_simulation.Advance`, nhiệt phím, sparks, rings, flashes và **live note
 bars** (`trail.Age`). Trong khi đó đường GPU cố ý tách ra (`GpuStageSimulation.cs:241-244`):
 
@@ -193,7 +193,16 @@ bars** (`trail.Age`). Trong khi đó đường GPU cố ý tách ra (`GpuStageSi
 
 và [EFFECTS-REDESIGN](EFFECTS-REDESIGN.md) §8 ghi đúng như vậy. Nghĩa là preset có `PhysicsTimeFactor = 10`
 cho ra **hai trải nghiệm khác nhau** tuỳ máy có GPU hay không, và bản WPF vi phạm chính tài liệu của repo.
-Sửa: tính `particleDt` riêng, dùng `dt` thật cho phần còn lại — đúng khuôn GPU đang làm.
+
+**Đã sửa (W0, 2026-10-20).** `Stage/StageClock.cs` giữ phép chia hai đồng hồ ở một chỗ; `Advance` lấy
+`particleDt` cho **sparks** (tuổi, vận tốc, gió, drag, curl), còn `frameSeconds` cho `_elapsed`, `_simulation`,
+`_beatPulse`/`_energyLevel`, nhiệt phím, ngân sách phát wisp, rings, flashes và **live bars**. Ở mặc định 100
+hai đồng hồ là một (`x × 1.0 ≡ x`), nên mọi frame đã được chấp nhận — preview và bằng chứng WARP — không đổi
+một bit. Ba lớp khoá: `StageClockTests` (5 fact, gồm "100 phải trùng khít", không phải "xấp xỉ"), guard
+`scan_stage_clock_contract` trong `check_sources.py` (live bar/ring/flash mà ăn `particleDt` là đỏ), và
+`VerifyStageClock` trong `--verify` dựng **hai `PianoStage` thật** ở 100% và 40%: thanh live bar phải đi đúng
+quãng đường như nhau, còn wisp phải chậm hẳn — 0,4 lần là mốc lý thuyết, test chấp nhận 0,3–0,6 vì drag làm
+quãng đường hụt ít hơn thời gian.
 
 ### 6.2 Wisp — xem 4.3
 
@@ -216,7 +225,7 @@ GPU/WPF bằng số thay vì bằng mắt.
 
 | Lát | Nội dung | Vì sao trước | Cổng |
 |---|---|---|---|
-| **W0 · Hợp đồng** | **Xong 2026-10-20:** gom `WispMotion` (5 bản sao → 1), WPF bỏ dao động khỏi vận tốc, guard trong `check_sources` + `--verify`. **Còn lại:** tách `particleDt` ở WPF; flame có vật lý | Sửa lỗi, không đổi nghệ thuật; tạo nền để so sánh được | Test so sánh vị trí wisp GPU/WPF; slow-motion không đổi tốc độ live bar |
+| **W0 · Hợp đồng** | **Xong 2026-10-20:** gom `WispMotion` (5 bản sao → 1), WPF bỏ dao động khỏi vận tốc, tách `particleDt` khỏi `frameDt` (`StageClock`), guard trong `check_sources` + `--verify`. **Chuyển sang W2:** vật lý flame — nó **đổi pixel**, mà bằng chứng `flames-v3` đang ghim đúng hình flame hiện tại, nên phải làm cùng lúc với một lần re-baseline có chủ đích, không phải như một refactor | Sửa lỗi, không đổi nghệ thuật; tạo nền để so sánh được | Test so sánh vị trí wisp GPU/WPF; slow-motion không đổi tốc độ live bar |
 | **W1 · Hình dáng dòng chảy** | Emitter sustain riêng (thành phần 1), gió cuốn (thành phần 2), curl theo seed (thành phần 3), khuếch tán (thành phần 4) | 80% cảm giác "flow" mà roadmap P3b hứa; không thêm hạt | Ảnh/clip 3 checkpoint (nhấn/giữ/pedal) ở 100% và 50%; độ rộng dòng ≤ 1,5 phím |
 | **W2 · Vật liệu** | Life curve theo họ (thành phần 5), trễ sinh + spin (thành phần 6), nhiệt độ (thành phần 7) | Làm đám hạt có khối lượng và "chín" | Bảng `LifeCurve` cho 5 họ × 3 look; review ảnh tĩnh + clip |
 | **W3 · Tương tác & tải** | Va chạm (thành phần 8), bảng `exp`/`sin` nếu đo thấy cần; **cân nhắc** `EmissionScale` cho adaptive | Chỉ làm sau khi hình đã chốt | Benchmark `--bench` trên GPU thật (ngoài sandbox này) |

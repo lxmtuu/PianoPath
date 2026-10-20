@@ -1019,6 +1019,43 @@ def scan_wisp_motion_contract():
     return errors
 
 
+def scan_stage_clock_contract():
+    """Slow motion must scale the particles and nothing else, on both renderers.
+
+    The GPU simulation has always done this: ``particleDt = frameDt * PhysicsTimeFactor`` feeds the particle
+    integrator, while rings, flashes, live bars, key heat and the beat envelope read ``frameDt``. The software
+    stage used one scaled clock for everything, so at any factor but 100 its live bars fell at a different
+    speed from the engine's — the same song, a different animation. Nothing compared the two, so nothing went
+    red; the check below is the cheap half of the replacement.
+
+    Three facts, each one a way the split has already been (or could be) undone:
+      * the software stage asks ``StageClock.Particle`` for its particle clock;
+      * it does not feed that scaled clock to the things a player reads as real time — the held bar, the
+        impact rings and the impact flash ages;
+      * the GPU keeps the same division of labour, so the two renderers stay comparable.
+    """
+    errors = []
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    gpu_path = ROOT / "Gpu" / "GpuStageSimulation.cs"
+    for path in (stage_path, gpu_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; it decides which clock a frame runs on"]
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    if "StageClock.Particle(" not in stage:
+        errors.append("Stage/PianoStage.cs: the software stage no longer asks StageClock for its particle clock, "
+                      "so the slow-motion slider is scaling the whole stage again")
+    for line in ("trail.Age += particleDt", "trail.HeldSeconds += particleDt",
+                 "ring.Age += particleDt", "flash.Age += particleDt"):
+        if line in stage:
+            errors.append(f"Stage/PianoStage.cs: '{line}' puts a real-time effect on the particle clock; only "
+                          f"the particles may slow down")
+    gpu = _code(gpu_path.read_text(encoding="utf-8"))
+    if "particleDt = frameDt * look.PhysicsTimeFactor" not in gpu:
+        errors.append("Gpu/GpuStageSimulation.cs: the GPU no longer derives particleDt from the frame clock "
+                      "and the look's factor, so StageClock.Particle mirrors a formula that has moved")
+    return errors
+
+
 def scan_previews_folder():
     folder = ROOT / "docs" / "previews"
     if not folder.exists():
@@ -2062,6 +2099,7 @@ def main():
     errors.extend(scan_markdown_tables())
     errors.extend(scan_gpu_overlay_evidence())
     errors.extend(scan_wisp_motion_contract())
+    errors.extend(scan_stage_clock_contract())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
@@ -2084,6 +2122,7 @@ def main():
     print("checked the release version of PianoPath.csproj against the installer, both READMEs, both changelogs and every source that prints it")
     print("checked every Markdown table's delimiter row, and the claim about what is still a WPF layer over a GPU frame against the engine that draws it")
     print("checked that the wisp sway lives in one curve and that the stage, the AR quads and the alignment review all draw it")
+    print("checked that slow motion scales the particles on both renderers and leaves the held bar, rings and flashes on the real clock")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")
