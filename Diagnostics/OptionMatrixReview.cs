@@ -79,10 +79,13 @@ internal static class OptionMatrixReview
             foreach (var family in OptionMatrixPlan.Families)
             {
                 var baseline = Capture(root, renderer, family, null, "neutral", neutral: true);
-                var values = OptionMatrixPlan.CapturedValues(family)
+                // One entry per value, each holding its WPF and its WARP capture; the flat list is what the
+                // manifest records, the pairs are what the per-value comparisons index.
+                var scenes = OptionMatrixPlan.CapturedValues(family)
                     .Select(value => Capture(root, renderer, family, value, OptionMatrixPlan.Slug(value), neutral: false))
                     .ToArray();
-                if (values.Length == 0)
+                var values = scenes.SelectMany(scene => scene).ToArray();
+                if (scenes.Length == 0)
                     throw new InvalidDataException($"Option matrix family '{family.Id}' captures no values; the review would never run.");
 
                 foreach (var rendererId in RendererIds)
@@ -105,11 +108,11 @@ internal static class OptionMatrixReview
                                 "the option is accepted by the settings class but does not draw.");
                     }
 
-                    for (var left = 0; left < values.Length; left++)
-                    for (var right = left + 1; right < values.Length; right++)
+                    for (var left = 0; left < scenes.Length; left++)
+                    for (var right = left + 1; right < scenes.Length; right++)
                     {
-                        var a = values[left].Single(capture => capture.Renderer == rendererId);
-                        var b = values[right].Single(capture => capture.Renderer == rendererId);
+                        var a = scenes[left].Single(capture => capture.Renderer == rendererId);
+                        var b = scenes[right].Single(capture => capture.Renderer == rendererId);
                         var changed = OptionMatrixPlan.ChangedPixels(a.Pixels!, b.Pixels!);
                         comparisons.Add((family.Id, rendererId, OptionMatrixPlan.Slug(a.Value), OptionMatrixPlan.Slug(b.Value), changed));
                         if (changed == 0)
@@ -120,10 +123,9 @@ internal static class OptionMatrixReview
                 }
 
                 captures.AddRange(baseline);
-                captures.AddRange(values.SelectMany(scene => scene));
+                captures.AddRange(values);
                 // The comparison is done; the 3.7 MB frames of this family are not needed by the manifest.
-                foreach (var pending in baseline) pending.Pixels = null;
-                foreach (var scene in values) foreach (var pending in scene) pending.Pixels = null;
+                foreach (var pending in baseline.Concat(values)) pending.Pixels = null;
             }
 
             // Every family's baseline is the same scene, the same seed and the same input — only the family
