@@ -6844,7 +6844,7 @@ internal static partial class VerificationSuite
     private static void VerifyOptionPose(string outputDirectory)
     {
         var captures = OptionPoseReview.Render(outputDirectory);
-        Assert(captures == 30, "The AR/pose slice must capture five effect axes in their off state and at one value, through three calibrated poses.");
+        Assert(captures == 27, "The AR/pose slice must capture four off states plus five values at each of the three calibrated poses.");
         Results.Add($"PASS AR/pose option slice (N12(d), part 1): {captures} WARP captures at 1280×720 — the impact wave, the impact burst, both morph channels and the release ring, each drawn through the three calibrated AR poses at one fixed seed and compared with its own off state at the same pose. Proof that the option reaches the projected layer, not an art, real-camera or occlusion claim; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
     }
 

@@ -1055,7 +1055,7 @@ jobs:
           overwrite: true
           retention-days: 2
 
-      # N12(d) part 1: 30 AR captures (five effect axes × three calibrated poses × off/on) with the camera
+      # N12(d) part 1: 27 AR captures (four off states + five values, per calibrated pose) with the camera
       # fixture, so the projection half of the audit can be reviewed without the full bundle.
       - name: Publish the AR/pose option slice (N12(d))
         if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/main')

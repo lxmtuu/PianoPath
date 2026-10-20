@@ -33,7 +33,7 @@ internal static class OptionPoseReview
     /// <summary>Matches the flat matrix's floor: a "drawn" claim needs more than a stray pixel.</summary>
     private const int MinimumChangedPixels = 12;
     private static readonly IReadOnlySet<int> NoPressed = new HashSet<int>();
-    private const int ExpectedCaptures = 30; // 3 poses × 5 effects × (off, value)
+    private const int ExpectedCaptures = 27; // 3 poses × (4 off states + 5 values; the morph axis has two values)
 
     private sealed record Counters(int Sprites, int ArParticles);
 

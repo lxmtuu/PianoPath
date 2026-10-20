@@ -168,7 +168,7 @@ Phần 1 của N12(d) (`Diagnostics/OptionPoseReview.cs`, route `--verify-option
 nghệ thuật của chúng nằm **trong ảnh camera**: wave, burst, hai kênh morph (hạt và flash) và vòng release. Mỗi
 trục hai lần chụp — **tắt** và **bật** — ở cùng pose, cùng input, cùng seed; ba pose là ba pose đã hiệu chỉnh sẵn
 của review hạt giữ phím (`HeldParticleControlPlan.Views`: reference, oblique, near-overhead), nên không thêm
-fixture camera hay tuyên bố pose mới. Tổng **30 ảnh WARP 1280×720** (artifact `option-pose-n12d`), manifest ghi
+fixture camera hay tuyên bố pose mới. Tổng **27 ảnh WARP 1280×720** (mỗi pose: bốn ảnh tắt + năm ảnh giá trị) (artifact `option-pose-n12d`), manifest ghi
 góc pose, sha256 của ảnh camera và số pixel đổi của từng cặp.
 
 Cổng: mỗi giá trị phải đổi **≥ 12 px** so với ảnh tắt **ở từng pose** — cùng ngưỡng với ma trận phẳng. Nếu một
