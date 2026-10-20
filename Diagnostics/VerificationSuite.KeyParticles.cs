@@ -252,7 +252,7 @@ internal static partial class VerificationSuite
         {
             if (!snap[i].Wisp) continue;
             wisps++;
-            var drawn = sprites[i].PosSize.X;
+            var drawn = sprites.Span[i].PosSize.X;
             var expected = snap[i].X * scaleX + WispMotion.Offset(look.WispTurbulence, look.WispWidth, snap[i].Age, snap[i].Phase);
             worst = Math.Max(worst, Math.Abs(drawn - expected));
         }
