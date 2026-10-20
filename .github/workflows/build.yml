@@ -198,8 +198,28 @@ jobs:
           git add docs/evidence/keyboard-key-light-v1 docs/previews/keyboard-key-light-v1
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Refresh native keyboard key-light evidence [skip ci]'
-          git pull --rebase origin "$GITHUB_REF_NAME"
-          git push origin "$GITHUB_REF_NAME"
+          # Two runs of one branch can be alive at once: a cancelled run's evidence step finishes after
+          # its successor has started, both rewrite the same files, and `git pull --rebase` stops on the
+          # first one they both touched -- which is how run 39324857917 went red on 2026-10-19 with all
+          # 154 native captures passed and the evidence commit already on the branch. This step follows
+          # the rule "Commit refreshed previews" documents above: a branch that moved while this job
+          # rendered keeps the evidence belonging to its newer tip, and this run's renders stay in the
+          # keyboard-key-light-native artifact. bash rather than pwsh because the decision needs git's exit code and
+          # its message side by side.
+          log="$RUNNER_TEMP/key-light-push.log"
+          git fetch --quiet origin "$GITHUB_REF_NAME"
+          tip=$(git rev-parse "origin/$GITHUB_REF_NAME" 2>/dev/null || true)
+          if [ -n "$tip" ] && [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "::warning title=Key-light evidence not committed::The branch moved while this build rendered (now $tip, this run built $GITHUB_SHA), so the refreshed evidence was not pushed. It is in the keyboard-key-light-native artifact of this run."
+            exit 0
+          fi
+          if git push >"$log" 2>&1; then cat "$log"; exit 0; fi
+          cat "$log"
+          if grep -Eqi 'GH013|repository rule violations|protected branch|non-fast-forward|fetch first|stale info|cannot lock ref' "$log"; then
+            echo "::warning title=Key-light evidence not committed::The branch would not take the evidence push, so it keeps the set it already has. The renders are in the keyboard-key-light-native artifact of this run."
+            exit 0
+          fi
+          exit 1
 
   # Focused native lane (manual or explicit push marker): never cancel/re-run the full lane for diagnostic-only work.
   key-ensemble:
@@ -252,8 +272,28 @@ jobs:
           git add docs/evidence/key-particle-ensemble-v1 docs/previews/key-particle-ensemble-v1
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Refresh native mixed key-particle evidence [skip ci]'
-          git pull --rebase origin "$GITHUB_REF_NAME"
-          git push origin "$GITHUB_REF_NAME"
+          # Two runs of one branch can be alive at once: a cancelled run's evidence step finishes after
+          # its successor has started, both rewrite the same files, and `git pull --rebase` stops on the
+          # first one they both touched -- which is how run 39324857917 went red on 2026-10-19 with all
+          # 154 native captures passed and the evidence commit already on the branch. This step follows
+          # the rule "Commit refreshed previews" documents above: a branch that moved while this job
+          # rendered keeps the evidence belonging to its newer tip, and this run's renders stay in the
+          # key-particle-ensemble-native artifact. bash rather than pwsh because the decision needs git's exit code and
+          # its message side by side.
+          log="$RUNNER_TEMP/ensemble-push.log"
+          git fetch --quiet origin "$GITHUB_REF_NAME"
+          tip=$(git rev-parse "origin/$GITHUB_REF_NAME" 2>/dev/null || true)
+          if [ -n "$tip" ] && [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "::warning title=Ensemble evidence not committed::The branch moved while this build rendered (now $tip, this run built $GITHUB_SHA), so the refreshed evidence was not pushed. It is in the key-particle-ensemble-native artifact of this run."
+            exit 0
+          fi
+          if git push >"$log" 2>&1; then cat "$log"; exit 0; fi
+          cat "$log"
+          if grep -Eqi 'GH013|repository rule violations|protected branch|non-fast-forward|fetch first|stale info|cannot lock ref' "$log"; then
+            echo "::warning title=Ensemble evidence not committed::The branch would not take the evidence push, so it keeps the set it already has. The renders are in the key-particle-ensemble-native artifact of this run."
+            exit 0
+          fi
+          exit 1
 
   ar-budget:
     if: >-
@@ -305,8 +345,28 @@ jobs:
           git add docs/evidence/ar-particle-budget-v1 docs/previews/ar-particle-budget-v1
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Refresh native mixed key-particle evidence [skip ci]'
-          git pull --rebase origin "$GITHUB_REF_NAME"
-          git push origin "$GITHUB_REF_NAME"
+          # Two runs of one branch can be alive at once: a cancelled run's evidence step finishes after
+          # its successor has started, both rewrite the same files, and `git pull --rebase` stops on the
+          # first one they both touched -- which is how run 39324857917 went red on 2026-10-19 with all
+          # 154 native captures passed and the evidence commit already on the branch. This step follows
+          # the rule "Commit refreshed previews" documents above: a branch that moved while this job
+          # rendered keeps the evidence belonging to its newer tip, and this run's renders stay in the
+          # ar-particle-budget-native artifact. bash rather than pwsh because the decision needs git's exit code and
+          # its message side by side.
+          log="$RUNNER_TEMP/ar-budget-push.log"
+          git fetch --quiet origin "$GITHUB_REF_NAME"
+          tip=$(git rev-parse "origin/$GITHUB_REF_NAME" 2>/dev/null || true)
+          if [ -n "$tip" ] && [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "::warning title=AR budget evidence not committed::The branch moved while this build rendered (now $tip, this run built $GITHUB_SHA), so the refreshed evidence was not pushed. It is in the ar-particle-budget-native artifact of this run."
+            exit 0
+          fi
+          if git push >"$log" 2>&1; then cat "$log"; exit 0; fi
+          cat "$log"
+          if grep -Eqi 'GH013|repository rule violations|protected branch|non-fast-forward|fetch first|stale info|cannot lock ref' "$log"; then
+            echo "::warning title=AR budget evidence not committed::The branch would not take the evidence push, so it keeps the set it already has. The renders are in the ar-particle-budget-native artifact of this run."
+            exit 0
+          fi
+          exit 1
 
   build:
     if: >-
