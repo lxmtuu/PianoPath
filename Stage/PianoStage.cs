@@ -485,7 +485,7 @@ internal sealed partial class PianoStage : FrameworkElement
                     {
                         Kind = 4, X = x, Y = y - 2, Vx = Math.Cos(angle) * speed, Vy = Math.Sin(angle) * speed,
                         Life = .5 + _random.NextDouble() * .4, Age = 0, Mass = 1, Phase = _random.NextDouble() * Math.PI * 2,
-                        Size = 2 + _random.NextDouble() * 3.5, Grav = 1.4, Color = Blend(color, Colors.White, .45)
+                        Size = 2 + _random.NextDouble() * 3.5, Grav = 1.4, Channel = EffectChannel.Morph, Color = Blend(color, Colors.White, .45)
                     });
                 }
                 break;
@@ -500,14 +500,14 @@ internal sealed partial class PianoStage : FrameworkElement
                         Kind = 1, X = x + (_random.NextDouble() - .5) * 22, Y = y + 2,
                         Vx = (_random.NextDouble() - .5) * 30, Vy = 40 + _random.NextDouble() * 90,
                         Life = .55 + _random.NextDouble() * .45, Age = 0, Mass = 2, Phase = _random.NextDouble() * Math.PI * 2,
-                        Size = 1.6 + _random.NextDouble() * 2.2, Grav = 1.1, DragK = 1.6,
+                        Size = 1.6 + _random.NextDouble() * 2.2, Grav = 1.1, DragK = 1.6, Channel = EffectChannel.Morph,
                         Color = Blend(color, Color.FromRgb(255, 220, 150), .3)
                     });
                 }
                 break;
             }
             case "Absorb": // The key sucks the note in: a ring collapsing into the hit point.
-                if (_rings.Count < EffectBudget.WpfRingCap) _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .3, Implode = true, Strength = strength });
+                if (_rings.Count < EffectBudget.WpfRingCap) _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .3, Implode = true, Strength = strength, Channel = EffectChannel.Morph });
                 break;
             case "Bounce": // The hit bounces back up: a narrow jet plus a small kick ring.
             {
@@ -520,15 +520,15 @@ internal sealed partial class PianoStage : FrameworkElement
                         X = x + (_random.NextDouble() - .5) * 10, Y = y,
                         Vx = (_random.NextDouble() - .5) * 60, Vy = -speed,
                         Life = .4 + _random.NextDouble() * .3, Age = 0, Mass = .6, Phase = _random.NextDouble() * Math.PI * 2,
-                        Size = _visual.ParticleSize * (.5 + _random.NextDouble() * .5),
+                        Size = _visual.ParticleSize * (.5 + _random.NextDouble() * .5), Channel = EffectChannel.Morph,
                         Color = i % 3 == 0 ? Colors.White : color
                     });
                 }
-                if (_rings.Count < EffectBudget.WpfRingCap) _rings.Add(new Ring { X = x, Y = y, Color = Colors.White, Life = .3, Strength = .6 * strength });
+                if (_rings.Count < EffectBudget.WpfRingCap) _rings.Add(new Ring { X = x, Y = y, Color = Colors.White, Life = .3, Strength = .6 * strength, Channel = EffectChannel.Morph });
                 break;
             }
             case "Morph": // The note head becomes a star that pops at the hit point.
-                if (_flashes.Count < EffectBudget.WpfFlashCap) _flashes.Add(new Flash { X = x, Y = y, Color = color, Life = .3, Strength = strength, Style = 3 });
+                if (_flashes.Count < EffectBudget.WpfFlashCap) _flashes.Add(new Flash { X = x, Y = y, Color = color, Life = .3, Strength = strength, Style = 3, Channel = EffectChannel.Morph });
                 break;
         }
         InvalidateVisual();
@@ -578,7 +578,7 @@ internal sealed partial class PianoStage : FrameworkElement
                         Kind = 1, X = x + (_random.NextDouble() - .5) * 18, Y = y - 4,
                         Vx = (_random.NextDouble() - .5) * 24, Vy = -(50 + _random.NextDouble() * 90),
                         Life = .7 + _random.NextDouble() * .5, Age = 0, Mass = .5, Phase = _random.NextDouble() * Math.PI * 2,
-                        Size = 1.4 + _random.NextDouble() * 1.6, Grav = -.25, Color = color
+                        Size = 1.4 + _random.NextDouble() * 1.6, Grav = -.25, Channel = EffectChannel.Release, Color = color
                     });
                 break;
             }
@@ -594,7 +594,7 @@ internal sealed partial class PianoStage : FrameworkElement
                         Kind = 1, X = x + (_random.NextDouble() - .5) * 26, Y = y - 6,
                         Vx = Math.Cos(angle) * speed, Vy = Math.Sin(angle) * speed - 20,
                         Life = .4 + _random.NextDouble() * .35, Age = 0, Mass = 1, Phase = _random.NextDouble() * Math.PI * 2,
-                        Size = .9 + _random.NextDouble() * 1.1, Grav = .3, DragK = 2, Color = color
+                        Size = .9 + _random.NextDouble() * 1.1, Grav = .3, DragK = 2, Channel = EffectChannel.Release, Color = color
                     });
                 }
                 break;
@@ -608,18 +608,18 @@ internal sealed partial class PianoStage : FrameworkElement
                         Kind = 3, X = x + (_random.NextDouble() - .5) * 20, Y = y - 6,
                         Vx = (_random.NextDouble() - .5) * 20, Vy = -(30 + _random.NextDouble() * 50),
                         Life = .8 + _random.NextDouble() * .6, Age = 0, Mass = 1, Phase = _random.NextDouble() * Math.PI * 2,
-                        Size = 2 + _random.NextDouble() * 2, Grav = -.1, DragK = 2, Color = Blend(Color.FromRgb(150, 145, 140), color, .2)
+                        Size = 2 + _random.NextDouble() * 2, Grav = -.1, DragK = 2, Channel = EffectChannel.Release, Color = Blend(Color.FromRgb(150, 145, 140), color, .2)
                     });
                 break;
             }
             case "Snap Back": // The note snaps back into the key.
-                if (_rings.Count < EffectBudget.WpfRingCap) _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .25, Implode = true, Strength = strength });
+                if (_rings.Count < EffectBudget.WpfRingCap) _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .25, Implode = true, Strength = strength, Channel = EffectChannel.Release });
                 break;
             case "Echo Rings": // Two soft rings echo the ending.
                 if (_rings.Count <= EffectBudget.WpfRingCap - 2)
                 {
-                    _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .5, Strength = .8 * strength });
-                    _rings.Add(new Ring { X = x, Y = y, Color = Colors.White, Life = .5, Strength = .4 * strength });
+                    _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .5, Strength = .8 * strength, Channel = EffectChannel.Release });
+                    _rings.Add(new Ring { X = x, Y = y, Color = Colors.White, Life = .5, Strength = .4 * strength, Channel = EffectChannel.Release });
                 }
                 break;
         }
@@ -973,9 +973,11 @@ internal sealed partial class PianoStage : FrameworkElement
         if (_visual.ShowSheet) DrawSheet(dc, width, keyTop);
         dc.Pop();
         if (_visual.ShowFlame && _visual.FlameIntensity > 0) DrawFlames(dc, width, keyTop, lane);
-        if (_visual.ShowImpactRings) DrawRings(dc);
-        if (_visual.ShowImpactFlash) DrawImpactFlashes(dc);
-        if (_visual.ShowEmbers || _visual.ShowWisps) DrawSparks(dc, width, keyTop);
+        // A layer's toggle hides the effects that layer spawns, not the morph or the release effect that
+        // happen to share its particle list: those are chosen on their own row and draw on their own.
+        if (_visual.ShowImpactRings || _rings.Exists(ring => EffectChannel.OwnsItsDraw(ring.Channel))) DrawRings(dc);
+        if (_visual.ShowImpactFlash || _flashes.Exists(flash => EffectChannel.OwnsItsDraw(flash.Channel))) DrawImpactFlashes(dc);
+        if (_visual.ShowEmbers || _visual.ShowWisps || _sparks.Exists(spark => EffectChannel.OwnsItsDraw(spark.Channel))) DrawSparks(dc, width, keyTop);
         if (_visual.ShowHalo) DrawImpactLine(dc, width, keyTop);
         if (_visual.HoldElectricArc && _visual.HoldArcIntensity > 0) DrawElectricArcs(dc, width, keyTop);
         if (!chroma && !_transparentBackdrop && _visual.Vignette > 0) DrawVignette(dc, width, keyTop);
@@ -2072,7 +2074,7 @@ internal sealed partial class PianoStage : FrameworkElement
                 dc.DrawEllipse(Brush(wispCore), null, new Point(wispX, particle.Y), wispSize, wispSize);
                 continue;
             }
-            if (!_visual.ShowEmbers) continue;
+            if (!EffectChannel.OwnsItsDraw(particle.Channel) && !_visual.ShowEmbers) continue;
             if (particle.Kind == 1) { DrawDroplet(dc, particle, fade, bloom); continue; }
             if (particle.Kind == 2) { DrawConfetti(dc, particle, fade); continue; }
             if (particle.Kind == 3) { DrawDust(dc, particle, fade, bloom); continue; }
@@ -2155,10 +2157,15 @@ internal sealed partial class PianoStage : FrameworkElement
     {
         // Impact phase, wave channel. Both styles share the size slider; brightness follows the
         // intensity slider and the velocity of the hit (the first smart modulator: velocity mapping).
-        var intensity = _visual.ImpactWaveIntensity / 100;
-        if (intensity <= 0) return;
         foreach (var ring in _rings)
         {
+            if (!EffectChannel.OwnsItsDraw(ring.Channel) && !_visual.ShowImpactRings) continue;
+            // The knob that owns the channel sets the gain: the wave slider for a wave ring, the morph
+            // slider for an absorb/bounce ring, and a release ring already carries its intensity in
+            // Strength at birth. This is KeyRingChannelGain, shared with the GPU stage.
+            var intensity = KeyRingChannelGain.Resolve(ring.Channel,
+                (float)(_visual.ImpactWaveIntensity / 100), (float)(_visual.ImpactMorphIntensity / 100));
+            if (intensity <= 0) continue;
             if (ring.Shock) { DrawShockwave(dc, ring, intensity); continue; }
             if (ring.Implode) { DrawImplode(dc, ring, intensity); continue; }
             if (ring.Ripple) { DrawRipple(dc, ring, intensity); continue; }
@@ -2221,6 +2228,7 @@ internal sealed partial class PianoStage : FrameworkElement
         if (intensity <= 0) return;
         foreach (var flash in _flashes)
         {
+            if (!EffectChannel.OwnsItsDraw(flash.Channel) && !_visual.ShowImpactFlash) continue;
             if (flash.Style == 1) { DrawLightning(dc, flash, intensity); continue; }
             if (flash.Style == 2) { DrawPlasma(dc, flash, intensity); continue; }
             if (flash.Style == 3) { DrawStarMorph(dc, flash, intensity); continue; }
@@ -3746,10 +3754,10 @@ internal sealed partial class PianoStage : FrameworkElement
     private sealed record Petal(double X, double Y, double Size, double Speed, double Sway, double Drift, double Spin, double Phase);
     /// <summary>A cached overlay tile of one sounding key plus where it belongs on the stage.</summary>
     private sealed record ShadedKeyTile(BitmapSource Bitmap, Rect Where);
-    private sealed class Spark { public double X, Y, Vx, Vy, Life, Age, Size, Phase, Mass; public bool Wisp; public Color Color; public int Kind; public double Grav = 1, DragK = 1; }
+    private sealed class Spark { public double X, Y, Vx, Vy, Life, Age, Size, Phase, Mass; public bool Wisp; public Color Color; public int Kind; public byte Channel; public double Grav = 1, DragK = 1; }
     /// <summary>One flame mote. Its own type because nothing else in the stage shares its cooling ramp.</summary>
     private sealed class FlameMote { public double X, Y, Vx, Vy, Life, Age, Size, Phase; public Color Tint; }
-    private sealed class Ring { public double X, Y, Age, Life, Strength = 1; public bool Shock, Implode, Ripple; public Color Color; }
-    private sealed class Flash { public double X, Y, Age, Life, Strength = 1; public int Style; public Color Color; }
+    private sealed class Ring { public double X, Y, Age, Life, Strength = 1; public bool Shock, Implode, Ripple; public byte Channel; public Color Color; }
+    private sealed class Flash { public double X, Y, Age, Life, Strength = 1; public int Style; public byte Channel; public Color Color; }
     private sealed class LiveTrail { public int Pitch; public double Age, HeldSeconds; public bool KeyDown = true, Released, Hit; public double Strength = 1; }
 }

@@ -1229,6 +1229,58 @@ def scan_option_matrix():
         errors.append("Diagnostics/VerificationSuite.cs does not call OptionMatrixReview.Render, so the matrix never runs")
     if '"--verify-option-matrix-only"' not in suite:
         errors.append("Diagnostics/VerificationSuite.cs lost the --verify-option-matrix-only route")
+    errors.extend(scan_effect_channel_ownership())
+    return errors
+
+
+def scan_effect_channel_ownership():
+    """An option must draw on its own, not behind another layer's switch.
+
+    The first N12(b) run failed on the shipping stage: Shatter, Melt and Bounce are particles and both ring
+    releases are rings, while the stage drew those lists only when ``ShowEmbers`` / ``ShowImpactRings`` were
+    on — so a user who chose a morph or a release effect could get nothing at all even though the GPU stage
+    drew it. ``Stage/Effects/EffectChannel.cs`` tags each effect with the channel that spawned it and the
+    three draw paths skip only layer-owned effects behind their own switch. That ownership is the whole
+    value of the fix, so it is pinned here: an edit that re-gates a list, or spawns a morph/release effect
+    without a tag, fails on Linux before Windows ever renders a frame.
+    """
+    errors = []
+    channel_path = ROOT / "Stage" / "Effects" / "EffectChannel.cs"
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    if not channel_path.exists():
+        return ["Stage/Effects/EffectChannel.cs is missing; the morph and release channels lost their owner"]
+    if not stage_path.exists():
+        return ["Stage/PianoStage.cs is missing; the option matrix cannot verify a stage that does not exist"]
+    channel = _code(channel_path.read_text(encoding="utf-8"))
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    for owner, number in (("Layer", 0), ("Morph", 1), ("Release", 2)):
+        if not re.search(rf"const\s+byte\s+{owner}\s*=\s*{number}\s*;", channel):
+            errors.append(f"Stage/Effects/EffectChannel.cs must keep {owner} = {number}: the GPU ring channels use "
+                          "the same numbering, so the two renderers cannot disagree about who owns an effect")
+    if "OwnsItsDraw" not in channel:
+        errors.append("Stage/Effects/EffectChannel.cs lost OwnsItsDraw, the one rule the draw paths share")
+    # A list that is skipped because of a layer switch must skip only the effects that switch owns.
+    for owner, switch, what in (
+        ("particle", "ShowEmbers", "particles"),
+        ("ring", "ShowImpactRings", "rings"),
+        ("flash", "ShowImpactFlash", "flashes"),
+    ):
+        if f"!EffectChannel.OwnsItsDraw({owner}.Channel) && !_visual.{switch}" not in stage:
+            errors.append(f"Stage/PianoStage.cs no longer skips only layer-owned {what} when {switch} is off; a "
+                          "chosen morph or release effect would hide behind another layer's switch again")
+        if f"EffectChannel.OwnsItsDraw({owner}.Channel)" not in stage:
+            errors.append(f"Stage/PianoStage.cs does not ask EffectChannel.OwnsItsDraw({owner}.Channel), so the "
+                          f"{what} list is drawn or skipped as a whole and one channel can silence another")
+    if "KeyRingChannelGain.Resolve(ring.Channel" not in stage:
+        errors.append("Stage/PianoStage.cs no longer resolves a ring's brightness through KeyRingChannelGain; a "
+                      "morph ring would follow the wave slider and a release ring would be dimmed twice")
+    # Every spawn site of the two self-owning families must carry its tag, or the effect it spawns stays
+    # hidden by ShowEmbers / ShowImpactRings / ShowImpactFlash.
+    for owner, expected in (("Morph", 6), ("Release", 6)):
+        found = stage.count(f"Channel = EffectChannel.{owner}")
+        if found != expected:
+            errors.append(f"Stage/PianoStage.cs tags {found} {owner.lower()} effect(s) with EffectChannel.{owner}, "
+                          f"expected {expected}; a new or removed morph/release branch must be tagged and captured")
     return errors
 
 

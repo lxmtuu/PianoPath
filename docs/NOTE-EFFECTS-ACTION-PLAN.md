@@ -28,7 +28,7 @@
    cả hai engine (trước đây WPF 0,18/0,30). Khi chạm trần, cả hai cùng **bỏ cái cũ nhất**.
 5. **Độ phủ hiệu ứng: từng option của 11 trục setting đã có ảnh riêng (N12(b), 2026-10-21)**: 87 mục,
    86 `Available`, 1 `Planned`; AR có 24 family (6 `Native`, 17 `Unverified`, 1 `Unsupported`). Ma trận option chạy
-   trên **WPF và D3D/WARP**: 62 giá trị (9 trong đó là trạng thái tắt) + 11 baseline = **64 cảnh, 128 ảnh 1280×720**, cùng cảnh/cùng seed; mỗi giá
+   trên **WPF và D3D/WARP**: 62 giá trị (9 trong đó là trạng thái tắt) + 11 baseline = **64 cảnh, 128 ảnh 960×540**, cùng cảnh/cùng seed; mỗi giá
    trị phải đổi pixel so với baseline và không trùng ảnh với giá trị khác. Còn thiếu: ma trận theo **AR/pose**, duyệt
    mỹ thuật và cổng phần cứng.
 6. **Những thứ đang tốt, không nên phá**: bảng màu nốt dùng chung (`GpuLook.NoteColor` lấy từ stage), vật liệu
@@ -429,7 +429,7 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
 - **Số đo (b):** 11 trục = `NoteStyle` 6, `FallingTrail` 8, `ImpactWave` 4, `ImpactBurst` 5, `ImpactMorph` 6,
   `ImpactFlashStyle` 3, `ReleaseEffect` 6, `AmbientEnergy` 5, `AmbientNature` 8, `AmbientLight` 5, `AmbientCosmic` 6
   → **62 giá trị** (9 giá trị chính là trạng thái tắt, baseline không chụp lại) + **11 baseline** ⇒ **64 cảnh × 2 renderer =
-  128 ảnh** 1280×720. Cảnh cố định: nốt 60 giữ 2,0 s (falling,
+  128 ảnh** 960×540. Cảnh cố định: nốt 60 giữ 2,0 s (falling,
   mẫu 1,5 s); một cú `Impact(60, 96/127)` (mẫu 0,117 s sau cú đánh); press ở khung 0 / release khung 8 (mẫu 0,267 s);
   ambient không input (mẫu 1,5 s). Hai family không có giá trị "off" (`ImpactBurst`, `ImpactFlashStyle`) lấy baseline bằng
   **công tắc hiển thị** (`ShowEmbers`, `ShowImpactFlash`).
@@ -439,6 +439,13 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
 - **Nghiệm thu:** mỗi giá trị của 11 trục có ảnh WPF + WARP, checksum và số pixel đổi; `tools/check_sources.py` ghim danh sách
   giá trị của plan **bằng đúng** mảng trong `PianoVisualSettings` (thêm style mà quên capture ⇒ làn tĩnh đỏ); test xUnit ghim
   62/64/128; route riêng `--verify-option-matrix-only`, và `--verify` đầy đủ cũng chạy nó.
+- **Lượt chạy đầu tiên (2026-10-21):** đỏ ở `impact-morph/Shatter` — **0 px** trên WPF, không phải lỗi harness. Stage phần
+  mềm chỉ vẽ danh sách hạt/ring/flash khi công tắc của **lớp khác** bật (`ShowEmbers`, `ShowImpactRings`,
+  `ShowImpactFlash`), nên Shatter/Melt/Bounce, Absorb và Morph biến mất khi người dùng tắt Sparks/Rings/Flash — trong khi
+  GPU vẫn vẽ. Đã sửa ở sản phẩm: `Stage/Effects/EffectChannel.cs` (+ `Layer`/`Morph`/`Release`), ba đường vẽ chỉ ẩn hiệu
+  ứng `Layer` khi công tắc của chính nó tắt, ring dùng `KeyRingChannelGain` như GPU; `scan_effect_channel_ownership` ghim
+  lại, `EffectChannelTests` giữ cách đánh số trùng GPU. Morph/release vì thế được chụp với **mọi** công tắc lớp tắt, nên
+  mỗi khung của hai family này cũng là bằng chứng "option tự vẽ".
 - **Cỡ:** L · **Phụ thuộc:** N9.
 
 ### P2 — nhất quán và tài liệu

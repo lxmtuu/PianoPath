@@ -57,6 +57,7 @@
     <Compile Include="..\..\Gpu\HeldParticleAppearance.cs" Link="Product\Gpu\HeldParticleAppearance.cs" />
     <Compile Include="..\..\Camera\ArParticleBillboard.cs" Link="Product\Camera\ArParticleBillboard.cs" />
     <Compile Include="..\..\Gpu\KeyRingChannelGain.cs" Link="Product\Gpu\KeyRingChannelGain.cs" />
+    <Compile Include="..\..\Stage\Effects\EffectChannel.cs" Link="Product\Stage\Effects\EffectChannel.cs" />
     <Compile Include="..\..\Diagnostics\AuxParticleTimeline.cs" Link="Product\Diagnostics\AuxParticleTimeline.cs" />
     <Compile Include="..\..\Diagnostics\HeldParticleControlPlan.cs" Link="Product\Diagnostics\HeldParticleControlPlan.cs" />
     <Compile Include="..\..\Diagnostics\HeldLightIsolationPlan.cs" Link="Product\Diagnostics\HeldLightIsolationPlan.cs" />

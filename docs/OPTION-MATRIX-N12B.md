@@ -33,11 +33,17 @@ N12(b) tạo bằng chứng đó bằng cách giữ mọi thứ cố định và
 | `AmbientCosmic` | None, Galaxy, Black Hole, Matrix Rain, Geometric, Fractal | 6 | không input | 1,5 s |
 
 **62 giá trị**, trong đó **9 giá trị chính là trạng thái tắt** — baseline của chúng không chụp lại — cộng **11 baseline**
-⇒ **64 cảnh**, mỗi cảnh hai renderer (WPF và Direct3D/WARP) ⇒ **128 ảnh 1280×720**,
-cùng seed `20261021`, cùng 60 fps.
+⇒ **64 cảnh**, mỗi cảnh hai renderer (WPF và Direct3D/WARP) ⇒ **128 ảnh 960×540**,
+cùng seed `20261021`, cùng 60 fps. 960×540 là cỡ review của harness: một mảnh shard hay một ring vẫn phủ vài chục
+pixel, còn 128 PNG thì vẫn là artifact nhỏ — không nhồi vào bundle Phase 1 vốn đã hơn 1 GiB.
 
 Hai family **không có giá trị "off"** — `ImpactBurst` và `ImpactFlashStyle` luôn vẽ một cái gì đó — nên baseline
 của chúng tắt **công tắc hiển thị** (`ShowEmbers`, `ShowImpactFlash`) và mọi giá trị được chụp với công tắc bật.
+
+Ngược lại, `ImpactMorph` và `ReleaseEffect` là hai family **không có công tắc riêng**: chúng được chụp với Embers,
+Impact rings, Impact flash và wisps đều **tắt**. Nhờ vậy mỗi khung của hai family này không chỉ so với baseline mà còn
+chứng minh option **tự vẽ**, không mượn công tắc của lớp khác. Nếu một lần sửa nào bật lại một lớp cho hai family đó,
+`Settings(...)` ném lỗi ngay.
 
 Mọi family khác đều tắt trong baseline: `NoteStyle=Solid`, `FallingTrail=None`, `ImpactWave=None`, `ImpactMorph=None`,
 `ReleaseEffect=Fade`, bốn lớp ambient `None`. Baseline cũng tắt các lớp có thể thêm kênh thứ hai (`ShowFlame`,
@@ -75,10 +81,15 @@ Kết quả nằm trong `<thư-mục>/option-matrix/`:
   counter GPU: sprite/ambient/note-trail/note/key), `comparisons` (từng cặp), `baselines` (hash + số pixel sáng).
 - `<trục>/neutral-{wpf,gpu-warp}.png` và `<trục>/<giá-trị>-{wpf,gpu-warp}.png`.
 
-Trong CI, cả thư mục đi cùng artifact `phase1-visual-review` (bước *Verification suite*).
+Trong CI, `option-matrix/` có artifact riêng tên **`option-matrix-n12b`** (bước *Verification suite* sinh ra, artifact
+được upload ngay sau bundle Phase 1), và bundle `phase1-visual-review` **loại trừ** thư mục này để giữ nguyên cỡ cũ.
+Chạy trên nhánh push thì cả hai chỉ lên artifact, không vào Git.
 
 ## 5. Ghim để ma trận không lặng lẽ cũ đi
 
+- `tools/check_sources.py` → `scan_effect_channel_ownership`: `Stage/Effects/EffectChannel.cs` phải giữ
+  `Layer=0/Morph=1/Release=2` (trùng số kênh ring của GPU), ba đường vẽ phải hỏi `OwnsItsDraw`, ring phải đi qua
+  `KeyRingChannelGain.Resolve(ring.Channel, …)`, và đúng **6** điểm sinh morph + **6** điểm sinh release phải mang tag.
 - `tools/check_sources.py` → `scan_option_matrix`: danh sách giá trị trong `Diagnostics/OptionMatrixPlan.cs`
   phải **bằng đúng, đúng thứ tự** mảng trong `Stage/PianoVisualSettings.cs`; mỗi trục phải có nhánh trong
   `OptionMatrixReview`; `--verify-option-matrix-only` phải còn trong suite. Thêm một style mà quên capture ⇒
@@ -95,4 +106,43 @@ Trong CI, cả thư mục đi cùng artifact `phase1-visual-review` (bước *Ve
 - **Không** phủ smart modulator (`VelocityColor`, `OctaveColor`, `PedalGlow`, `TempoSync`, `AudioReactive`,
   `ZoneSplit`) hay theme graph.
 - **Không** phải hiệu năng: WARP trên runner, không phải GPU thật, không đo FPS.
-- **Không** đổi mặc định, preset, RNG hay mã vẽ: ma trận chỉ đọc settings và gọi API công khai của stage.
+- **Không** đổi mặc định, preset hay RNG. Ma trận **không** sửa mã vẽ: nó chỉ đọc settings và gọi API công khai của
+  stage. Lỗi vẽ mà nó bắt được (mục 7) là lỗi của sản phẩm và được sửa riêng trong `Stage/`, có test.
+
+## 7. Lượt chạy đầu tiên đã bắt được gì
+
+CI của ma trận (run `39486496425`, commit `d087476`) đỏ ngay ở cảnh thứ ba:
+
+```
+FAIL: impact-morph/Shatter moved 0 pixels on WPF (floor 12): the option is accepted by the settings class
+but does not draw.
+```
+
+Không phải ma trận làm sai. Stage **phần mềm** giữ hạt, ring và flash trong ba danh sách dùng chung, và cả ba
+chỉ được vẽ khi công tắc của lớp sở hữu bật:
+
+| Danh sách | Điều kiện vẽ cũ | Hệ quả |
+|---|---|---|
+| `_sparks` | `ShowEmbers \|\| ShowWisps` | Shatter, Melt, Bounce biến mất khi tắt Sparks |
+| `_rings` | `ShowImpactRings` | Absorb, Snap Back, Echo Rings biến mất khi tắt Impact rings |
+| `_flashes` | `ShowImpactFlash` | Morph (ngôi sao) biến mất khi tắt Impact flash |
+
+Stage GPU thì ngược lại: nó sinh morph **trước** cổng `ShowEmbers`, và vẽ danh sách ring/flash **không** hỏi hai
+công tắc kia. Tức là cùng một file preset cho ra hai hình khác nhau trên hai renderer — và trên WPF, năm trong
+sáu giá trị morph cùng hai kiểu release "được nhận nhưng không vẽ", đúng thứ audit §4.11 không thể chứng minh.
+
+**Bản sửa (sản phẩm, không phải harness):**
+
+- `Stage/Effects/EffectChannel.cs`: mỗi hiệu ứng mang chủ sở hữu `Layer` (0), `Morph` (1) hoặc `Release` (2) — đúng
+  cách đánh số kênh ring của GPU (`KeyRingChannelGain`).
+- `PianoStage`: `SpawnImpactMorph` gắn `Morph` cho 6 điểm sinh, `SpawnReleaseFx` gắn `Release` cho 6 điểm sinh; ba
+  đường vẽ chỉ bỏ qua hiệu ứng `Layer` khi công tắc của chính nó tắt, và **vẫn** gọi hàm vẽ khi trong danh sách còn
+  hiệu ứng tự sở hữu.
+- Ring lấy độ sáng qua `KeyRingChannelGain.Resolve(ring.Channel, wave, morph)`: ring morph theo slider morph, ring
+  release mang sẵn `ReleaseIntensity` lúc sinh (không bị nhân hai lần).
+- Ghim: `tests/PianoPath.Tests/EffectChannelTests.cs` (cách đánh số + bảng chân trị), `scan_effect_channel_ownership`
+  trong `tools/check_sources.py`, và chính ma trận — `ImpactMorph`/`ReleaseEffect` bị **buộc** chụp với mọi công tắc
+  tắt, nên một lần re-gate là CI đỏ.
+
+Đổi lại: người dùng chọn Shatter với Sparks tắt giờ **thấy** shard (và bản ghi WPF khớp bản ghi GPU), còn ring
+morph/release sáng theo đúng slider của chúng thay vì theo slider wave.

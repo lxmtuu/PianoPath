@@ -232,7 +232,7 @@ chọn giá trị khác thì **có** pixel khác. Ma trận này bịt đúng kh
 Cách chạy, cách đọc artifact và phần ghim: `docs/OPTION-MATRIX-N12B.md`.
 
 Tổng: **62 giá trị**, trong đó **9 giá trị chính là trạng thái tắt** (nên baseline của chúng không chụp lại), cộng
-**11 baseline** ⇒ **64 cảnh × 2 renderer = 128 ảnh** 1280×720, kèm `manifest.json` (sha256 từng
+**11 baseline** ⇒ **64 cảnh × 2 renderer = 128 ảnh** 960×540, kèm `manifest.json` (sha256 từng
 ảnh, số pixel đổi so với baseline, bảng so từng cặp, counter hạt/ambient/trail của GPU) và `index.html`.
 
 Bốn điều kiện làm lượt chạy **đỏ**, tất cả đều là bất biến của renderer chứ không phải ý thích:
@@ -242,6 +242,19 @@ Bốn điều kiện làm lượt chạy **đỏ**, tất cả đều là bất 
 3. baseline của các family **chung một cảnh** khác nhau **dù chỉ một bit** ⇒ renderer không tất định, hoặc option
    này rò rỉ sang cảnh của option khác (mọi family đều tắt trong baseline, nên chúng phải ra cùng ảnh);
 4. thiếu ảnh, thiếu hash, hoặc số ảnh khác 128.
+
+**Lượt chạy đầu tiên tìm ra một lỗi thật (2026-10-21).** CI của chính ma trận đỏ ở `impact-morph/Shatter`:
+**0 px** trên WPF. Nguyên nhân không nằm ở ma trận — stage **phần mềm** vẽ hạt/ring/flash qua ba danh sách
+dùng chung, mà mỗi danh sách chỉ được vẽ khi công tắc của lớp đó bật (`ShowEmbers`, `ShowImpactRings`,
+`ShowImpactFlash`). Vì vậy Shatter/Melt/Bounce (hạt), Absorb (ring) và Morph (flash) **biến mất** nếu người
+dùng tắt Sparks/Rings/Flash, còn stage GPU vẫn vẽ chúng: vừa là lỗi parity WPF↔GPU, vừa là một option "được
+settings nhận nhưng không vẽ". Bản sửa nằm ở sản phẩm, không ở harness: `Stage/Effects/EffectChannel.cs` gắn
+chủ sở hữu cho từng hạt/ring/flash (`Layer`/`Morph`/`Release`); ba đường vẽ chỉ ẩn hiệu ứng `Layer` khi công
+tắc của chính nó tắt; ring lấy độ sáng qua `KeyRingChannelGain` như GPU (ring morph theo slider morph, ring
+release mang sẵn intensity lúc sinh). Morph và release là hai family **không có công tắc riêng**, nên chúng
+được chụp với **mọi** công tắc lớp tắt — mỗi khung của hai family đó đồng thời là bằng chứng "option tự vẽ".
+`tools/check_sources.py` ghim cả bốn đường vẽ, phép chia độ sáng và 6+6 điểm sinh hiệu ứng, để lỗi này không
+quay lại mà không cần Windows.
 
 **Không** chứng nhận: mỹ thuật/duyệt hình, AR (chưa có pose/camera), đường MIDI/CC64 thật, các quality tier khác,
 FPS phần cứng, hay thay đổi mặc định. `tools/check_sources.py` (`scan_option_matrix`) ghim danh sách giá trị của
@@ -278,7 +291,7 @@ plan **bằng đúng** mảng trong `PianoVisualSettings`, nên thêm một styl
 | `VerifyGpuStage` | Một bundle nhiều setting; WARP render, ambient count, recording tap. | Ma trận từng effect/option và GPU thật. |
 | `VerifyArNoteProjection` | Windows CI [38014563330](https://github.com/lxmtuu/PianoPath/actions/runs/38014563330) PASS on the earlier source revision: calibrated Standard/Ultra, selected impact variants, Dissolve release, transformed pose/direction, and four hold modifiers with representative 0↔100 parameter pixel deltas. The current local branch adds note-colour/material/shimmer, released-bar lifetime, Lite/Standard/Ultra pixel parity for note and live-bar geometry, age-zero first-frame Perform onset/direction, and held-bar default-opacity WARP assertions; all of them pass in Windows CI [39294579913](https://github.com/lxmtuu/PianoPath/actions/runs/39294579913) (2026-10-20). | Only sampled styles/values; not all 14 families/parameter bindings. Those assertions ran on WARP in 39294579913; the remaining gap is per-value/per-binding coverage, and real webcam, OBS, physical GPU and performance are not verified. |
 | `VerifyEffectFamilyGpuRecordingCaptures` / `VerifyEffectFamilyWpfRecordingCaptures` | Windows CI [37762349649](https://github.com/lxmtuu/PianoPath/actions/runs/37762349649) PASS: 24/24 GPU tap families có changed-pixel evidence; 22/22 WPF-native families ghi PNG rồi decode/read back và pass pixel-diff. Hai WPF-only exclusions được assert chính xác. | Chỉ family-level presence trên WARP + WPF software-stage fixture; mọi `parameter.Bindings.Recording` vẫn `Unverified`, mọi `Cost.Recording` vẫn `Unmeasured`; không chứng nhận GPU phần cứng. |
-| `--verify-option-matrix-only` (N12(b)) | Ma trận option: 11 trục setting × mọi giá trị (62) + 11 baseline = 64 cảnh × WPF/GPU‑WARP = **128 ảnh 1280×720**, cùng cảnh/cùng seed; mỗi giá trị đổi ≥12 px so với baseline, mọi cặp trong một trục khác ảnh, baseline của các family chung một cảnh trùng nhau **từng bit**; `manifest.json` (sha256, số pixel đổi, bảng so cặp, counter GPU) và `index.html` trong `phase1-visual-review/option-matrix`. Đường tắt và `--verify` đầy đủ đều chạy nó; `tools/check_sources.py` ghim danh sách giá trị vào `PianoVisualSettings`. | Chưa phủ: AR/pose, các giá trị **số** (amount/speed/size/intensity), smart modulator, theme graph, GPU phần cứng, duyệt mỹ thuật hay thay đổi mặc định. |
+| `--verify-option-matrix-only` (N12(b)) | Ma trận option: 11 trục setting × mọi giá trị (62) + 11 baseline = 64 cảnh × WPF/GPU‑WARP = **128 ảnh 960×540**, cùng cảnh/cùng seed; mỗi giá trị đổi ≥12 px so với baseline, mọi cặp trong một trục khác ảnh, baseline của các family chung một cảnh trùng nhau **từng bit**; `manifest.json` (sha256, số pixel đổi, bảng so cặp, counter GPU) và `index.html` trong `phase1-visual-review/option-matrix`. Đường tắt và `--verify` đầy đủ đều chạy nó; `tools/check_sources.py` ghim danh sách giá trị vào `PianoVisualSettings`. | Chưa phủ: AR/pose, các giá trị **số** (amount/speed/size/intensity), smart modulator, theme graph, GPU phần cứng, duyệt mỹ thuật hay thay đổi mặc định. |
 | `tests/PianoPath.Tests` | Portable test project PASS cùng Windows build/`--verify` trong run [38014563330](https://github.com/lxmtuu/PianoPath/actions/runs/38014563330). | Không có project test riêng cho toàn bộ lifecycle effect renderer. |
 
 ### AR capability baseline (source audit)

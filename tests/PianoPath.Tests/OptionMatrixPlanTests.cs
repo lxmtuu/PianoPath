@@ -62,6 +62,16 @@ public class OptionMatrixPlanTests
     }
 
     [Fact]
+    public void The_review_size_keeps_the_contact_sheet_small()
+    {
+        // 960×540 is the harness' review size: a shard or a ring still covers dozens of pixels, while 128 of
+        // these PNGs stay a small artifact instead of riding inside the 1+ GiB Phase 1 bundle.
+        Assert.Equal(960, OptionMatrixPlan.Width);
+        Assert.Equal(540, OptionMatrixPlan.Height);
+        Assert.Equal(OptionMatrixPlan.SceneCount * 2, 128);
+    }
+
+    [Fact]
     public void Each_scene_has_one_frame_count_and_one_sample_time()
     {
         foreach (var family in OptionMatrixPlan.Families)

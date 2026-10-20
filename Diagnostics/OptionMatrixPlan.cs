@@ -40,7 +40,12 @@ internal static class OptionMatrixPlan
     internal sealed record Family(string Id, string Setting, Scene Scene, IReadOnlyList<string> Values,
         string Neutral, string? Gate = null);
 
-    internal const int Width = 1280, Height = 720, Fps = 60, Seed = 20261021;
+    /// <summary>
+    /// 960×540, the same review size the rest of the harness uses for its 2×2-averaged captures: large enough
+    /// that a shard, a spark or a ring is dozens of pixels, small enough that 128 PNGs stay a small artifact
+    /// (the Phase 1 bundle is already 1+ GiB and this review must not ride inside it).
+    /// </summary>
+    internal const int Width = 960, Height = 540, Fps = 60, Seed = 20261021;
     /// <summary>Middle C: far enough from both ends that the hit is never clipped by the stage edge.</summary>
     internal const int Pitch = 60;
     /// <summary>The velocity of the sampled note/hit, as the renderers' own 0..1 strength.</summary>

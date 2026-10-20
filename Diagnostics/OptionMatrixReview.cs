@@ -25,7 +25,10 @@ namespace PianoPath;
 ///
 /// <para>
 /// Nothing here touches the product's defaults, presets, RNG streams or drawing code: it reads the settings,
-/// drives the public stage API the way the app does, and writes PNGs outside the repository.
+/// drives the public stage API the way the app does, and writes PNGs outside the repository. The first run
+/// found a real defect anyway — three of the five morphs and both ring releases were drawn by a layer whose
+/// own switch was off (see <see cref="EffectChannel"/>) — and the fix lives in the stage, with its own static
+/// guard in <c>tools/check_sources.py</c>, not in this file.
 /// </para>
 /// </summary>
 internal static class OptionMatrixReview
@@ -40,6 +43,8 @@ internal static class OptionMatrixReview
     /// "the option did nothing" instead of grading the art.
     /// </summary>
     private const int MinimumChangedPixels = 12;
+    /// <summary>Frames and captures the plan asks for: 62 values plus 11 scenes that keep their off baseline.</summary>
+    private const int ExpectedScenes = 64, ExpectedCaptures = ExpectedScenes * 2;
 
     private sealed record GpuCounters(int Sprites, int Ambient, int NoteTrails, int Notes, int Keys);
 
@@ -62,6 +67,10 @@ internal static class OptionMatrixReview
     internal static int Render(string output)
     {
         if (string.IsNullOrWhiteSpace(output)) throw new ArgumentException("The option matrix output directory is empty.", nameof(output));
+        if (OptionMatrixPlan.SceneCount != ExpectedScenes)
+            throw new InvalidDataException(
+                $"The option plan now captures {OptionMatrixPlan.SceneCount} scenes; this review pins {ExpectedScenes}. " +
+                "Update the plan, this number, docs/OPTION-MATRIX-N12B.md and the suite assert together.");
         var previousLayout = KeyboardLayout.Active;
         KeyboardLayout.Use(KeyboardLayout.Standard88);
         try
@@ -72,7 +81,7 @@ internal static class OptionMatrixReview
             if (!renderer.IsWarp)
                 throw new InvalidOperationException($"The option matrix requires WARP, but Direct3D created '{renderer.AdapterName}'.");
 
-            var captures = new List<Pending>(OptionMatrixPlan.SceneCount * RendererIds.Length);
+            var captures = new List<Pending>(ExpectedCaptures);
             var comparisons = new List<(string Family, string Renderer, string Left, string Right, int Changed)>();
             var baselines = new Dictionary<(OptionMatrixPlan.Scene Scene, string Renderer, string Family), (string Hash, int Lit)>();
 
@@ -124,7 +133,7 @@ internal static class OptionMatrixReview
 
                 captures.AddRange(baseline);
                 captures.AddRange(values);
-                // The comparison is done; the 3.7 MB frames of this family are not needed by the manifest.
+                // The comparison is done; the 2.1 MB frames of this family are not needed by the manifest.
                 foreach (var pending in baseline.Concat(values)) pending.Pixels = null;
             }
 
@@ -141,9 +150,8 @@ internal static class OptionMatrixReview
                         "are not the same picture; turning every family off must render one scene, bit for bit.");
             }
 
-            var expected = OptionMatrixPlan.SceneCount * RendererIds.Length;
-            if (captures.Count != expected)
-                throw new InvalidDataException($"The option matrix wrote {captures.Count} captures; exactly {expected} are required.");
+            if (captures.Count != ExpectedCaptures)
+                throw new InvalidDataException($"The option matrix wrote {captures.Count} captures; exactly {ExpectedCaptures} are required.");
 
             WriteManifest(root, renderer.AdapterName, captures, comparisons, baselines);
             WriteHtmlIndex(root, captures);
@@ -166,18 +174,20 @@ internal static class OptionMatrixReview
         var (gpu, counters) = CaptureGpu(renderer, family, settings);
         return
         [
-            Store(root, family, shown, neutral, "WPF", label, seconds, wpf, null),
-            Store(root, family, shown, neutral, "GPU-WARP", label, seconds, gpu, counters)
+            // The software stage hands out premultiplied BGRA (it draws brushes with alpha); the Direct3D
+            // readback is straight BGRA. Writing each in its own format keeps the PNG's colours exact.
+            Store(root, family, shown, neutral, "WPF", label, seconds, wpf, PixelFormats.Pbgra32, null),
+            Store(root, family, shown, neutral, "GPU-WARP", label, seconds, gpu, PixelFormats.Bgra32, counters)
         ];
     }
 
     private static Pending Store(string root, OptionMatrixPlan.Family family, string value, bool neutral,
-        string rendererId, string label, double seconds, byte[] pixels, GpuCounters? counters)
+        string rendererId, string label, double seconds, byte[] pixels, PixelFormat format, GpuCounters? counters)
     {
         if (pixels.Length != Width * Height * 4)
             throw new InvalidDataException($"{rendererId} returned {pixels.Length} bytes for {family.Id}/{value}; expected {Width}×{Height} BGRA pixels.");
         var relative = Path.Combine("option-matrix", family.Id, $"{label}-{(rendererId == "WPF" ? "wpf" : "gpu-warp")}.png");
-        WritePng(Path.Combine(root, relative), pixels, $"{family.Id}/{value} on {rendererId}");
+        WritePng(Path.Combine(root, relative), pixels, format, $"{family.Id}/{value} on {rendererId}");
         return new Pending
         {
             Family = family.Id, Setting = family.Setting, Value = value, Neutral = neutral, Renderer = rendererId,
@@ -208,6 +218,14 @@ internal static class OptionMatrixReview
         };
         if (value is not null) Apply(settings, family, value);
         settings.Clamp();
+        // The morph and the release effect are the two families with no visibility switch of their own, so
+        // their captures are also the proof that they draw while Embers, Impact rings and Impact flash are
+        // off. If a future edit switches a layer on for them, this fails instead of quietly weakening the
+        // comparison.
+        if ((family.Setting is "ImpactMorph" or "ReleaseEffect")
+            && (settings.ShowEmbers || settings.ShowWisps || settings.ShowImpactRings || settings.ShowImpactFlash))
+            throw new InvalidDataException(
+                $"The {family.Id} family must be captured with every layer switch off; its value has to draw on its own.");
         return settings;
     }
 
@@ -217,7 +235,7 @@ internal static class OptionMatrixReview
         {
             case "NoteStyle": settings.NoteStyle = value; break;
             case "FallingTrail": settings.FallingTrail = value; break;
-            // The two channels whose every value is an effect: the baseline is the channel switched off.
+            // The three channels that are an effect on every value: their baseline is the channel switched off.
             case "ImpactWave": settings.ImpactWave = value; settings.ShowImpactRings = true; break;
             case "ImpactBurst": settings.ImpactBurst = value; settings.ShowEmbers = true; break;
             case "ImpactMorph": settings.ImpactMorph = value; break;
@@ -234,6 +252,8 @@ internal static class OptionMatrixReview
 
     private static byte[] CaptureWpf(OptionMatrixPlan.Family family, PianoVisualSettings settings)
     {
+        // Its own stage, its own seed, its own clock: nothing a previous capture left behind can reach it. The
+        // key tiles are baked synchronously so the picture does not depend on a background render pass.
         var stage = new PianoStage { Width = Width, Height = Height, SynchronousReviewKeyTileBake = true };
         stage.SetVisualSettings(settings);
         stage.Measure(new Size(Width, Height));
@@ -245,6 +265,8 @@ internal static class OptionMatrixReview
         var dt = 1.0 / OptionMatrixPlan.Fps;
         for (var frame = 0; frame < OptionMatrixPlan.Frames(family); frame++)
         {
+            // The clock only ever moves forward, so the stage can never read a rewind as a seek and drop the
+            // release backlog; the hit and the release are driven at the same frame numbers on both renderers.
             stage.SetState(notes, (frame + 1) * dt, playing, NoPressed);
             Drive(family, frame,
                 pitch => stage.Impact(pitch, OptionMatrixPlan.Strength),
@@ -310,10 +332,10 @@ internal static class OptionMatrixReview
         }
     }
 
-    private static void WritePng(string path, byte[] pixels, string what)
+    private static void WritePng(string path, byte[] pixels, PixelFormat format, string what)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var bitmap = BitmapSource.Create(Width, Height, 96, 96, PixelFormats.Bgra32, null, pixels, Width * 4);
+        var bitmap = BitmapSource.Create(Width, Height, 96, 96, format, null, pixels, Width * 4);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using (var stream = File.Create(path)) encoder.Save(stream);
@@ -322,7 +344,7 @@ internal static class OptionMatrixReview
         if (decoded.PixelWidth != Width || decoded.PixelHeight != Height)
             throw new InvalidDataException($"The option matrix PNG of {what} is {decoded.PixelWidth}×{decoded.PixelHeight}, not {Width}×{Height}.");
         var roundTrip = new byte[pixels.Length];
-        new FormatConvertedBitmap(decoded, PixelFormats.Bgra32, null, 0).CopyPixels(roundTrip, Width * 4, 0);
+        new FormatConvertedBitmap(decoded, format, null, 0).CopyPixels(roundTrip, Width * 4, 0);
         if (!pixels.AsSpan().SequenceEqual(roundTrip))
             throw new InvalidDataException($"The option matrix PNG of {what} failed its pixel round trip.");
     }
@@ -337,6 +359,7 @@ internal static class OptionMatrixReview
             status = "n12b-option-matrix-not-art-signoff",
             claim = "every value of eleven settings families is accepted, drawn and distinguishable from its own off state and from its siblings on the WPF stage and the Direct3D stage on WARP at one fixed scene",
             notClaimed = "art approval, live MIDI/CC64 routing, AR projection, hardware frames, other quality tiers or a default change",
+            ownedChannels = "the morph and the release families have no visibility switch of their own and are captured with Embers, Impact rings, Impact flash and wisps off, so each of those captures proves the value draws by itself",
             width = Width, height = Height, fps = OptionMatrixPlan.Fps, seed = OptionMatrixPlan.Seed,
             pitch = OptionMatrixPlan.Pitch, strength = Math.Round(OptionMatrixPlan.Strength, 6),
             adapter,
@@ -375,7 +398,9 @@ internal static class OptionMatrixReview
         html.Append("figcaption{color:#aaa;font-size:12px;padding-top:4px}b{color:#fff}</style>");
         html.Append("<h1>Keyflow — ma trận option N12(b)</h1>");
         html.Append("<p>Mỗi khung là cùng một cảnh, cùng seed, cùng thời điểm; chỉ option đang xét thay đổi. ");
-        html.Append("WPF và Direct3D/WARP, 1280×720. Đây là bằng chứng renderer rẽ nhánh, không phải duyệt mỹ thuật.</p>");
+        html.Append("WPF và Direct3D/WARP, 960×540. Morph và release không có công tắc riêng nên được chụp khi ");
+        html.Append("Embers / Impact rings / Impact flash / wisps đều tắt: mỗi khung đó chứng minh option tự vẽ. ");
+        html.Append("Đây là bằng chứng renderer rẽ nhánh, không phải duyệt mỹ thuật.</p>");
         foreach (var family in OptionMatrixPlan.Families)
         {
             html.Append($"<h2>{WebUtility.HtmlEncode(family.Id)} · {WebUtility.HtmlEncode(family.Setting)}</h2><div class=\"row\">");
@@ -398,6 +423,12 @@ internal static class OptionMatrixReview
             var path = Path.Combine(root, capture.File.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(path)) throw new InvalidDataException($"Option matrix capture is missing: {capture.File}");
         }
+        var index = Path.Combine(root, "option-matrix", "index.html");
+        if (!File.Exists(index)) throw new InvalidDataException("The option matrix index.html is missing.");
+        var page = File.ReadAllText(index);
+        foreach (var family in OptionMatrixPlan.Families)
+            if (!page.Contains($"<h2>{family.Id}", StringComparison.Ordinal))
+                throw new InvalidDataException($"The option matrix index.html does not show the '{family.Id}' family.");
         using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "option-matrix", "manifest.json")));
         var entries = manifest.RootElement.GetProperty("captures").EnumerateArray().ToArray();
         if (manifest.RootElement.GetProperty("captureCount").GetInt32() != captures.Count || entries.Length != captures.Count)

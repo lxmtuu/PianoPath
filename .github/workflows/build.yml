@@ -1033,7 +1033,23 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: phase1-visual-review
-          path: ${{ runner.temp }}/phase1-visual-review
+          # The option matrix lives in the same folder but has its own small artifact below; excluding it here
+          # keeps this bundle at the size it had before N12(b).
+          path: |
+            ${{ runner.temp }}/phase1-visual-review/**
+            !${{ runner.temp }}/phase1-visual-review/option-matrix/**
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 2
+
+      # N12(b): 128 contact-sheet PNGs, not video. A reviewer can fetch this without the 1+ GiB bundle, and
+      # a failed matrix run still leaves whatever it managed to write.
+      - name: Publish the option matrix (N12(b))
+        if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/main')
+        uses: actions/upload-artifact@v7
+        with:
+          name: option-matrix-n12b
+          path: ${{ runner.temp }}/phase1-visual-review/option-matrix
           if-no-files-found: warn
           overwrite: true
           retention-days: 2
