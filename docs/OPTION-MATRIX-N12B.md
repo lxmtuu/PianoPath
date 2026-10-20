@@ -116,7 +116,7 @@ Chạy trên nhánh push thì cả hai chỉ lên artifact, không vào Git.
 
 ## 7. Lượt chạy đầu tiên đã bắt được gì
 
-CI của ma trận (run `39486496425`, commit `d087476`) đỏ ngay ở cảnh thứ ba:
+CI của ma trận (run `39486496425`, commit `d087476`) đỏ ở family thứ năm, ngay giá trị đầu tiên của nó:
 
 ```
 FAIL: impact-morph/Shatter moved 0 pixels on WPF (floor 12): the option is accepted by the settings class
@@ -133,8 +133,8 @@ chỉ được vẽ khi công tắc của lớp sở hữu bật:
 | `_flashes` | `ShowImpactFlash` | Morph (ngôi sao) biến mất khi tắt Impact flash |
 
 Stage GPU thì ngược lại: nó sinh morph **trước** cổng `ShowEmbers`, và vẽ danh sách ring/flash **không** hỏi hai
-công tắc kia. Tức là cùng một file preset cho ra hai hình khác nhau trên hai renderer — và trên WPF, năm trong
-sáu giá trị morph cùng hai kiểu release "được nhận nhưng không vẽ", đúng thứ audit §4.11 không thể chứng minh.
+công tắc kia. Tức là cùng một file preset cho ra hai hình khác nhau trên hai renderer — và trên WPF, **cả năm**
+giá trị morph lẫn **cả năm** kiểu release "được nhận nhưng không vẽ", đúng thứ audit §4.11 không thể chứng minh.
 
 **Bản sửa (sản phẩm, không phải harness):**
 
