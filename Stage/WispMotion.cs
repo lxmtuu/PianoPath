@@ -9,7 +9,7 @@ namespace PianoPath;
 /// dangerous one: it checked the product against its own arithmetic, so it could keep passing while the
 /// renderer drifted.</para>
 ///
-/// <para>The software stage made a fourth, different copy: it added <c>sin(age·(3+t·7))·(8+t·46)</c> to the
+/// <para>The software stage made a fifth, different copy: it added <c>sin(age·(3+t·7))·(8+t·46)</c> to the
 /// particle's <em>velocity</em> every tick, which the integrator then damped. Same settings, same seed, and
 /// the two renderers drew a wisp 10.6 px apart after 0.8 s, with the amplitude 4.9 px against 16.4 px and
 /// the frequency 6.85 rad/s against 5.75 (docs/PARTICLE-MOTION-REVIEW.md §4.3). Nothing compared them, so
