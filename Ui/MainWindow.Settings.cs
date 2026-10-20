@@ -374,9 +374,12 @@ public partial class MainWindow
             ("Ring", "Ring"), ("Shockwave", "Shockwave"), ("Ripple", "Ripple"), ("None", "None")).VisibleWhen = () => _visualSettings.ShowImpactRings;
         SliderRow(impact, "Wave size", nameof(PianoVisualSettings.RingSize), 0, 100, "Final radius of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
         SliderRow(impact, "Wave intensity", nameof(PianoVisualSettings.ImpactWaveIntensity), 0, 150, "Brightness of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
+        // The morph is its own effect, not part of the wave: it draws even with every other impact layer off
+        // (Stage/Effects/EffectChannel.cs), so hiding its row behind "Enable impact wave" only made a chosen
+        // morph look broken. The slider follows the morph, exactly like every other intensity row.
         Choice(impact, "Note morph", nameof(PianoVisualSettings.ImpactMorph), "What the note itself becomes when it lands.",
-            ("None", "None"), ("Shatter", "Shatter"), ("Melt", "Melt"), ("Absorb", "Absorb"), ("Bounce", "Bounce"), ("Morph", "Star morph")).VisibleWhen = () => _visualSettings.ShowImpactRings;
-        SliderRow(impact, "Morph intensity", nameof(PianoVisualSettings.ImpactMorphIntensity), 0, 100, "Strength of the morph.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactMorph != "None";
+            ("None", "None"), ("Shatter", "Shatter"), ("Melt", "Melt"), ("Absorb", "Absorb"), ("Bounce", "Bounce"), ("Morph", "Star morph"));
+        SliderRow(impact, "Morph intensity", nameof(PianoVisualSettings.ImpactMorphIntensity), 0, 100, "Strength of the morph.").VisibleWhen = () => _visualSettings.ImpactMorph != "None";
         Toggle(impact, "Impact flash", nameof(PianoVisualSettings.ShowImpactFlash), "White-hot flare at the hit point, fading over 260–380 ms depending on the style.");
         Choice(impact, "Flash style", nameof(PianoVisualSettings.ImpactFlashStyle), "A white-hot flare, a lightning strike or a plasma ball.",
             ("Flash", "Flash"), ("Lightning", "Lightning"), ("Plasma", "Plasma")).VisibleWhen = () => _visualSettings.ShowImpactFlash;
