@@ -187,11 +187,11 @@ internal static class OptionMatrixReview
         if (pixels.Length != Width * Height * 4)
             throw new InvalidDataException($"{rendererId} returned {pixels.Length} bytes for {family.Id}/{value}; expected {Width}×{Height} BGRA pixels.");
         var relative = Path.Combine("option-matrix", family.Id, $"{label}-{(rendererId == "WPF" ? "wpf" : "gpu-warp")}.png");
-        WritePng(Path.Combine(root, relative), pixels, format, $"{family.Id}/{value} on {rendererId}");
+        var sha = WritePng(Path.Combine(root, relative), pixels, format, $"{family.Id}/{value} on {rendererId}");
         return new Pending
         {
             Family = family.Id, Setting = family.Setting, Value = value, Neutral = neutral, Renderer = rendererId,
-            File = relative.Replace('\\', '/'), PixelSha256 = Convert.ToHexString(SHA256.HashData(pixels)),
+            File = relative.Replace('\\', '/'), PixelSha256 = sha,
             SampleSeconds = seconds, Pixels = pixels, Counters = counters
         };
     }
@@ -332,21 +332,33 @@ internal static class OptionMatrixReview
         }
     }
 
-    private static void WritePng(string path, byte[] pixels, PixelFormat format, string what)
+    /// <summary>
+    /// Writes one PNG and returns the SHA-256 of the pixels <em>as they decode back from the file</em>, so the
+    /// manifest names the picture a reviewer opens rather than the buffer the renderer held. The two are not
+    /// byte-identical by construction: PNG stores straight alpha while the software stage hands out
+    /// premultiplied BGRA, and a codec is free to round the conversion. The checksum is therefore taken after
+    /// the round trip, and <see cref="VerifyWrittenArtifacts"/> re-derives it from the files on disk.
+    /// </summary>
+    private static string WritePng(string path, byte[] pixels, PixelFormat format, string what)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var bitmap = BitmapSource.Create(Width, Height, 96, 96, format, null, pixels, Width * 4);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using (var stream = File.Create(path)) encoder.Save(stream);
+        return Convert.ToHexString(SHA256.HashData(ReadPng(path, format, what)));
+    }
+
+    /// <summary>The pixels a written PNG decodes to, in the renderer's own format; also the one size check.</summary>
+    private static byte[] ReadPng(string path, PixelFormat format, string what)
+    {
         using var read = File.OpenRead(path);
         var decoded = BitmapDecoder.Create(read, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
         if (decoded.PixelWidth != Width || decoded.PixelHeight != Height)
             throw new InvalidDataException($"The option matrix PNG of {what} is {decoded.PixelWidth}×{decoded.PixelHeight}, not {Width}×{Height}.");
-        var roundTrip = new byte[pixels.Length];
-        new FormatConvertedBitmap(decoded, format, null, 0).CopyPixels(roundTrip, Width * 4, 0);
-        if (!pixels.AsSpan().SequenceEqual(roundTrip))
-            throw new InvalidDataException($"The option matrix PNG of {what} failed its pixel round trip.");
+        var pixels = new byte[Width * Height * 4];
+        new FormatConvertedBitmap(decoded, format, null, 0).CopyPixels(pixels, Width * 4, 0);
+        return pixels;
     }
 
     private static void WriteManifest(string root, string adapter, List<Pending> captures,
@@ -422,6 +434,13 @@ internal static class OptionMatrixReview
         {
             var path = Path.Combine(root, capture.File.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(path)) throw new InvalidDataException($"Option matrix capture is missing: {capture.File}");
+            // The manifest's checksum is the file's own: re-derive it, so a truncated or re-encoded PNG cannot
+            // sit under a hash that describes a picture nobody can open.
+            var format = capture.Renderer == "WPF" ? PixelFormats.Pbgra32 : PixelFormats.Bgra32;
+            var sha = Convert.ToHexString(SHA256.HashData(ReadPng(path, format, $"{capture.Family}/{capture.Value}")));
+            if (!string.Equals(sha, capture.PixelSha256, StringComparison.Ordinal))
+                throw new InvalidDataException(
+                    $"The option matrix PNG of {capture.Family}/{capture.Value} on {capture.Renderer} no longer decodes to the pixels its manifest names.");
         }
         var index = Path.Combine(root, "option-matrix", "index.html");
         if (!File.Exists(index)) throw new InvalidDataException("The option matrix index.html is missing.");

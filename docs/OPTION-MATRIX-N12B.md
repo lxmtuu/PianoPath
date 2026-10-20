@@ -62,7 +62,11 @@ Mỗi ảnh được so với baseline của **chính family đó** (cùng cản
    `Falling`, 4 ở `Impact`, 4 ở `Ambient`) phải trùng sha256. Nếu lệch, hoặc renderer không tất định, hoặc
    option này rò rỉ sang cảnh khác — cả hai đều là lỗi thật. GPU đã có tiền lệ `VerifyDeterministicGpuFrame`
    (khung trùng byte-for-byte), và preview WPF cũng đã được CI so không drift.
-4. **Đủ ảnh.** Đúng 128 ảnh, mỗi ảnh có trong manifest, và manifest khớp với đĩa.
+4. **Đủ ảnh và đọc lại được.** Đúng 128 ảnh, mỗi ảnh có trong manifest, và hash trong manifest phải **khớp lại**
+   khi giải mã chính tệp PNG đó — hash được tính từ pixel **đọc lại từ tệp**, không phải từ buffer trong RAM, nên
+   một tệp cụt hay bị ghi lại không thể nằm dưới một hash mô tả ảnh khác. (PNG lưu alpha thẳng còn stage phần mềm
+   trả BGRA đã nhân alpha, nên so byte-by-byte giữa buffer và tệp là sai kỳ vọng; so hash-của-tệp là đúng thứ
+   người xem mở.)
 
 ## 4. Chạy và đọc kết quả
 
@@ -77,7 +81,8 @@ PianoPath.exe --verify --verify-review-out=<thư-mục>
 Kết quả nằm trong `<thư-mục>/option-matrix/`:
 
 - `index.html` — contact sheet, mỗi trục một hàng, baseline đứng đầu; dòng dưới ảnh ghi `+N px vs baseline`.
-- `manifest.json` — `families` (trục, giá trị, cảnh, số khung, mốc chụp), `captures` (sha256, số pixel đổi,
+- `manifest.json` — `families` (trục, giá trị, cảnh, số khung, mốc chụp), `captures` (sha256 **của pixel đọc lại
+  từ tệp**, số pixel đổi,
   counter GPU: sprite/ambient/note-trail/note/key), `comparisons` (từng cặp), `baselines` (hash + số pixel sáng).
 - `<trục>/neutral-{wpf,gpu-warp}.png` và `<trục>/<giá-trị>-{wpf,gpu-warp}.png`.
 
