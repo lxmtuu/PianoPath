@@ -82,6 +82,21 @@ public class WispMotionTests
     }
 
     [Fact]
+    public void The_two_precisions_describe_the_same_curve()
+    {
+        // The sprite paths evaluate the sine in float and the AR projection in double; that is what each
+        // renderer always did, and keeping it is what lets this be a pure refactor of the accepted frames.
+        // If one of the two ever drifts, the renderers part company again.
+        for (var age = 0f; age < 2.5f; age += .07f)
+        for (var phase = 0f; phase < 6.3f; phase += .9f)
+        {
+            var single = WispMotion.Offset(.8f, .65f, age, phase);
+            var precise = WispMotion.OffsetPrecise(.8f, .65f, age, phase);
+            Assert.InRange(Math.Abs(precise - single), 0, 1e-5);
+        }
+    }
+
+    [Fact]
     public void The_curve_is_deterministic_and_repeatable()
     {
         // Same inputs, same pixels: no clock, no RNG, no ambient state.

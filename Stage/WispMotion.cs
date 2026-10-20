@@ -39,9 +39,26 @@ internal static class WispMotion
     /// The lateral offset to draw a wisp at, given its simulated age and phase. Zero at birth, bounded by
     /// <see cref="Amplitude"/>, and identical for the stage, the AR quads and the review diagnostic.
     /// </summary>
+    /// <remarks>
+    /// The sway is multiplied as <c>sin × (amplitude × envelope)</c>, the grouping the two GPU call sites
+    /// already used. Floating-point multiplication is not associative, so regrouping it would move a mote by a
+    /// fraction of a pixel and change the hashes of the accepted WARP evidence — a refactor that alters
+    /// pixels is not a refactor. The AR projection reads the same curve through
+    /// <see cref="OffsetPrecise"/>, because that path always evaluated the sine in double.
+    /// </remarks>
     internal static float Offset(float turbulence, float width, float ageSeconds, float phase)
         => MathF.Sin(Math.Max(0, ageSeconds) * AngularFrequency(turbulence) + phase)
-            * Amplitude(turbulence, width) * Envelope(ageSeconds);
+            * (Amplitude(turbulence, width) * Envelope(ageSeconds));
+
+    /// <summary>
+    /// The same offset at the precision the AR projection works in. <c>GpuArLayer</c> places camera quads from
+    /// doubles (<c>unit</c>, the pose ratio), and it has always taken <c>Math.Sin</c> of the float argument, so
+    /// the field returns a double rather than rounding through float first. Every bit matters here: these
+    /// frames are part of the accepted WARP evidence, and a pure refactor must leave them identical.
+    /// </summary>
+    internal static double OffsetPrecise(float turbulence, float width, float ageSeconds, float phase)
+        => Math.Sin(Math.Max(0, ageSeconds) * AngularFrequency(turbulence) + phase)
+            * (Amplitude(turbulence, width) * Envelope(ageSeconds));
 
     private static float T(float turbulence) => Math.Clamp(turbulence, 0, 1);
     private static float W(float width) => Math.Clamp(width, 0, 1);

@@ -992,7 +992,7 @@ def scan_wisp_motion_contract():
             errors.append(f"{name} is missing, but it is one of the paths that draws a wisp")
             continue
         text = path.read_text(encoding="utf-8")
-        found = text.count("WispMotion.Offset(")
+        found = _code(text).count("WispMotion.Offset")
         if found != expected:
             errors.append(f"{name}: expected {expected} call(s) to WispMotion.Offset, found {found} — every "
                           f"renderer of a wisp must draw the shared curve, not its own copy")
