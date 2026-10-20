@@ -125,6 +125,12 @@ cong, nên một bản sao mới sẽ đỏ ngay trên CI thay vì lệch dần 
 không drag, không gió, size không đổi. Kết quả: lửa "dán" vào phím trong khi tia lửa cạnh nó cong và tắt dần.
 Ngọn lửa thật cần: nổi lên (gia tốc âm), nở ra khi nguội, tắt dần theo nhiệt độ, và bị gió bẻ cong.
 
+**Một nửa đã sửa (2026-10-20):** bản WPF trước đây **không** vẽ hạt nào — nó vẽ một chùm ellipse dán `keyTop`
+(≈43 × 99 px, tâm cách phím 35–41 px, chỉ sway/flicker tại chỗ). Nay `Stage/FlameMotion.cs` giữ đúng luật của
+engine và bản phần mềm bắn hạt theo luật đó: 49 hạt/s/phím ở mặc định (70 × 0,7), bay lên 84–168 px/s, sống
+0,382–0,544 s, size 5,1–9,4 px, nguội trắng → vàng → cam → đỏ thẫm. Vật lý *của engine* (gia tốc nổi, nở ra
+khi nguội) vẫn là W2 vì nó đổi pixel đã ghim trong `flames-v3`.
+
 ### 4.5 Đường cong sống gần như tuyến tính — P1
 
 `alpha = 1 - u` cho hầu hết hình, size hằng số trừ droplet/flame. Hệ quả: hạt **hiện ra đột ngột** ở frame đầu
@@ -227,7 +233,7 @@ GPU/WPF bằng số thay vì bằng mắt.
 |---|---|---|---|
 | **W0 · Hợp đồng** | **Xong 2026-10-20:** gom `WispMotion` (5 bản sao → 1), WPF bỏ dao động khỏi vận tốc, tách `particleDt` khỏi `frameDt` (`StageClock`), guard trong `check_sources` + `--verify`. **Chuyển sang W2:** vật lý flame — nó **đổi pixel**, mà bằng chứng `flames-v3` đang ghim đúng hình flame hiện tại, nên phải làm cùng lúc với một lần re-baseline có chủ đích, không phải như một refactor | Sửa lỗi, không đổi nghệ thuật; tạo nền để so sánh được | Test so sánh vị trí wisp GPU/WPF; slow-motion không đổi tốc độ live bar |
 | **W1 · Hình dáng dòng chảy** | Emitter sustain riêng (thành phần 1), gió cuốn (thành phần 2), curl theo seed (thành phần 3), khuếch tán (thành phần 4) | 80% cảm giác "flow" mà roadmap P3b hứa; không thêm hạt | Ảnh/clip 3 checkpoint (nhấn/giữ/pedal) ở 100% và 50%; độ rộng dòng ≤ 1,5 phím |
-| **W2 · Vật liệu** | Life curve theo họ (thành phần 5), trễ sinh + spin (thành phần 6), nhiệt độ (thành phần 7) | Làm đám hạt có khối lượng và "chín" | Bảng `LifeCurve` cho 5 họ × 3 look; review ảnh tĩnh + clip |
+| **W2 · Vật liệu** | **Nửa đầu xong 2026-10-20:** bản phần mềm vẽ flame bằng đúng luật hạt của engine (`FlameMotion`, guard + 5 fact + `VerifyWpfFlameParity`) thay cho chùm ellipse dán phím. **Còn lại:** vật lý của chính engine (nổi có gia tốc, nở ra khi nguội, nhiệt độ), không tách được khỏi một lần re-baseline `flames-v3` | Làm đám hạt có khối lượng và "chín" | Bảng `LifeCurve` cho 5 họ × 3 look; review ảnh tĩnh + clip |
 | **W3 · Tương tác & tải** | Va chạm (thành phần 8), bảng `exp`/`sin` nếu đo thấy cần; **cân nhắc** `EmissionScale` cho adaptive | Chỉ làm sau khi hình đã chốt | Benchmark `--bench` trên GPU thật (ngoài sandbox này) |
 
 `GpuAdaptiveQualityProfile` hiện chỉ hạ bloom và ambient density; master roadmap §11.6 ghi rõ *"particle bursts …

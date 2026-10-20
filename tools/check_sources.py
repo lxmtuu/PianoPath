@@ -1056,6 +1056,47 @@ def scan_stage_clock_contract():
     return errors
 
 
+def scan_flame_motion_contract():
+    """The held-key flame must stay one effect, not two.
+
+    The engine draws it as a stream of motes and always has; the software stage drew a plume pinned to the key
+    top, so the same preset showed fire on a GPU machine and a stuck decal without one. ``Stage/FlameMotion.cs``
+    now holds the engine's law and the fallback calls it.
+
+    This is a drift detector, not a duplicate of the C# tests: if the engine's literals change, the shared
+    helper has to change with them, and the failure message says which literal moved. It also refuses the old
+    anchored plume's geometry, because that is the exact shape this replaced.
+    """
+    errors = []
+    helper_path = ROOT / "Stage" / "FlameMotion.cs"
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    gpu_path = ROOT / "Gpu" / "GpuStageSimulation.cs"
+    for path in (helper_path, stage_path, gpu_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; it is part of the flame contract"]
+    helper = _code(helper_path.read_text(encoding="utf-8"))
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    gpu = _code(gpu_path.read_text(encoding="utf-8"))
+    for name in ("EmissionRate", "RiseSpeed", "LifeSeconds", "Size", "Sway", "Ramp"):
+        if name not in helper:
+            errors.append(f"Stage/FlameMotion.cs: the flame's {name} is gone, so the fallback and the engine no longer share a law")
+        elif f"FlameMotion.{name}(" not in stage:
+            errors.append(f"Stage/PianoStage.cs: nothing calls FlameMotion.{name}, so the frame being drawn is not the engine's flame")
+    for literal, what in (
+        ("70 * look.FlameIntensity * _heat[pitch]", "birth rate"),
+        ("-(50 + 150 * look.FlameHeight)", "rise speed"),
+        (".22f + look.FlameHeight * .45f", "lifetime"),
+        ("layout.Lane * (.35f + Rand() * .3f)", "mote size"),
+    ):
+        if literal not in gpu:
+            errors.append(f"Gpu/GpuStageSimulation.cs: the flame's {what} changed away from '{literal}'; update "
+                          "Stage/FlameMotion.cs in the same commit or the two renderers drift apart again")
+    if "keyTop - flameH * .42" in stage:
+        errors.append("Stage/PianoStage.cs: the anchored flame plume is back (keyTop - flameH * .42); it is the shape "
+                      "that never moves and it belongs to no renderer any more")
+    return errors
+
+
 def scan_previews_folder():
     folder = ROOT / "docs" / "previews"
     if not folder.exists():
@@ -2100,6 +2141,7 @@ def main():
     errors.extend(scan_gpu_overlay_evidence())
     errors.extend(scan_wisp_motion_contract())
     errors.extend(scan_stage_clock_contract())
+    errors.extend(scan_flame_motion_contract())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
@@ -2123,6 +2165,7 @@ def main():
     print("checked every Markdown table's delimiter row, and the claim about what is still a WPF layer over a GPU frame against the engine that draws it")
     print("checked that the wisp sway lives in one curve and that the stage, the AR quads and the alignment review all draw it")
     print("checked that slow motion scales the particles on both renderers and leaves the held bar, rings and flashes on the real clock")
+    print("checked that the held-key flame keeps the engine's law on the software stage instead of a plume pinned to the key")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")

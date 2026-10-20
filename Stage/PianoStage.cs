@@ -48,9 +48,15 @@ internal sealed partial class PianoStage : FrameworkElement
     private readonly List<Star> _stars = [];
     private readonly List<Petal> _petals = [];
     /// <summary>Seed of the blossom field, and of the particle stream. Fixed so a screenshot run repeats.</summary>
-    private const int PetalSeed = 20240616, ParticleSeed = 7331;
+    private const int PetalSeed = 20240616, ParticleSeed = 7331, FlameSeed = 20261020;
     /// <summary>Own random stream so the blossom field stays identical when particle effects consume their own numbers.</summary>
     private Random _petalRandom = new(PetalSeed);
+    /// <summary>
+    /// Own stream for the held-key flame. The flame is drawn here and the wisps are drawn from <see cref="_random"/>,
+    /// so giving the flame its own numbers keeps every wisp and spark of an existing frame exactly where it was
+    /// when the flame stopped being a static plume.
+    /// </summary>
+    private Random _flameRandom = new(FlameSeed);
     private int _petalCount = -1;
     private double _petalWidth = -1, _petalHeight = -1;
     private readonly List<Spark> _sparks = [];
@@ -62,6 +68,9 @@ internal sealed partial class PianoStage : FrameworkElement
     private readonly Color[] _activeKeyColor = new Color[128];
     private readonly double[] _keyHeat = new double[128];
     private readonly double[] _wispBudget = new double[128];
+    private readonly double[] _flameBudget = new double[128];
+    /// <summary>Live flame motes, drawn as a stream out of the key line (see <see cref="FlameMotion"/>).</summary>
+    private readonly List<FlameMote> _flameMotes = [];
     // ---- Ray-traced keyboard cache ----------------------------------------------------------------
     /// <summary>Empty light state used for the cached "all keys up" bake.</summary>
     private static readonly KeyLightState NoLights = new();
@@ -149,6 +158,19 @@ internal sealed partial class PianoStage : FrameworkElement
             if (_sparks.Count == 0) return -1;
             var top = double.MaxValue;
             foreach (var spark in _sparks) top = Math.Min(top, spark.Y);
+            return ActualHeight - KeyboardHeight - top;
+        }
+    }
+    /// <summary>Live flame motes; the verification suite reads them back to prove the fallback follows the engine's law.</summary>
+    internal int FlameMoteCount => _flameMotes.Count;
+    /// <summary>How far the highest live flame mote has climbed from the key line, in stage DIPs (-1 when there is none).</summary>
+    internal double HighestFlameRise
+    {
+        get
+        {
+            if (_flameMotes.Count == 0) return -1;
+            var top = double.MaxValue;
+            foreach (var mote in _flameMotes) top = Math.Min(top, mote.Y);
             return ActualHeight - KeyboardHeight - top;
         }
     }
@@ -336,8 +358,8 @@ internal sealed partial class PianoStage : FrameworkElement
 
     public void ClearTransient()
     {
-        _liveTrails.Clear(); _sparks.Clear(); _rings.Clear(); _flashes.Clear(); Array.Clear(_keyHeat); Array.Clear(_activeKey); _anyHeat = false;
-        Array.Clear(_wispBudget);
+        _liveTrails.Clear(); _sparks.Clear(); _rings.Clear(); _flashes.Clear(); _flameMotes.Clear(); Array.Clear(_keyHeat); Array.Clear(_activeKey); _anyHeat = false;
+        Array.Clear(_wispBudget); Array.Clear(_flameBudget);
         _beatPulse = _energyLevel = 0;
         _simulation.Reset();
         _gpu?.ClearTransient();
@@ -644,11 +666,12 @@ internal sealed partial class PianoStage : FrameworkElement
     {
         _elapsed = 0;
         _beatPulse = 0; _energyLevel = 0;
-        _sparks.Clear(); _rings.Clear(); _flashes.Clear(); _liveTrails.Clear();
+        _sparks.Clear(); _rings.Clear(); _flashes.Clear(); _liveTrails.Clear(); _flameMotes.Clear();
         _petals.Clear(); _petalCount = -1;
         Array.Clear(_keyHeat);
-        Array.Clear(_wispBudget);
+        Array.Clear(_wispBudget); Array.Clear(_flameBudget);
         _petalRandom = new Random(seed is int value ? unchecked(value * 397 ^ PetalSeed) : PetalSeed);
+        _flameRandom = new Random(seed is int value ? unchecked(value * 331 ^ FlameSeed) : FlameSeed);
         _random = new Random(seed ?? ParticleSeed);
         InvalidateVisual();
     }
@@ -681,6 +704,11 @@ internal sealed partial class PianoStage : FrameworkElement
             // slow take stays as dense in wall-clock seconds and the motes merely move slower.
             if (_activeKey[pitch] && _visual.ShowWisps && _visual.WispAmount > 0 && ActualWidth >= 1) SpawnWisps(pitch, frameSeconds, hitY, lane);
             else _wispBudget[pitch] = 0;
+            // Flames outlive the key: they are born from cooling heat, exactly as the engine's are. The birth
+            // rate follows the frame clock (a slow take keeps the same density per second) and the motes
+            // themselves move on the particle clock, like every other particle here.
+            if (_visual.ShowFlame && _visual.FlameIntensity > 0 && heat > .01 && ActualWidth >= 1) SpawnFlames(pitch, frameSeconds, heat, hitY, lane);
+            else _flameBudget[pitch] = 0;
         }
         for (var i = _sparks.Count - 1; i >= 0; i--)
         {
@@ -709,6 +737,14 @@ internal sealed partial class PianoStage : FrameworkElement
             var curl = Math.Sin(p.Y * 0.04 + p.Phase + _elapsed * 3.2) * 14.0 * (1.0 - p.Age / p.Life);
             p.Vx += curl * particleDt;
             var damping = Math.Exp(-_visual.Drag / 100 * p.DragK * particleDt); p.Vx *= damping; p.Vy *= damping;
+        }
+        for (var i = _flameMotes.Count - 1; i >= 0; i--)
+        {
+            var mote = _flameMotes[i];
+            mote.Age += particleDt;
+            if (mote.Age >= mote.Life) { _flameMotes.RemoveAt(i); continue; }
+            mote.X += mote.Vx * particleDt; mote.Y += mote.Vy * particleDt;
+            mote.Vx += FlameMotion.Sway(mote.Age, mote.Phase) * particleDt;
         }
         for (var i = _rings.Count - 1; i >= 0; i--)
         {
@@ -764,6 +800,33 @@ internal sealed partial class PianoStage : FrameworkElement
                 Life = life * (.6 + _random.NextDouble() * .8), Age = 0, Phase = _random.NextDouble() * Math.PI * 2,
                 Size = .7 + _random.NextDouble() * 1.5,
                 Color = _random.NextDouble() < .18 ? Blend(color, Colors.White, .6) : color
+            });
+        }
+    }
+
+    /// <summary>
+    /// Births flame motes on the engine's schedule: <see cref="FlameMotion.EmissionRate"/> per second of heat,
+    /// credited on the frame clock so a slow take stays as dense per wall-clock second as a full-speed one.
+    /// </summary>
+    private void SpawnFlames(int pitch, double frameSeconds, double heat, double hitY, double lane)
+    {
+        _flameBudget[pitch] += FlameMotion.EmissionRate(_visual.FlameIntensity, heat) * frameSeconds;
+        var count = (int)_flameBudget[pitch]; if (count <= 0) return;
+        _flameBudget[pitch] -= count;
+        var tint = _visual.FlameColorMode == "Note"
+            ? AdjustColor(_activeKey[pitch] ? _activeKeyColor[pitch] : NoteColor(pitch, 0))
+            : Color.FromRgb(255, 140, 38);
+        var x = KeyCenter(pitch) * ActualWidth;
+        for (var i = 0; i < count && _flameMotes.Count < FlameMotion.MaxMotes; i++)
+        {
+            _flameMotes.Add(new FlameMote
+            {
+                X = x + (_flameRandom.NextDouble() - .5) * lane * .7, Y = hitY - 1,
+                Vx = (_flameRandom.NextDouble() - .5) * 14,
+                Vy = FlameMotion.RiseSpeed(_visual.FlameHeight, _flameRandom.NextDouble()),
+                Life = FlameMotion.LifeSeconds(_visual.FlameHeight, _flameRandom.NextDouble()),
+                Size = FlameMotion.Size(lane, _flameRandom.NextDouble()),
+                Phase = _flameRandom.NextDouble() * Math.PI * 2, Tint = tint,
             });
         }
     }
@@ -3357,58 +3420,46 @@ internal sealed partial class PianoStage : FrameworkElement
         return CacheGradient(key, gradient);
     }
 
+    /// <summary>
+    /// Draws the held-key flame as the engine does: a stream of small motes climbing out of the key line,
+    /// cooling from a white core to deep red and fading out. The old shape was one ellipse plume pinned to
+    /// the key top, which is why a machine without a GPU showed a flame that never moved
+    /// (PARTICLE-MOTION-REVIEW §4.4).
+    /// </summary>
     private void DrawFlames(DrawingContext dc, double width, double keyTop, double lane)
     {
         var intensity = _visual.FlameIntensity / 100;
-        var heightScale = .4 + _visual.FlameHeight / 100 * 1.4;
-        var warm = _visual.FlameColorMode != "Note";
+        var noteMode = _visual.FlameColorMode == "Note";
+        // The combustion contact: the key still reads as burning at the line, which the old plume gave the
+        // eye and which the engine gets from its lit keys.
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             var heat = _keyHeat[pitch];
             if (heat <= .015) continue;
             var x = KeyCenter(pitch) * width;
-            var sway1 = Math.Sin(_elapsed * 13 + pitch * 2.7) * (2.0 + 5.0 * heat);
-            var sway2 = Math.Sin(_elapsed * 19 + pitch * 3.9) * (4.0 + 8.0 * heat) + Math.Cos(_elapsed * 25 + pitch) * 2.5;
-            var flicker = .84 + .16 * Math.Sin(_elapsed * 22 + pitch * 3.3);
-            var flameH = (22 + 62 * heat * heightScale) * flicker;
-            var flameW = (lane * 0.45 + 14 * heat) * (.7 + intensity * .5);
-
-            var tint = warm ? Color.FromRgb(255, 185, 75) : AdjustColor(_activeKey[pitch] ? _activeKeyColor[pitch] : NoteColor(pitch, 0));
-            var deep = warm ? Color.FromRgb(255, 60, 20) : Blend(tint, Color.FromRgb(140, 10, 50), .45);
-
-            // Layer 1: Ambient thermal bloom around combustion zone
-            var thermalBloom = new RadialGradientBrush
+            dc.DrawEllipse(Brush(Color.FromArgb(Alpha(95 * intensity * heat), 255, 196, 120)), null,
+                new Point(x, keyTop - 1), lane * .62, 2.4 + heat * 1.8);
+        }
+        foreach (var mote in _flameMotes)
+        {
+            var u = mote.Age / mote.Life;
+            var fade = 1 - u;
+            if (fade <= .02) continue;
+            // Both the cooling colour and the fade are quantised: the brush cache then holds a handful of
+            // brushes instead of one new one per mote per frame.
+            var step = Math.Min(9, (int)(u * 10));
+            var (r, g, b) = FlameMotion.Ramp((step + .5) / 10);
+            if (noteMode)
             {
-                Center = new Point(.5, .9), GradientOrigin = new Point(.5, .9), RadiusX = .85, RadiusY = .95,
-                MappingMode = BrushMappingMode.RelativeToBoundingBox
-            };
-            thermalBloom.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(45 * intensity * heat), tint.R, tint.G, tint.B), 0));
-            thermalBloom.GradientStops.Add(new GradientStop(Color.FromArgb(0, tint.R, tint.G, tint.B), 1));
-            thermalBloom.Freeze();
-            dc.DrawEllipse(thermalBloom, null, new Point(x, keyTop - flameH * .35), flameW * 1.6, flameH * .8);
-
-            // Layer 2: Main organic aerodynamic combustion plume
-            var plume = new RadialGradientBrush
-            {
-                Center = new Point(.5, .92), GradientOrigin = new Point(.5, .92), RadiusX = .85, RadiusY = 1.15,
-                MappingMode = BrushMappingMode.RelativeToBoundingBox
-            };
-            plume.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(220 * intensity * heat), 255, 255, 235), 0));
-            plume.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(160 * intensity * heat), tint.R, tint.G, tint.B), .28));
-            plume.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(60 * intensity * heat), deep.R, deep.G, deep.B), .75));
-            plume.GradientStops.Add(new GradientStop(Color.FromArgb(0, deep.R, deep.G, deep.B), 1));
-            plume.Freeze();
-
-            dc.DrawEllipse(plume, null, new Point(x + sway1 * .4, keyTop - flameH * .42), flameW, flameH * .55);
-
-            // Layer 3: High-energy dancing flame tongues
-            var tongueH1 = (9 + 20 * heat) * (.8 + .2 * Math.Sin(_elapsed * 26 + pitch * 2.1)) * heightScale;
-            var tongueH2 = (7 + 16 * heat) * (.8 + .2 * Math.Sin(_elapsed * 30 + pitch * 3.7)) * heightScale;
-            dc.DrawEllipse(Brush(Color.FromArgb(Alpha(180 * intensity * heat), 255, 252, 235)), null, new Point(x - flameW * .15 + sway2 * .4, keyTop - tongueH1 * .5), 2.2 + heat * 2.0, tongueH1 * .5);
-            dc.DrawEllipse(Brush(Color.FromArgb(Alpha(150 * intensity * heat), 255, 245, 210)), null, new Point(x + flameW * .18 + sway2 * .6, keyTop - tongueH2 * .5), 1.8 + heat * 1.6, tongueH2 * .5);
-
-            // Layer 4: Base plasma contact flash
-            dc.DrawEllipse(Brush(Color.FromArgb(Alpha(230 * intensity * heat), 255, 255, 250)), null, new Point(x, keyTop - 1), flameW * .55, 2.5 + heat * 1.5);
+                var tint = mote.Tint;
+                r += (tint.R / 255.0 - r) * .6; g += (tint.G / 255.0 - g) * .6; b += (tint.B / 255.0 - b) * .6;
+            }
+            var core = Color.FromRgb((byte)(r * 255), (byte)(g * 255), (byte)(b * 255));
+            var size = mote.Size * (.6 + Math.Sin(Math.Min(1, u * 1.4) * Math.PI) * .7);
+            dc.PushOpacity(Math.Min(8, (int)(fade * 8) + 1) / 8.0);
+            dc.DrawEllipse(Brush(Color.FromArgb(125, core.R, core.G, core.B)), null, new Point(mote.X, mote.Y), size, size);
+            dc.DrawEllipse(Brush(core), null, new Point(mote.X, mote.Y), size * .45, size * .45);
+            dc.Pop();
         }
     }
 
@@ -3616,6 +3667,8 @@ internal sealed partial class PianoStage : FrameworkElement
     /// <summary>A cached overlay tile of one sounding key plus where it belongs on the stage.</summary>
     private sealed record ShadedKeyTile(BitmapSource Bitmap, Rect Where);
     private sealed class Spark { public double X, Y, Vx, Vy, Life, Age, Size, Phase, Mass; public bool Wisp; public Color Color; public int Kind; public double Grav = 1, DragK = 1; }
+    /// <summary>One flame mote. Its own type because nothing else in the stage shares its cooling ramp.</summary>
+    private sealed class FlameMote { public double X, Y, Vx, Vy, Life, Age, Size, Phase; public Color Tint; }
     private sealed class Ring { public double X, Y, Age, Life, Strength = 1; public bool Shock, Implode, Ripple; public Color Color; }
     private sealed class Flash { public double X, Y, Age, Life, Strength = 1; public int Style; public Color Color; }
     private sealed class LiveTrail { public int Pitch; public double Age, HeldSeconds; public bool KeyDown = true, Released, Hit; public double Strength = 1; }

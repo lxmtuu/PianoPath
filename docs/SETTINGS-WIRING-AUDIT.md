@@ -82,7 +82,7 @@ Phương pháp:
 | Vector field / Field scale / Evolution | `VectorField`, `FieldScale`, `EvolutionSpeed` | `PianoStage.cs:250, :256` |
 | Physics time factor | `PhysicsTimeFactor` | `PianoStage.cs:665` (`StageClock.Particle` — chỉ tuổi/vận tốc/gió/drag của hạt); đồng hồ sân khấu, nốt, live bar, ring, flash, nhiệt phím, nền và halo vẫn chạy theo thời gian thật, đúng như `GpuStageSimulation.Step` với `frameDt`/`particleDt` |
 | Wisp density / rise / height / width / turbulence / glow | `WispAmount…WispGlow` | `PianoStage.cs:239` (spawn gate), `:283-291` (SpawnWisps), `:247` (turbulence), `:663` (glow) |
-| Flame intensity / height / color | `FlameIntensity`, `FlameHeight`, `FlameColorMode` | `PianoStage.cs:1004-1005` |
+| Flame intensity / height / color | `FlameIntensity`, `FlameHeight`, `FlameColorMode` | `PianoStage.cs:811-833` (`SpawnFlames` — birth rate, rise, life, size qua `FlameMotion`), `:3428-3470` (`DrawFlames` — ramp nhiệt độ + contact glow) |
 | Impact wave (Ring/Shockwave/None) · size · intensity | `ShowImpactRings`, `ImpactWave`, `RingSize`, `ImpactWaveIntensity` | `PianoStage.cs` SpawnImpactWave → DrawRings/DrawShockwave (size and brightness follow hit strength) |
 | Impact flash · intensity | `ShowImpactFlash`, `ImpactFlashIntensity` | `PianoStage.cs` SpawnImpactFlash → DrawImpactFlashes (flare 380 ms / Lightning, Plasma 260 ms, strength-scaled) |
 
