@@ -26,9 +26,11 @@
    9,23× vì mỗi hạt WPF là một `Drawing`; vòng sóng **64 vs 96** và flash **32 vs 48** cũng giữ nguyên vì đó là
    ngân sách khung hình. Nhưng **thời gian sống đã thống nhất**: flare **0,38 s**, Lightning/Plasma **0,26 s** ở
    cả hai engine (trước đây WPF 0,18/0,30). Khi chạm trần, cả hai cùng **bỏ cái cũ nhất**.
-5. **Độ phủ hiệu ứng đã rộng nhưng bằng chứng còn mỏng**: 87 mục, 86 `Available`, 1 `Planned`; AR có 24 family
-   (6 `Native`, 17 `Unverified`, 1 `Unsupported`); kiểm thử theo family, chưa theo từng option; cổng phần cứng
-   vẫn chưa đạt.
+5. **Độ phủ hiệu ứng: từng option của 11 trục setting đã có ảnh riêng (N12(b), 2026-10-21)**: 87 mục,
+   86 `Available`, 1 `Planned`; AR có 24 family (6 `Native`, 17 `Unverified`, 1 `Unsupported`). Ma trận option chạy
+   trên **WPF và D3D/WARP**: 62 giá trị (9 trong đó là trạng thái tắt) + 11 baseline = **64 cảnh, 128 ảnh 1280×720**, cùng cảnh/cùng seed; mỗi giá
+   trị phải đổi pixel so với baseline và không trùng ảnh với giá trị khác. Còn thiếu: ma trận theo **AR/pose**, duyệt
+   mỹ thuật và cổng phần cứng.
 6. **Những thứ đang tốt, không nên phá**: bảng màu nốt dùng chung (`GpuLook.NoteColor` lấy từ stage), vật liệu
    nốt dùng chung `ShadeNoteMaterial` cho stage và AR, công thức hình học WPF/GPU trùng nhau, brush/pen đã được
    cache, seed tất định. Vấn đề nằm ở **hợp đồng giữa các đường vẽ**, không phải ở chất lượng một đường.
@@ -418,13 +420,25 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
 - **Hiện tượng:** 87 mục, 86 `Available`, 1 `Planned`; AR 24 family (6 `Native`, 17 `Unverified`, 1
   `Unsupported`: `atmosphere.stars`). Các assertion từng ghi "chưa chạy" nay **đã chạy và PASS** trong CI
   [39294579913](https://github.com/lxmtuu/PianoPath/actions/runs/39294579913); phần còn thiếu là **coverage** theo family/giá trị đại diện.
-- **Nguồn:** `docs/EFFECT-COVERAGE-AUDIT.md` §2, §6 (gồm mục "Đính chính 2026-10-20"); `EffectContracts.cs`.
-- **Việc cần làm:** (a) **xong** — CI Windows 2026-10-20 xanh, mọi assertion từng chờ đã chạy; (b) sinh ma trận capture cho từng option
-  (ít nhất default + một cực trị) và lưu ảnh/checksum; (c) **xong** (2026-10-20) — family duy nhất thật sự không có ở AR là trường sao nền,
-  và card **3D NOTE PATH** giờ in dòng "The AR overlay leaves out …" (`ArOmittedEffects`, test xUnit + assertion `--verify`);
-  trail/pulse/shimmer được đính chính từ `Unsupported` sang `Unverified` vì chúng vẽ trên quad nốt AR. Phần còn lại của (c) là
-  mở rộng ma trận theo style/giá trị, không phải thêm UI.
-- **Nghiệm thu:** mỗi ID có ảnh/kiểm tra; CI xanh; không còn dòng "chờ chạy".
+- **Nguồn:** `docs/EFFECT-COVERAGE-AUDIT.md` §2, §6 (gồm mục "Đính chính 2026-10-20"); `EffectContracts.cs`; cách chạy và cách đọc ma trận: `docs/OPTION-MATRIX-N12B.md`.
+- **Việc cần làm:** (a) **xong** — CI Windows 2026-10-20 xanh, mọi assertion từng chờ đã chạy; (b) **xong (2026-10-21)** — ma trận
+  option theo từng giá trị, hai renderer, ảnh + checksum + manifest; (c) **xong** (2026-10-20) — family duy nhất thật sự không có ở AR
+  là trường sao nền, và card **3D NOTE PATH** giờ in dòng "The AR overlay leaves out …" (`ArOmittedEffects`, test xUnit + assertion
+  `--verify`); trail/pulse/shimmer được đính chính từ `Unsupported` sang `Unverified` vì chúng vẽ trên quad nốt AR. Phần còn lại của (c)
+  là ma trận theo **pose/camera AR**, không phải thêm UI.
+- **Số đo (b):** 11 trục = `NoteStyle` 6, `FallingTrail` 8, `ImpactWave` 4, `ImpactBurst` 5, `ImpactMorph` 6,
+  `ImpactFlashStyle` 3, `ReleaseEffect` 6, `AmbientEnergy` 5, `AmbientNature` 8, `AmbientLight` 5, `AmbientCosmic` 6
+  → **62 giá trị** (9 giá trị chính là trạng thái tắt, baseline không chụp lại) + **11 baseline** ⇒ **64 cảnh × 2 renderer =
+  128 ảnh** 1280×720. Cảnh cố định: nốt 60 giữ 2,0 s (falling,
+  mẫu 1,5 s); một cú `Impact(60, 96/127)` (mẫu 0,117 s sau cú đánh); press ở khung 0 / release khung 8 (mẫu 0,267 s);
+  ambient không input (mẫu 1,5 s). Hai family không có giá trị "off" (`ImpactBurst`, `ImpactFlashStyle`) lấy baseline bằng
+  **công tắc hiển thị** (`ShowEmbers`, `ShowImpactFlash`).
+- **Lượt chạy đỏ khi:** (1) một giá trị đổi <12 px so với baseline ⇒ option không vẽ; (2) hai giá trị trong cùng trục cho ra
+  **cùng một ảnh** ⇒ hai tên một hình; (3) baseline của các family chung một cảnh **khác nhau từng bit** ⇒ renderer không tất
+  định hoặc option rò rỉ sang cảnh khác; (4) thiếu ảnh/hash trong manifest.
+- **Nghiệm thu:** mỗi giá trị của 11 trục có ảnh WPF + WARP, checksum và số pixel đổi; `tools/check_sources.py` ghim danh sách
+  giá trị của plan **bằng đúng** mảng trong `PianoVisualSettings` (thêm style mà quên capture ⇒ làn tĩnh đỏ); test xUnit ghim
+  62/64/128; route riêng `--verify-option-matrix-only`, và `--verify` đầy đủ cũng chạy nó.
 - **Cỡ:** L · **Phụ thuộc:** N9.
 
 ### P2 — nhất quán và tài liệu
@@ -483,7 +497,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N9 | Benchmark khung hình nốt/hiệu ứng | **đã có kịch bản**: `--bench-detail` (GPU, 18 ô) + `VerifyWpfNoteDensity` (WPF, cùng 18 ô, tự chạy); còn số p95 trên máy GPU | M | tài liệu này |
 | N10 | Occlusion bàn tay AR | không vẽ xuyên tay | L | AR roadmap |
 | N11 | Reduced Motion/giảm flash toàn cục | **đã xong**: hệ thống có sẵn từ Phase 2; P1 chốt tần số pulse 1,67 Hz + test toàn bộ preset | S | master roadmap |
-| N12 | Ma trận capture từng option | 87 ID có ảnh; CI xanh | L | audit |
+| N12 | Ma trận capture từng option | **đã xong (b) 2026-10-21**: 11 trục × mọi giá trị = 64 cảnh, 128 ảnh WPF/WARP; mỗi giá trị đổi pixel, mọi cặp giá trị khác ảnh, baseline chung cảnh trùng từng bit; còn AR/pose | L | audit |
 | N13 | Lookahead stage ↔ AR | **đã chốt (b)**: AR có slider riêng 1–6 s; công thức stage ở §3.6 | S | tài liệu này |
 | N14 | Nhãn nốt AR phẳng | **đã chốt**: phẳng bỏ nhãn có chủ ý + tooltip; còn ảnh 3 nền | S | tài liệu này |
 | N15 | Nợ tài liệu/trạng thái | **đã xong**: tool + 3 checker trong làn tĩnh; audit đối chiếu CI 2026-10-20, hết câu "chờ chạy" | S | tài liệu này |

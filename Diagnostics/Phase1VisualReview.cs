@@ -150,7 +150,11 @@ internal static class Phase1VisualReview
         }
     }
 
-    private static void FlushWpfRenderPass()
+    /// <summary>
+    /// Pumps a render pass so an off-screen capture sees the drawing the stage retained. Internal because the
+    /// option matrix (<see cref="OptionMatrixReview"/>) captures the same stage the same way.
+    /// </summary>
+    internal static void FlushWpfRenderPass()
     {
         // RenderTargetBitmap.Render snapshots the last retained drawing; it does not run a same-tick
         // InvalidateVisual through OnRender. Pump WPF's render priority before every off-screen capture.

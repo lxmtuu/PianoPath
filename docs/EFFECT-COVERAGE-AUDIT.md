@@ -66,6 +66,12 @@
 
 ## 4. Ma trận inventory 87 mục
 
+> **Cập nhật 2026-10-21 — N12(b):** cột "Độ phủ / lưu ý" bên dưới ghi trạng thái **lúc audit Phase 0**. Từ đợt
+> N12(b), từng giá trị của **11 trục option** đã có ảnh riêng trên WPF **và** D3D/WARP ở cùng cảnh, cùng seed và
+> cùng thời điểm (`--verify-option-matrix-only`, 128 ảnh, `phase1-visual-review/option-matrix/`). Các dòng còn ghi
+> "chưa test riêng option X" vẫn đúng ở mức **AR/pose** và mức **mỹ thuật**, nhưng không còn đúng ở mức "renderer có
+> rẽ nhánh theo option hay không" — xem §4.11 và `docs/NOTE-EFFECTS-ACTION-PLAN.md` N12.
+
 ### 4.1 Falling — 10 mục
 
 | ID | Mapping runtime hiện tại | Độ phủ / lưu ý |
@@ -203,6 +209,44 @@
 | `theme.ocean` | `Ocean Depths`. | `VerifyThemes` kiểm splash/ripple/rain. |
 | `theme.retro` | `Retro Arcade`. | `VerifyThemes` kiểm confetti/bounce/snap/square note. |
 
+### 4.11 Ma trận option N12(b) — 11 trục, 128 ảnh
+
+Trước đợt này, mỗi family chỉ được kiểm bằng **một** style chọn tay (Confetti cho burst, Shatter cho morph,
+Sparkles cho trail…), nên câu "chưa test riêng option X" trong §4.1–4.8 là đúng: chưa có ảnh nào chứng minh
+chọn giá trị khác thì **có** pixel khác. Ma trận này bịt đúng khoảng đó, và **chỉ** khoảng đó.
+
+| Trục setting | Giá trị | Cảnh / mẫu | Kết luận sau N12(b) |
+|---|---|---|---|
+| `NoteStyle` | 6 | nốt 60 giữ 2,0 s · mẫu 1,5 s | 6/6 có ảnh riêng; 5 giá trị khác baseline `Solid` và khác nhau từng cặp |
+| `FallingTrail` | 8 | nốt 60 giữ 2,0 s · mẫu 1,5 s | 7/7 style có ảnh; baseline `None` không vẽ trail |
+| `ImpactWave` | 4 | `Impact(60, 0,756)` · mẫu +0,117 s | Ring / Shockwave / Ripple khác baseline `None` và khác nhau |
+| `ImpactBurst` | 5 | `Impact(60, 0,756)` · mẫu +0,117 s | 5/5 style; baseline = `ShowEmbers=false` |
+| `ImpactMorph` | 6 | `Impact(60, 0,756)` · mẫu +0,117 s | Shatter / Melt / Absorb / Bounce / Morph khác `None` và khác nhau |
+| `ImpactFlashStyle` | 3 | `Impact(60, 0,756)` · mẫu +0,117 s | Flash / Lightning / Plasma; baseline = `ShowImpactFlash=false` |
+| `ReleaseEffect` | 6 | press khung 0, release khung 8 · mẫu 0,267 s | 5/5 hiệu ứng khác baseline `Fade` và khác nhau |
+| `AmbientEnergy` | 5 | không input · mẫu 1,5 s | 4/4 có ảnh; baseline `None` |
+| `AmbientNature` | 8 | không input · mẫu 1,5 s | 7/7 có ảnh; baseline `None` |
+| `AmbientLight` | 5 | không input · mẫu 1,5 s | 4/4 có ảnh, gồm `Spotlights` (control ngoài 87 ID); baseline `None` |
+| `AmbientCosmic` | 6 | không input · mẫu 1,5 s | 5/5 có ảnh; baseline `None` |
+
+Cách chạy, cách đọc artifact và phần ghim: `docs/OPTION-MATRIX-N12B.md`.
+
+Tổng: **62 giá trị**, trong đó **9 giá trị chính là trạng thái tắt** (nên baseline của chúng không chụp lại), cộng
+**11 baseline** ⇒ **64 cảnh × 2 renderer = 128 ảnh** 1280×720, kèm `manifest.json` (sha256 từng
+ảnh, số pixel đổi so với baseline, bảng so từng cặp, counter hạt/ambient/trail của GPU) và `index.html`.
+
+Bốn điều kiện làm lượt chạy **đỏ**, tất cả đều là bất biến của renderer chứ không phải ý thích:
+
+1. một giá trị đổi **<12 px** so với baseline của chính nó ⇒ option được settings nhận nhưng không vẽ;
+2. hai giá trị trong cùng trục cho ra **cùng một khung hình** ⇒ hai tên, một hình;
+3. baseline của các family **chung một cảnh** khác nhau **dù chỉ một bit** ⇒ renderer không tất định, hoặc option
+   này rò rỉ sang cảnh của option khác (mọi family đều tắt trong baseline, nên chúng phải ra cùng ảnh);
+4. thiếu ảnh, thiếu hash, hoặc số ảnh khác 128.
+
+**Không** chứng nhận: mỹ thuật/duyệt hình, AR (chưa có pose/camera), đường MIDI/CC64 thật, các quality tier khác,
+FPS phần cứng, hay thay đổi mặc định. `tools/check_sources.py` (`scan_option_matrix`) ghim danh sách giá trị của
+plan **bằng đúng** mảng trong `PianoVisualSettings`, nên thêm một style mà quên capture là làn tĩnh đỏ ngay.
+
 ## 5. Khoảng trống ưu tiên
 
 ### P0 — quyết định đã chốt và yêu cầu trước typed runtime registry
@@ -216,7 +260,7 @@
 
 5. Phân biệt event-triggered `Embers/Fire/Explosion/Plasma/Water Ripple` với ambient chạy nền, đồng thời giữ alias cũ khi migrate preset.
 6. `Spotlights` là setting/UI choice bổ sung ngoài 87 ID hiện tại; WPF path và regression đã PASS trên CI. Trong Phase 2 ID normalization, quyết định có thêm ID explicit hay gộp vào Ambient Light capability; đồng thời lập mapping/verification cho `ShowStars`, `ShowPetals`, Shooting Stars, note landing glow, note shimmer, halo pulse và background motion — các control tồn tại nhưng không thuộc inventory 87 hiện tại.
-7. Mở rộng verify từ “một mẫu mỗi nhóm” sang từng Choice value tối thiểu: spawn/draw/decay, màu/size/speed/amount, disabled, seek/reset, preset round-trip.
+7. Mở rộng verify từ “một mẫu mỗi nhóm” sang từng Choice value tối thiểu: spawn/draw/decay, màu/size/speed/amount, disabled, seek/reset, preset round-trip. **Đã làm một nửa (N12(b), 2026-10-21):** 11 trục setting dạng chuỗi có ảnh riêng cho **mọi** giá trị trên WPF và GPU/WARP (128 ảnh, §4.11); phần **giá trị số** (amount/speed/intensity/size), seek/reset và round-trip preset vẫn còn.
 8. Kiểm tra pixel parity GPU/software trên tập scene chung; hiện có thể khẳng định cùng settings có đường code ở cả hai, nhưng chưa có bằng chứng mọi style render giống/đạt chất lượng tương đương.
 9. Tách `AudioReactive` envelope hiện tại khỏi mục tiêu FFT thật; chỉ quảng bá low/mid/high spectrum sau khi đường PCM → analyzer → smoothing → render đã được kiểm thử.
 
@@ -234,6 +278,7 @@
 | `VerifyGpuStage` | Một bundle nhiều setting; WARP render, ambient count, recording tap. | Ma trận từng effect/option và GPU thật. |
 | `VerifyArNoteProjection` | Windows CI [38014563330](https://github.com/lxmtuu/PianoPath/actions/runs/38014563330) PASS on the earlier source revision: calibrated Standard/Ultra, selected impact variants, Dissolve release, transformed pose/direction, and four hold modifiers with representative 0↔100 parameter pixel deltas. The current local branch adds note-colour/material/shimmer, released-bar lifetime, Lite/Standard/Ultra pixel parity for note and live-bar geometry, age-zero first-frame Perform onset/direction, and held-bar default-opacity WARP assertions; all of them pass in Windows CI [39294579913](https://github.com/lxmtuu/PianoPath/actions/runs/39294579913) (2026-10-20). | Only sampled styles/values; not all 14 families/parameter bindings. Those assertions ran on WARP in 39294579913; the remaining gap is per-value/per-binding coverage, and real webcam, OBS, physical GPU and performance are not verified. |
 | `VerifyEffectFamilyGpuRecordingCaptures` / `VerifyEffectFamilyWpfRecordingCaptures` | Windows CI [37762349649](https://github.com/lxmtuu/PianoPath/actions/runs/37762349649) PASS: 24/24 GPU tap families có changed-pixel evidence; 22/22 WPF-native families ghi PNG rồi decode/read back và pass pixel-diff. Hai WPF-only exclusions được assert chính xác. | Chỉ family-level presence trên WARP + WPF software-stage fixture; mọi `parameter.Bindings.Recording` vẫn `Unverified`, mọi `Cost.Recording` vẫn `Unmeasured`; không chứng nhận GPU phần cứng. |
+| `--verify-option-matrix-only` (N12(b)) | Ma trận option: 11 trục setting × mọi giá trị (62) + 11 baseline = 64 cảnh × WPF/GPU‑WARP = **128 ảnh 1280×720**, cùng cảnh/cùng seed; mỗi giá trị đổi ≥12 px so với baseline, mọi cặp trong một trục khác ảnh, baseline của các family chung một cảnh trùng nhau **từng bit**; `manifest.json` (sha256, số pixel đổi, bảng so cặp, counter GPU) và `index.html` trong `phase1-visual-review/option-matrix`. Đường tắt và `--verify` đầy đủ đều chạy nó; `tools/check_sources.py` ghim danh sách giá trị vào `PianoVisualSettings`. | Chưa phủ: AR/pose, các giá trị **số** (amount/speed/size/intensity), smart modulator, theme graph, GPU phần cứng, duyệt mỹ thuật hay thay đổi mặc định. |
 | `tests/PianoPath.Tests` | Portable test project PASS cùng Windows build/`--verify` trong run [38014563330](https://github.com/lxmtuu/PianoPath/actions/runs/38014563330). | Không có project test riêng cho toàn bộ lifecycle effect renderer. |
 
 ### AR capability baseline (source audit)

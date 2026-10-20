@@ -1143,6 +1143,95 @@ def scan_held_emission_parity():
     return errors
 
 
+# The eleven settings strings that are a user-visible choice in both renderers. The value lists live in
+# PianoVisualSettings; the option matrix (Diagnostics/OptionMatrixPlan.cs) copies them so a Windows capture run
+# can walk them without WPF. This table is the only place that knows the two are the same list.
+OPTION_MATRIX_FAMILIES = {
+    "NoteStyle": "NoteStyles",
+    "FallingTrail": "FallingTrails",
+    "ImpactWave": "ImpactWaves",
+    "ImpactBurst": "ImpactBursts",
+    "ImpactMorph": "ImpactMorphs",
+    "ImpactFlashStyle": "ImpactFlashStyles",
+    "ReleaseEffect": "ReleaseEffects",
+    "AmbientEnergy": "AmbientEnergies",
+    "AmbientNature": "AmbientNatures",
+    "AmbientLight": "AmbientLights",
+    "AmbientCosmic": "AmbientCosmics",
+}
+
+
+def scan_option_matrix():
+    """Every option the settings offer is a picture, not only a word in a combo box.
+
+    The audit could say "chưa test riêng option X" for thirty-odd catalog rows because the suite exercised one
+    chosen style per family. ``--verify`` now walks the whole axis twice (WPF and D3D/WARP) at one fixed scene
+    and fails when a value draws nothing or two values paint the same frame. That claim is only worth anything
+    while the captured list is the settings list: this check keeps the plan's literal values equal, in order,
+    to the arrays the settings class validates against, and keeps every family wired from the plan through the
+    capture driver into the suite. Add a style to the product and this check fails until it has a capture.
+    """
+    errors = []
+    paths = {
+        "settings": ROOT / "Stage" / "PianoVisualSettings.cs",
+        "plan": ROOT / "Diagnostics" / "OptionMatrixPlan.cs",
+        "review": ROOT / "Diagnostics" / "OptionMatrixReview.cs",
+        "suite": ROOT / "Diagnostics" / "VerificationSuite.cs",
+    }
+    for name, path in paths.items():
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the option matrix needs it"]
+    settings = _code(paths["settings"].read_text(encoding="utf-8"))
+    plan = _code(paths["plan"].read_text(encoding="utf-8"))
+    review = _code(paths["review"].read_text(encoding="utf-8"))
+    suite = _code(paths["suite"].read_text(encoding="utf-8"))
+
+    offered = {}
+    for setting, array in OPTION_MATRIX_FAMILIES.items():
+        found = re.search(rf"string\[\] {array} = \[(.*?)\];", settings)
+        if not found:
+            errors.append(f"Stage/PianoVisualSettings.cs no longer declares {array}; the option matrix cannot know "
+                          f"which values {setting} accepts")
+            continue
+        offered[setting] = re.findall(r'\"([^\"]*)\"', found.group(1))
+
+    declared = re.findall(
+        r'new Family\("([^\"]+)",\s*"([^\"]+)",\s*Scene\.(\w+),\s*\[(.*?)\],\s*"([^\"]+)"(?:,\s*"([^\"]+)")?\)',
+        plan, re.S)
+    names = [setting for _, setting, _, _, _, _ in declared]
+    if len(declared) != len(OPTION_MATRIX_FAMILIES) or len(set(names)) != len(names):
+        errors.append("Diagnostics/OptionMatrixPlan.cs must declare exactly one family per settings axis "
+                      f"({', '.join(OPTION_MATRIX_FAMILIES)}); it declares {names or 'none'}")
+    for family_id, setting, scene, values, neutral, gate in declared:
+        if setting not in OPTION_MATRIX_FAMILIES:
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs family {family_id!r} names {setting!r}, which is not one "
+                          "of the eleven option axes the matrix verifies")
+            continue
+        planned = re.findall(r'\"([^\"]*)\"', values)
+        if setting in offered and planned != offered[setting]:
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs captures {setting} as {planned}, but "
+                          f"PianoVisualSettings.{OPTION_MATRIX_FAMILIES[setting]} offers {offered[setting]}; a new or "
+                          "renamed option needs a capture in the same commit")
+        if neutral not in planned:
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs family {family_id!r} keeps the neutral value {neutral!r}, "
+                          "which is not one of its own values")
+        if gate and setting not in ("ImpactBurst", "ImpactFlashStyle"):
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs gives {setting} a visibility gate; only the families with "
+                          "no off value (burst, flash) need one")
+
+    for setting in OPTION_MATRIX_FAMILIES:
+        if f'case "{setting}":' not in review:
+            errors.append(f"Diagnostics/OptionMatrixReview.cs never applies {setting} to the settings it renders; the "
+                          "family would be captured as its baseline")
+    if "OptionMatrixPlan.Families" not in review or "OptionMatrixPlan.CapturedValues(" not in review:
+        errors.append("Diagnostics/OptionMatrixReview.cs no longer walks the plan; it would capture a hardcoded list")
+    if "OptionMatrixReview.Render(" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs does not call OptionMatrixReview.Render, so the matrix never runs")
+    if '"--verify-option-matrix-only"' not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs lost the --verify-option-matrix-only route")
+    return errors
+
+
 def scan_previews_folder():
     folder = ROOT / "docs" / "previews"
     if not folder.exists():
@@ -2189,6 +2278,7 @@ def main():
     errors.extend(scan_stage_clock_contract())
     errors.extend(scan_flame_motion_contract())
     errors.extend(scan_held_emission_parity())
+    errors.extend(scan_option_matrix())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
@@ -2214,6 +2304,7 @@ def main():
     print("checked that slow motion scales the particles on both renderers and leaves the held bar, rings and flashes on the real clock")
     print("checked that the held-key flame keeps the engine's law on the software stage instead of a plume pinned to the key")
     print("checked that a held key lets off the engine's amount of embers and wisps on both renderers, ceilings aside")
+    print("checked that every option the settings offer is captured by the N12(b) matrix on both renderers, off state included")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")

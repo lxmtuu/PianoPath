@@ -43,6 +43,7 @@
     <Compile Include="..\..\Stage\StageClock.cs" Link="Product\Stage\StageClock.cs" />
     <Compile Include="..\..\Stage\FlameMotion.cs" Link="Product\Stage\FlameMotion.cs" />
     <Compile Include="..\..\Stage\HeldEmission.cs" Link="Product\Stage\HeldEmission.cs" />
+    <Compile Include="..\..\Diagnostics\OptionMatrixPlan.cs" Link="Product\Diagnostics\OptionMatrixPlan.cs" />
     <Compile Include="..\..\Camera\ArDriftMeter.cs" Link="Product\Camera\ArDriftMeter.cs" />
     <Compile Include="..\..\Gpu\ReleaseParticleAppearance.cs" Link="Product\Gpu\ReleaseParticleAppearance.cs" />
     <Compile Include="..\..\Gpu\BounceParticleAppearance.cs" Link="Product\Gpu\BounceParticleAppearance.cs" />
