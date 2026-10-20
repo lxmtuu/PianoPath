@@ -10,12 +10,14 @@ namespace PianoPath;
 internal static partial class VerificationSuite
 {
     /// <summary>
-    /// Pins AR support to its evidence grade: six screen-space ambient families are Native, 14 S5 families
-    /// remain Unverified despite sampled calibrated-3D WARP checks (the full choice/value matrix is incomplete),
-    /// four unprojected families stay Unsupported, and note-material capability/parameter bindings remain
-    /// Unverified although the shared shader renders on camera-facing quads. The WARP checks sample styles,
-    /// not a full parameter matrix. VerifyArOverlayCapturedFrames checks ambient/suppression; VerifyArNoteProjection
-    /// exercises selected S5 and note-material paths.
+    /// Pins AR support to its evidence grade: six screen-space ambient families are Native, 17 families that do
+    /// reach the camera remain Unverified despite sampled calibrated-3D WARP checks (the full choice/value matrix
+    /// is incomplete) — that now includes the three falling families, which ride on AR's own note quads rather
+    /// than on the stage roll — and the backdrop star field is the single Unsupported family, because its stars
+    /// live in the background pass that a camera backdrop skips. Note-material capability/parameter bindings
+    /// remain Unverified although the shared shader renders on camera-facing quads. The WARP checks sample
+    /// styles, not a full parameter matrix. VerifyArOverlayCapturedFrames checks ambient/suppression;
+    /// VerifyArNoteProjection exercises selected S5 and note-material paths.
     /// </summary>
     private static void VerifyArOverlayExclusions()
     {
@@ -29,13 +31,14 @@ internal static partial class VerificationSuite
             "impact.wave", "impact.flash", "impact.burst", "impact.morph",
             "hold.bar", "hold.breath", "hold.vibration", "hold.color-cycle", "hold.arc",
             "atmosphere.beams", "particles.sparks", "particles.wisps", "particles.flames", "release.fx",
+            "falling.trail", "falling.pulse", "falling.shimmer",
         };
         var families = EffectContractCatalog.AllFamilies;
         Assert(families.Count == 24, "AR classification should cover all 24 typed effect families.");
         Assert(families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native) == 6
-                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified) == 14
-                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported) == 4,
-            "AR evidence must distinguish six verified screen-space families, 14 unverified S5 projections and four unsupported unprojected families.");
+                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified) == 17
+                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported) == 1,
+            "AR evidence must distinguish six verified screen-space families, 17 unverified projected families and the one family AR never draws (the backdrop star field).");
         Assert(nativeInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native).Select(family => family.Id)),
             "Only the four ambient layers, shooting stars and petals are verified Native over the camera.");
         Assert(unverifiedInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified).Select(family => family.Id)),
@@ -71,7 +74,7 @@ internal static partial class VerificationSuite
             Assert(material.Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
                 $"{material.Id} must keep per-setting AR bindings Unverified until their values are covered.");
         }
-        Results.Add("PASS AR contract classification: six screen-space ambient families are Native; 14 calibrated S5 projection families remain Unverified after sampled WARP checks because the full style/value/parameter matrix is incomplete; four unprojected families stay Unsupported; note materials use the shared shader on camera-facing quads but their support and parameter bindings remain Unverified.");
+        Results.Add("PASS AR contract classification: six screen-space ambient families are Native; 17 projected families remain Unverified after sampled WARP checks because the full style/value/parameter matrix is incomplete, including the falling trail, pulse and shimmer that AR draws on its own note quads; the backdrop star field stays Unsupported because the background pass is skipped over a camera backdrop; note materials use the shared shader on camera-facing quads but their support and parameter bindings remain Unverified.");
     }
 
     /// <summary>

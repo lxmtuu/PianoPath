@@ -195,6 +195,14 @@ public sealed class EffectContractTests
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.GpuStage);
         });
 
+        // AR draws these on its own note quads rather than on the stage roll: trail and ghosts on the
+        // projected path, the pulse and the shimmer on both (GpuArLayer.AddSongNote). None is Unsupported.
+        Assert.All(EffectContractCatalog.FallingFxPilot, contract =>
+        {
+            Assert.Equal(EffectBackendState.Unverified, contract.Capabilities.ArOverlay.State);
+            Assert.All(contract.Parameters, parameter => Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.ArOverlay));
+        });
+
         Assert.All(EffectContractCatalog.FallingFxPilot, contract => Assert.All(
             new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay },
             cost => Assert.Equal(EffectCostState.Unmeasured, cost.State)));
@@ -256,10 +264,13 @@ public sealed class EffectContractTests
             "impact.wave", "impact.flash", "impact.burst", "impact.morph",
             "hold.bar", "hold.breath", "hold.vibration", "hold.color-cycle", "hold.arc",
             "atmosphere.beams", "particles.sparks", "particles.wisps", "particles.flames", "release.fx",
+            // Drawn on AR note quads, but not by every path: trails and ghosts need the saved pose, the pulse and
+            // the shimmer ride on the note quad itself. No per-value AR matrix covers them yet.
+            "falling.trail", "falling.pulse", "falling.shimmer",
         };
         Assert.Equal(6, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native));
-        Assert.Equal(14, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified));
-        Assert.Equal(4, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported));
+        Assert.Equal(17, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified));
+        Assert.Equal(1, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported));
         foreach (var family in EffectContractCatalog.AllFamilies)
         {
             var expectedState = nativeInAr.Contains(family.Id) ? EffectBackendState.Native

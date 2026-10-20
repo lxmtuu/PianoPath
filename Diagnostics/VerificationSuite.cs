@@ -349,6 +349,18 @@ internal static partial class VerificationSuite
         var sharedSound = VisualPresetShare.TryDecode(VisualPresetShare.Encode(new PianoVisualSettings { PianoSoundEnabled = false, AudioReverbAmount = 37 }), out var sharedLook, out _);
         Assert(new PianoVisualSettings().NoteLandingGlow && GpuOnlyEffects.Omitted(new PianoVisualSettings()).Contains("Landing glow"),
             "N6: landing glow ships on, so a software-rendered take has to name it instead of dropping it silently.");
+        // N12: the AR card's "leaves out" line is only worth reading if it matches the renderer. The flat overlay
+        // draws note bodies and nothing that needs the saved pose, and the star field lives in the stage
+        // background pass, which is skipped while the camera is the background (GpuStageRenderer.cs:588).
+        var flatLook = new PianoVisualSettings { ArNotesInPerspective = false, FallingTrail = "Glow", FallingGhost = true, ShowStars = true, ShowNoteLabels = true };
+        var flatOmitted = ArOmittedEffects.Omitted(flatLook);
+        Assert(flatOmitted.SequenceEqual(new[] { "Falling trail", "Echo ghosts", "Landing glow", "Note names", "Backdrop stars" }),
+            $"N12: the flat AR overlay must name every note effect it drops and the star field it never draws, in interface order; it named [{string.Join(", ", flatOmitted)}].");
+        var projectedLook = new PianoVisualSettings { ArNotesInPerspective = true, FallingTrail = "Glow", FallingGhost = true, ShowStars = true, ShowNoteLabels = true };
+        Assert(ArOmittedEffects.Omitted(projectedLook).SequenceEqual(new[] { "Backdrop stars" }),
+            "N12: with perspective notes on, trails, ghosts, landing glow and note names are built from calibrated patches, so only the star field is left out.");
+        Assert(ArOmittedEffects.Omitted(new PianoVisualSettings { ArNotesInPerspective = true, ShowStars = false }).Count == 0,
+            "N12: a projected look with the star field off loses nothing, so the AR card must stay quiet instead of printing a line about nothing.");
         Assert(!mutedSound.PianoSoundEnabled && mutedSound.AudioReverbAmount == 37
                 && !localSound.PianoSoundEnabled && localSound.AudioReverbAmount == 37
                 && sharedSound && sharedLook.PianoSoundEnabled && sharedLook.AudioReverbAmount == 100,

@@ -607,6 +607,10 @@ public partial class MainWindow
         Note(ar, "Before calibration, set Keyboard size on the Keyboard page. Then turn on AR, choose the camera above and its view below, and mark all four key-area corners in Calibrate. Keep the camera position and picture size unchanged while marking.");
         _arStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
         Register(ar, _arStatus, null, "ar overlay status calibration camera keys");
+        // What the overlay leaves out of the current look. Hidden while the answer is "nothing", so it is
+        // read when it matters and not one line of permanent small print.
+        _arOmitted = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+        Register(ar, _arOmitted, null, "ar overlay leaves out backdrop stars falling trail ghosts landing glow note names");
 
         var alignment = Card(CameraSettingsHost, "KEYBOARD ALIGNMENT", "Choose the camera view that matches the keys, then calibrate the virtual keyboard against the real one. Each camera, view, picture size and keyboard size has its own saved calibration.");
         Choice(alignment, "View", nameof(PianoVisualSettings.ArViewProfileId), "Choose the camera angle that matches how it sees the keys. Each view keeps its own calibration; changing the view does not reuse another view's corners.",
@@ -634,7 +638,7 @@ public partial class MainWindow
             .VisibleWhen = () => _visualSettings.ArDamperStrip && _visualSettings.ArDamperStripColorMode == "Custom";
 
         var notes = Card(CameraSettingsHost, "3D NOTE PATH", "Perspective notes follow the saved keyboard pose. Their travel direction is independent: changing it never moves or rotates the keyboard.");
-        Toggle(notes, "Notes in perspective", nameof(PianoVisualSettings.ArNotesInPerspective), "Use the Live Stage note material and colour. On projects notes as camera-facing quads from the saved 3D keyboard pose; note shimmer stays with its pitch. Off keeps the legacy flat overlay, which omits falling trails, echo ghosts, landing glow and note names; ambient petals and stars remain screen-space. Requires Direct3D and a valid calibration.");
+        Toggle(notes, "Notes in perspective", nameof(PianoVisualSettings.ArNotesInPerspective), "Use the Live Stage note material and colour. On projects notes as camera-facing quads from the saved 3D keyboard pose; note shimmer stays with its pitch. Off keeps the legacy flat overlay, which omits falling trails, echo ghosts, landing glow and note names. Ambient petals and meteors stay screen-space, but the backdrop star field belongs to the stage background and is never drawn over the camera. Requires Direct3D and a valid calibration.");
         SliderRow(notes, "Note direction tilt", nameof(PianoVisualSettings.ArNoteDirectionTilt), ArOptions.NoteDirectionTiltMin, ArOptions.NoteDirectionTiltMax, "The yellow arrow is Learn-note travel toward the keys: 0° follows key depth toward the player, 90° points away from the key surface, and 180° reverses key depth. Perform rising MIDI notes move opposite the arrow, away from the keys.")
             .VisibleWhen = () => _visualSettings.ArNotesProjected;
         SliderRow(notes, "Note direction azimuth", nameof(PianoVisualSettings.ArNoteDirectionAzimuth), ArOptions.NoteDirectionAzimuthMin, ArOptions.NoteDirectionAzimuthMax, "Azimuth turns the Learn-note path around the keyboard's 3D axes; Perform rising MIDI notes move opposite the yellow arrow. At 90° tilt it can aim across the key row. Use Calibrate's Screen-up or Along key depth buttons for quick directions.")
@@ -693,6 +697,8 @@ public partial class MainWindow
 
     private TextBlock? _arStatus;
     private string _arStatusKey = "";
+    private TextBlock? _arOmitted;
+    private string _arOmittedKey = "";
 
     /// <summary>What the AR card says about the overlay now: why it is not drawn yet, or what it is drawing on.</summary>
     private string ArStatusText()
@@ -729,11 +735,32 @@ public partial class MainWindow
     }
 
     /// <summary>
+    /// The AR card's second line: which switched-on effects this look will not see over the camera.
+    /// The reasons, and why the shimmer and the pulse are not in the list, are in
+    /// <see cref="ArOmittedEffects"/>; nothing here decides that — it only names the answer.
+    /// </summary>
+    private void RefreshArOmitted()
+    {
+        if (_arOmitted is null) return;
+        // Only worth saying while the overlay actually draws over the camera: with AR off, the stage draws the
+        // whole look and the line would describe a picture nobody is looking at.
+        var missing = _arPlan.ArLayer ? ArOmittedEffects.Omitted(_visualSettings) : Array.Empty<string>();
+        var key = string.Join("|", missing);
+        if (key == _arOmittedKey) return;
+        _arOmittedKey = key;
+        _arOmitted.Visibility = missing.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (missing.Count == 0) return;
+        // Re-run on a language change, not on every refresh: the keys are translated when the line is drawn.
+        Loc.Bind(_arOmitted, () => Loc.F("The AR overlay leaves out {0}.", string.Join(", ", missing.Select(Loc.T))));
+    }
+
+    /// <summary>
     /// Writes the AR card's status line again when what it says has changed. Called whenever the plan is carried out and, while the
     /// overlay owns the camera, from the frame timer, so a camera that stops answering is reported.
     /// </summary>
     private void RefreshArStatus()
     {
+        RefreshArOmitted();
         if (_arStatus is null) return;
         var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, MeasuringArDelay ? "m" + _latency.Presses : "", _arPlan.ArLayer ? _latencyText : "", _visualSettings.KeyboardSize, _visualSettings.ArMode, _visualSettings.ArViewProfileId, CameraStatus, CameraAgeText.Rounded(_gpuLoop?.CameraAge ?? default), _driftText);
         if (key == _arStatusKey) return;
@@ -1771,6 +1798,8 @@ public partial class MainWindow
         ApplyChromeTheme();
         SyncPlayInlineControls(refreshThemeChips: false);
         RefreshHandStatus();
+        // The AR card names what the overlay leaves out of the look, and every switch it reads lands here.
+        RefreshArOmitted();
         if (reloadBackground && Stage.BackgroundLoadError is { } error)
         {
             Loc.Set(SettingsSaveLabel, "Background image failed to load");

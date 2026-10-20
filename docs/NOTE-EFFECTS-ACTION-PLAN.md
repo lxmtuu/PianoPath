@@ -27,7 +27,7 @@
    ngân sách khung hình. Nhưng **thời gian sống đã thống nhất**: flare **0,38 s**, Lightning/Plasma **0,26 s** ở
    cả hai engine (trước đây WPF 0,18/0,30). Khi chạm trần, cả hai cùng **bỏ cái cũ nhất**.
 5. **Độ phủ hiệu ứng đã rộng nhưng bằng chứng còn mỏng**: 87 mục, 86 `Available`, 1 `Planned`; AR có 24 family
-   (6 `Native`, 14 `Unverified`, 4 `Unsupported`); kiểm thử theo family, chưa theo từng option; cổng phần cứng
+   (6 `Native`, 17 `Unverified`, 1 `Unsupported`); kiểm thử theo family, chưa theo từng option; cổng phần cứng
    vẫn chưa đạt.
 6. **Những thứ đang tốt, không nên phá**: bảng màu nốt dùng chung (`GpuLook.NoteColor` lấy từ stage), vật liệu
    nốt dùng chung `ShadeNoteMaterial` cho stage và AR, công thức hình học WPF/GPU trùng nhau, brush/pen đã được
@@ -415,13 +415,15 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
 
 #### N12. Bằng chứng hiệu ứng mới ở mức family, chưa mức option
 
-- **Hiện tượng:** 87 mục, 86 `Available`, 1 `Planned`; AR 24 family (6 `Native`, 14 `Unverified`, 4
-  `Unsupported`: `falling.trail`, `falling.pulse`, `falling.shimmer`, `atmosphere.stars`). Các assertion từng ghi "chưa chạy" nay **đã chạy và PASS** trong CI
+- **Hiện tượng:** 87 mục, 86 `Available`, 1 `Planned`; AR 24 family (6 `Native`, 17 `Unverified`, 1
+  `Unsupported`: `atmosphere.stars`). Các assertion từng ghi "chưa chạy" nay **đã chạy và PASS** trong CI
   [39294579913](https://github.com/lxmtuu/PianoPath/actions/runs/39294579913); phần còn thiếu là **coverage** theo family/giá trị đại diện.
-- **Nguồn:** `docs/EFFECT-COVERAGE-AUDIT.md` §2, §6; `EffectContracts.cs`.
+- **Nguồn:** `docs/EFFECT-COVERAGE-AUDIT.md` §2, §6 (gồm mục "Đính chính 2026-10-20"); `EffectContracts.cs`.
 - **Việc cần làm:** (a) **xong** — CI Windows 2026-10-20 xanh, mọi assertion từng chờ đã chạy; (b) sinh ma trận capture cho từng option
-  (ít nhất default + một cực trị) và lưu ảnh/checksum; (c) đưa trạng thái AR 4 family `Unsupported` lên UI hoặc
-  implement.
+  (ít nhất default + một cực trị) và lưu ảnh/checksum; (c) **xong** (2026-10-20) — family duy nhất thật sự không có ở AR là trường sao nền,
+  và card **3D NOTE PATH** giờ in dòng "The AR overlay leaves out …" (`ArOmittedEffects`, test xUnit + assertion `--verify`);
+  trail/pulse/shimmer được đính chính từ `Unsupported` sang `Unverified` vì chúng vẽ trên quad nốt AR. Phần còn lại của (c) là
+  mở rộng ma trận theo style/giá trị, không phải thêm UI.
 - **Nghiệm thu:** mỗi ID có ảnh/kiểm tra; CI xanh; không còn dòng "chờ chạy".
 - **Cỡ:** L · **Phụ thuộc:** N9.
 
