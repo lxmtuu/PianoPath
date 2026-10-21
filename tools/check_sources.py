@@ -1255,8 +1255,8 @@ def scan_preset_roundtrip():
     for required, why in (
         ("VisualPresets.BuiltIn", "the review stopped walking the built-in looks"),
         ("CommunityPresets.All", "the review stopped walking the community shelf"),
-        ("VisualPresets.WritePresetFile(", "the review no longer saves through the product's preset writer"),
-        ("VisualPresets.ReadPresetFile(", "the review no longer reads through the product's preset reader"),
+        ("VisualPresetStore.WritePresetFile(", "the review no longer saves through the product's preset writer"),
+        ("VisualPresetStore.ReadPresetFile(", "the review no longer reads through the product's preset reader"),
         ("CopyFrom(item.Settings, keepBackgroundImage: true)", "the review no longer applies a preset the way the dock does"),
         ("typeof(PianoVisualSettings).GetProperties()", "the review compares a hand-written list instead of every property"),
         ("ExpectedPresets = 20", "the review no longer pins the number of shipped presets"),

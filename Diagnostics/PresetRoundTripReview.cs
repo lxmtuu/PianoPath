@@ -13,7 +13,7 @@ namespace PianoPath;
 /// This is the half the other reviews cannot see. N12(b) proves each option draws and N12(e) proves each slider
 /// is read, but both build their settings in memory. A look that a player saves and opens tomorrow takes a
 /// different road: <see cref="PianoVisualSettings.CopyFrom"/> into the live settings,
-/// <see cref="VisualPresets.WritePresetFile"/> to disk, <see cref="VisualPresets.ReadPresetFile"/> back,
+/// <see cref="VisualPresetStore.WritePresetFile"/> to disk, <see cref="VisualPresetStore.ReadPresetFile"/> back,
 /// <c>ApplyMigrations</c> and <c>Clamp</c> on the way in. A property that the file does not carry — or that a
 /// migration rewrites — comes back as its default and the look changes after a reload, quietly.
 /// </para>
@@ -76,8 +76,8 @@ internal static class PresetRoundTripReview
             foreach (var item in cases)
             {
                 var before = Apply(item, new PianoVisualSettings());
-                var file = VisualPresets.WritePresetFile(before, null, item.Description);
-                var stored = VisualPresets.ReadPresetFile(file);
+                var file = VisualPresetStore.WritePresetFile(before, null, item.Description);
+                var stored = VisualPresetStore.ReadPresetFile(file);
                 if (stored.Description != item.Description)
                     throw new InvalidDataException(
                         $"{item.Name}: the preset file came back with description '{stored.Description}' instead of " +
@@ -226,7 +226,7 @@ internal static class PresetRoundTripReview
             whyOneScene = "a field the file drops is caught by the property comparison whether or not the sampled scene draws it; the frame is only the witness that the look reaches a renderer",
             applyPath = "MainWindow.ApplyPreset: CopyFrom(keepBackgroundImage), PresetName, PresetModified=false, Image without a path falls back to Solid",
             savePath = "VisualPresetStore.Save writes a clone after ClearMachineLocal; CopyFrom never copies a machine-local field, so the settings written here are already at this machine's defaults and the review writes them directly",
-            filePath = "VisualPresets.WritePresetFile -> ReadPresetFile (envelope v1 with thumbnail and description), then FromJson's ApplyMigrations + Clamp",
+            filePath = "VisualPresetStore.WritePresetFile -> ReadPresetFile (envelope v1 with thumbnail and description), then FromJson's ApplyMigrations + Clamp",
             frameComparison = "exact byte equality of the BGRA buffers (ChangedPixels with tolerance 0 plus a span compare), not the 2/255 tolerance the option matrix uses",
             renderer = "GPU-WARP", adapter,
             width = Width, height = Height, fps = OptionMatrixPlan.Fps, seed = OptionMatrixPlan.Seed,
