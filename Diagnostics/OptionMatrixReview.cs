@@ -46,7 +46,7 @@ internal static class OptionMatrixReview
     /// <summary>Frames and captures the plan asks for: 62 values plus 11 scenes that keep their off baseline.</summary>
     private const int ExpectedScenes = 64, ExpectedCaptures = ExpectedScenes * 2;
 
-    private sealed record GpuCounters(int Sprites, int Ambient, int NoteTrails, int Notes, int Keys);
+    internal sealed record GpuCounters(int Sprites, int Ambient, int NoteTrails, int Notes, int Keys);
 
     private sealed class Pending
     {
@@ -250,7 +250,14 @@ internal static class OptionMatrixReview
         }
     }
 
-    private static byte[] CaptureWpf(OptionMatrixPlan.Family family, PianoVisualSettings settings)
+    internal static byte[] CaptureWpf(OptionMatrixPlan.Family family, PianoVisualSettings settings)
+        => CaptureWpf(family.Scene, settings);
+
+    /// <summary>
+    /// Renders one scene on the shipping software stage. Shared with the N12(e) numeric review: a second copy
+    /// of this loop is how the two reviews would end up describing different frames.
+    /// </summary>
+    internal static byte[] CaptureWpf(OptionMatrixPlan.Scene scene, PianoVisualSettings settings)
     {
         // Its own stage, its own seed, its own clock: nothing a previous capture left behind can reach it. The
         // key tiles are baked synchronously so the picture does not depend on a background render pass.
@@ -260,15 +267,15 @@ internal static class OptionMatrixReview
         stage.Arrange(new Rect(0, 0, Width, Height));
         stage.UpdateLayout();
         stage.ResetAnimation(OptionMatrixPlan.Seed);
-        var notes = OptionMatrixPlan.Notes(family);
-        var playing = OptionMatrixPlan.Playing(family);
+        var notes = OptionMatrixPlan.Notes(scene);
+        var playing = OptionMatrixPlan.Playing(scene);
         var dt = 1.0 / OptionMatrixPlan.Fps;
-        for (var frame = 0; frame < OptionMatrixPlan.Frames(family); frame++)
+        for (var frame = 0; frame < OptionMatrixPlan.Frames(scene); frame++)
         {
             // The clock only ever moves forward, so the stage can never read a rewind as a seek and drop the
             // release backlog; the hit and the release are driven at the same frame numbers on both renderers.
             stage.SetState(notes, (frame + 1) * dt, playing, NoPressed);
-            Drive(family, frame,
+            Drive(scene, frame,
                 pitch => stage.Impact(pitch, OptionMatrixPlan.Strength),
                 pitch => stage.AddLiveNote(pitch, OptionMatrixPlan.Strength),
                 pitch => stage.ReleaseLiveNote(pitch));
@@ -285,6 +292,11 @@ internal static class OptionMatrixReview
 
     private static (byte[] Pixels, GpuCounters Counters) CaptureGpu(GpuStageRenderer renderer,
         OptionMatrixPlan.Family family, PianoVisualSettings settings)
+        => CaptureGpu(renderer, family.Scene, settings);
+
+    /// <summary>Renders one scene through the Direct3D stage on WARP; likewise shared with N12(e).</summary>
+    internal static (byte[] Pixels, GpuCounters Counters) CaptureGpu(GpuStageRenderer renderer,
+        OptionMatrixPlan.Scene scene, PianoVisualSettings settings)
     {
         // A stage that is never drawn: its colour pipeline and keyboard fraction are what the look is built
         // from, exactly as the app builds it, so the two renderers resolve the same palette.
@@ -297,15 +309,15 @@ internal static class OptionMatrixReview
         feed.SetLook(GpuLook.From(settings, (pitch, track) => stage.AdjustColor(stage.NoteColor(pitch, track)),
             stage.KeyboardHeight / stage.ActualHeight, stage.AdjustColor));
         feed.SetStageHeight(Height);
-        var notes = OptionMatrixPlan.Notes(family);
-        var playing = OptionMatrixPlan.Playing(family);
-        var frames = OptionMatrixPlan.Frames(family);
+        var notes = OptionMatrixPlan.Notes(scene);
+        var playing = OptionMatrixPlan.Playing(scene);
+        var frames = OptionMatrixPlan.Frames(scene);
         var dt = 1.0 / OptionMatrixPlan.Fps;
         void BeforeFrame(int frame)
         {
             feed.SetDeterministicState(notes, (frame + 1) * dt, playing, NoPressed);
             feed.SetDeterministicBeatPulse(0);
-            Drive(family, frame,
+            Drive(scene, frame,
                 pitch => feed.Impact(pitch, OptionMatrixPlan.Strength),
                 pitch => feed.LiveNote(pitch, true, OptionMatrixPlan.Strength),
                 pitch => feed.LiveNote(pitch, false, OptionMatrixPlan.Strength));
@@ -317,15 +329,20 @@ internal static class OptionMatrixReview
     }
 
     internal static void Drive(OptionMatrixPlan.Family family, int frame, Action<int> impact, Action<int> down, Action<int> up)
+        => Drive(family.Scene, frame, impact, down, up);
+
+    /// <summary>The one place a review turns a frame number into the input that scene asks for.</summary>
+    internal static void Drive(OptionMatrixPlan.Scene scene, int frame, Action<int> impact, Action<int> down, Action<int> up)
     {
-        switch (family.Scene)
+        switch (scene)
         {
             case OptionMatrixPlan.Scene.Impact when frame == OptionMatrixPlan.TriggerFrame:
                 impact(OptionMatrixPlan.Pitch);
                 break;
-            case OptionMatrixPlan.Scene.Release when frame == 0:
+            case OptionMatrixPlan.Scene.Release or OptionMatrixPlan.Scene.Held when frame == 0:
                 down(OptionMatrixPlan.Pitch);
                 break;
+            // The held scene never lets go: the bar it draws is the one the numeric review measures.
             case OptionMatrixPlan.Scene.Release when frame == OptionMatrixPlan.ReleaseFrame:
                 up(OptionMatrixPlan.Pitch);
                 break;

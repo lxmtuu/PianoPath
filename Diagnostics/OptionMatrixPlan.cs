@@ -28,6 +28,8 @@ internal static class OptionMatrixPlan
         Impact,
         /// <summary>No song: a live note pressed at frame zero and released at <see cref="ReleaseFrame"/>.</summary>
         Release,
+        /// <summary>No song: a live note pressed at frame zero and still held at the capture (N12(e) bar width).</summary>
+        Held,
         /// <summary>No song and no input: the ambient layers alone.</summary>
         Ambient
     }
@@ -99,14 +101,22 @@ internal static class OptionMatrixPlan
         ("release", "Echo Rings")       // ring channel
     });
 
-    internal static Family PoseFamily(string id) => Families.SingleOrDefault(family => family.Id == id)
-        ?? throw new ArgumentException($"The AR/pose slice names unknown family '{id}'.", nameof(id));
+    internal static Family FamilyById(string id) => Families.SingleOrDefault(family => family.Id == id)
+        ?? throw new ArgumentException($"The option plan names unknown family '{id}'.", nameof(id));
+
+    internal static Family PoseFamily(string id) => FamilyById(id);
 
     /// <summary>
     /// Frames each scene runs before the capture. A family's sample time is the last frame's time, so one
     /// number per scene keeps the reviewed moment and the rendered frames from drifting apart.
     /// </summary>
-    internal static int Frames(Family family) => family.Scene switch
+    internal static int Frames(Family family) => Frames(family.Scene);
+
+    /// <summary>
+    /// Frames each scene runs before the capture, per scene. A family's sample time is the last frame's time,
+    /// so one number keeps the reviewed moment and the rendered frames from drifting apart.
+    /// </summary>
+    internal static int Frames(Scene scene) => scene switch
     {
         // Long enough for a note to travel a third of the stage and for the ambient layers to populate.
         Scene.Falling or Scene.Ambient => 90,
@@ -114,17 +124,24 @@ internal static class OptionMatrixPlan
         Scene.Impact => 8,
         // 0.267 s in, 0.133 s after the release: inside every release lifetime (0.25-1.3 s).
         Scene.Release => 16,
-        _ => throw new ArgumentOutOfRangeException(nameof(family))
+        // Half a second of a held key: the bar is fully grown and, on the software stage, still being drawn by
+        // the path that used to floor its width.
+        Scene.Held => 30,
+        _ => throw new ArgumentOutOfRangeException(nameof(scene))
     };
 
-    internal static double Seconds(Family family) => Frames(family) / (double)Fps;
+    internal static double Seconds(Family family) => Seconds(family.Scene);
+    internal static double Seconds(Scene scene) => Frames(scene) / (double)Fps;
 
-    /// <summary>The song the scene plays; the release scene uses a live note instead, so it has none.</summary>
-    internal static IReadOnlyList<NoteEvent> Notes(Family family) => family.Scene == Scene.Falling
+    /// <summary>The song the scene plays; the release and held scenes use a live note instead, so they have none.</summary>
+    internal static IReadOnlyList<NoteEvent> Notes(Family family) => Notes(family.Scene);
+
+    internal static IReadOnlyList<NoteEvent> Notes(Scene scene) => scene == Scene.Falling
         ? Array.AsReadOnly(new[] { new NoteEvent { Pitch = Pitch, Start = 0, Duration = 2, Velocity = 96, Track = 0 } })
         : Array.Empty<NoteEvent>();
 
-    internal static bool Playing(Family family) => family.Scene == Scene.Falling;
+    internal static bool Playing(Family family) => Playing(family.Scene);
+    internal static bool Playing(Scene scene) => scene == Scene.Falling;
 
     /// <summary>
     /// The values this family is captured with. A family whose neutral is a real value ("None", "Fade",

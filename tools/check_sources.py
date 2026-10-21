@@ -1199,6 +1199,24 @@ def scan_held_emission_parity():
 # The eleven settings strings that are a user-visible choice in both renderers. The value lists live in
 # PianoVisualSettings; the option matrix (Diagnostics/OptionMatrixPlan.cs) copies them so a Windows capture run
 # can walk them without WPF. This table is the only place that knows the two are the same list.
+# An axis may skip the slider's endpoints only with a written reason. Fall speed is the one case: at 1000 px/s
+# a two-second note has left the 960x540 stage before the fixed sample time, so the capture would be a picture
+# of nothing and could not be compared with its siblings in any meaningful way.
+NUMERIC_ENDPOINT_EXEMPT = {
+    "note-speed": "1000 px/s clears the stage before the 1.5 s sample, so the top of the range is not a picture",
+}
+
+NUMERIC_OPTION_SETTINGS = {
+    "NoteWidth": "the width of a note and of a held bar",
+    "NoteFallSpeed": "how fast a note falls",
+    "FallingTrailIntensity": "how bright a falling trail is",
+    "ImpactWaveIntensity": "how bright a wave is",
+    "RingSize": "how far a wave grows",
+    "ParticleAmount": "how many particles a hit emits",
+    "ImpactFlashIntensity": "how bright a hit flash is",
+    "ReleaseIntensity": "how strong a release effect is",
+}
+
 OPTION_MATRIX_FAMILIES = {
     "NoteStyle": "NoteStyles",
     "FallingTrail": "FallingTrails",
@@ -1212,6 +1230,104 @@ OPTION_MATRIX_FAMILIES = {
     "AmbientLight": "AmbientLights",
     "AmbientCosmic": "AmbientCosmics",
 }
+
+
+def scan_option_numeric():
+    """A slider has no list, so its plan has to come from the dock and the settings class.
+
+    ``OptionNumericPlan`` names nine numeric axes, three values each, and the review fails when two of those
+    values paint the same picture on either renderer. That claim is only worth something while the plan's range
+    is the product's range: this check reads every endpoint out of the dock's ``SliderRow`` call and the
+    settings class's ``Clamp`` and compares it with the plan. A slider whose range moves, or an axis added to the
+    plan without a slider, fails here on Linux before Windows renders a frame.
+    """
+    errors = []
+    paths = {
+        "plan": ROOT / "Diagnostics" / "OptionNumericPlan.cs",
+        "review": ROOT / "Diagnostics" / "OptionNumericReview.cs",
+        "settings": ROOT / "Stage" / "PianoVisualSettings.cs",
+        "ui": ROOT / "Ui" / "MainWindow.Settings.cs",
+        "suite": ROOT / "Diagnostics" / "VerificationSuite.cs",
+    }
+    for name, path in paths.items():
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the numeric option review needs it"]
+    plan = _code(paths["plan"].read_text(encoding="utf-8"))
+    review = _code(paths["review"].read_text(encoding="utf-8"))
+    settings = _code(paths["settings"].read_text(encoding="utf-8"))
+    ui = _code(paths["ui"].read_text(encoding="utf-8"))
+    suite = _code(paths["suite"].read_text(encoding="utf-8"))
+
+    number = r"(-?\d+(?:\.\d+)?)"
+    axes = re.findall(
+        r'new Axis\(\"([^\"]+)\",\s*\"([^\"]+)\",\s*\"([^\"]+)\",\s*\"([^\"]+)\",\s*OptionMatrixPlan\.Scene\.(\w+),\s*'
+        + number + r",\s*" + number + r",\s*\[(.*?)\]\)",
+        plan, re.S)
+    if len(axes) != 9:
+        errors.append(f"Diagnostics/OptionNumericPlan.cs must declare nine numeric axes; it declares {len(axes)}")
+    seen = set()
+    for axis, setting, family, family_value, scene, low, high, values in axes:
+        if axis in seen:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs declares the axis {axis!r} twice")
+        seen.add(axis)
+        if setting not in NUMERIC_OPTION_SETTINGS:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} names {setting!r}, which is not one of the "
+                          "numeric settings the dock exposes")
+            continue
+        slider = re.search(rf'SliderRow\([^;]*?nameof\(PianoVisualSettings\.{setting}\),\s*{number},\s*{number}', ui, re.S)
+        if not slider:
+            errors.append(f"Ui/MainWindow.Settings.cs no longer offers a slider for {setting}; the numeric plan would "
+                          "claim a range the dock never shows")
+        else:
+            declared_low, declared_high = slider.group(1), slider.group(2)
+            if float(declared_low) != float(low) or float(declared_high) != float(high):
+                errors.append(f"Diagnostics/OptionNumericPlan.cs captures {setting} over {low}..{high}, but the dock's "
+                              f"slider is {declared_low}..{declared_high}; move the plan with the slider")
+        clamp = re.search(rf"{setting}\s*=\s*Math\.Clamp\({setting},\s*{number},\s*{number}\)", settings)
+        if not clamp:
+            errors.append(f"Stage/PianoVisualSettings.cs no longer clamps {setting}; the plan's range has no product "
+                          "law behind it")
+        elif float(clamp.group(1)) > float(low) or float(clamp.group(2)) < float(high):
+            errors.append(f"Stage/PianoVisualSettings.cs clamps {setting} to {clamp.group(1)}..{clamp.group(2)}, which "
+                          f"is narrower than the plan's {low}..{high}; the capture would be filed under a value the "
+                          "product moved")
+        points = [float(point) for point in re.findall(number, values)]
+        if len(points) != 3 or points != sorted(set(points)):
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} needs three ascending distinct values; it has {points}")
+        if points and (min(points) < float(low) - 1e-9 or max(points) > float(high) + 1e-9):
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} shoots {points}, outside its own {low}..{high}")
+        if axis not in NUMERIC_ENDPOINT_EXEMPT and not any(
+                abs(point - float(low)) < 1e-9 or abs(point - float(high)) < 1e-9 for point in points):
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} never samples an endpoint; a clamp at the "
+                          "end of the range would stay invisible")
+        if axis in NUMERIC_ENDPOINT_EXEMPT and not NUMERIC_ENDPOINT_EXEMPT[axis]:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs exempts {axis!r} from the endpoint rule without a reason")
+        # The arrangement family must exist and offer the value, so the numeric scene is a pinned one.
+        if f'new Family("{family}",' not in plan and f'"{family}"' not in plan:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} arranges itself through unknown family {family!r}")
+        if f'"{family_value}"' not in plan:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} arranges through {family_value!r}, which it never names")
+
+    for contract in (
+        ("OptionMatrixReview.CaptureWpf(", "the numeric review stopped using the flat matrix's WPF render path"),
+        ("OptionMatrixReview.CaptureGpu(", "the numeric review stopped using the flat matrix's engine render path"),
+        ("settings.Clamp()", "the numeric review no longer clamps before reading the value back"),
+        ("Math.Abs(drawn - value)", "the numeric review no longer proves it drew the value it files the capture under"),
+        ("MinimumChangedPixels", "the numeric review lost its pixel floor"),
+    ):
+        if contract[0] not in review:
+            errors.append(f"Diagnostics/OptionNumericReview.cs: {contract[1]}")
+    if '"--verify-option-numeric-only"' not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs lost the --verify-option-numeric-only route")
+    if "OptionNumericReview.Render(" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs does not call OptionNumericReview.Render, so the numeric review never runs")
+    if "captures == 54" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs no longer asserts 54 numeric captures; nine axes at three "
+                      "values on two renderers is the whole plan")
+    if "OptionMatrixPlan.Scene.Held" not in _code((ROOT / "Diagnostics" / "OptionMatrixReview.cs").read_text(encoding="utf-8")):
+        errors.append("Diagnostics/OptionMatrixReview.cs lost the held scene's press, so the bar-width axis would "
+                      "capture a stage with nothing held")
+    return errors
 
 
 def scan_option_matrix():
@@ -2385,6 +2501,7 @@ def main():
     errors.extend(scan_held_emission_parity())
     errors.extend(scan_note_width_parity())
     errors.extend(scan_option_matrix())
+    errors.extend(scan_option_numeric())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
@@ -2412,6 +2529,7 @@ def main():
     print("checked that a held key lets off the engine's amount of embers and wisps on both renderers, ceilings aside")
     print("checked that the falling note and the held bar size themselves from one Note width slider, with no floor of their own")
     print("checked that every option the settings offer is captured by the N12(b) matrix on both renderers, off state included")
+    print("checked that every numeric slider the plan shoots is the dock's own range, clamped by the settings class, sampled at both ends")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")

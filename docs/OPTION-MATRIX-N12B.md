@@ -79,6 +79,9 @@ PianoPath.exe --verify --verify-review-out=<thư-mục>
 
 # chỉ lát AR/pose N12(d) — §8
 PianoPath.exe --verify --verify-option-pose-only --verify-review-out=<thư-mục> --verify-log=<tệp.log>
+
+# chỉ ma trận trục số N12(e) — §9
+PianoPath.exe --verify --verify-option-numeric-only --verify-review-out=<thư-mục> --verify-log=<tệp.log>
 ```
 
 Kết quả nằm trong `<thư-mục>/option-matrix/`:
@@ -106,6 +109,13 @@ Chạy trên nhánh push thì cả hai chỉ lên artifact, không vào Git.
   "baseline không chụp hai lần", slug tên tệp, và ngữ nghĩa `ChangedPixels`/`NonBlackPixels`.
 - `Diagnostics/VerificationSuite.cs`: assert `captures == 128` (và `30` cho lát AR/pose) cùng dòng `PASS` nêu rõ
   phạm vi.
+- `OptionNumericPlanTests`: chín trục, ba điểm **tăng dần và phân biệt**, nằm trong khoảng slider, có ít nhất một
+  đầu; hai trục width phải giữ đúng cặp 30/45/100 và hai cảnh `Falling`/`Held`; mỗi trục phải arrange qua một
+  family mà ma trận §2 đã chụp.
+- `scan_option_numeric` (`tools/check_sources.py`): đọc **đầu mút slider từ `SliderRow`** trong
+  `Ui/MainWindow.Settings.cs` và khoảng `Clamp` trong `PianoVisualSettings`, so với khoảng của plan; đòi ba điểm
+  tăng dần, có đầu mút (trừ `note-speed`, có lý do ghi trong scan), và review vẫn gọi đúng hai hàm render của ma
+  trận phẳng, vẫn `Clamp()` rồi đọc lại giá trị.
 - `OptionMatrixPlanTests`: lát AR/pose chỉ được chọn **giá trị sản phẩm** (không phải `None`/`Fade`), phủ đúng
   hai kênh morph và kênh release, và không có công tắc riêng — tức cùng điều kiện "tự vẽ" như ma trận phẳng.
 
@@ -158,6 +168,47 @@ giá trị morph lẫn **cả năm** kiểu release "được nhận nhưng khô
 
 Đổi lại: người dùng chọn Shatter với Sparks tắt giờ **thấy** shard (và bản ghi WPF khớp bản ghi GPU), còn ring
 morph/release sáng theo đúng slider của chúng thay vì theo slider wave.
+
+## 9. N12(e) — trục số: hai mức slider không được ra cùng một khung hình
+
+Ma trận ở §2 chỉ chụp **giá trị rời rạc**: `ImpactWave = "Ripple"`, `NoteStyle = "Gem"`. Nó không nhìn thấy một
+slider, và slider che một lỗi khác hẳn: một ngưỡng/kẹp nằm trong **một** đường vẽ làm hai mức slider ra **cùng một
+khung hình**, trong khi mỗi mức vẫn khác ảnh "tắt" — nên một review chỉ so với baseline sẽ gọi nó là xanh. Sân
+khấu phần mềm đã có đúng lỗi đó: thanh giữ phím kẹp `Note width` ở 60, nên preset 30% vẽ thanh 60% trên WPF và
+thanh 30% trên engine (xem `docs/NOTE-EFFECTS-ACTION-PLAN.md` §3.2b).
+
+**Ma trận:** chín trục số, ba giá trị mỗi trục, mỗi giá trị chụp trên **WPF và D3D/WARP** ở 960×540, cùng cảnh,
+cùng seed (`--verify-option-numeric-only`, artifact `option-numeric-n12e`):
+
+| Trục | Setting | Cảnh | Giá trị | Vì sao ba mức đó |
+|---|---|---|---|---|
+| `note-width` | `NoteWidth` 30–100 | nốt rơi | 30 / 45 / 100 | 30 và 45 từng bị kẹp 60 ⇒ **trùng khung hình** trên WPF |
+| `bar-width` | `NoteWidth` 30–100 | **giữ phím** | 30 / 45 / 100 | chính thanh giữ phím — đường vẽ đã có lỗi |
+| `note-speed` | `NoteFallSpeed` 100–1000 | nốt rơi | 125 / 325 / 550 | 1000 px/s đã ra khỏi sân khấu trước mốc chụp, nên không lấy hai đầu |
+| `trail-intensity` | `FallingTrailIntensity` 0–100 | nốt rơi | 0 / 50 / 100 | 0 = không vẽ, 50 ↔ 100 = gấp đôi độ sáng |
+| `wave-intensity` | `ImpactWaveIntensity` 0–150 | va chạm | 0 / 75 / 150 | 0 = ring vô hình, 75 ↔ 150 = gấp đôi |
+| `wave-size` | `RingSize` 0–100 | va chạm | 5 / 50 / 100 | bán kính đổi ⇒ hình học đổi |
+| `burst-amount` | `ParticleAmount` 0–120 | va chạm | 8 / 60 / 120 | số hạt đổi ⇒ khác **cấu trúc** |
+| `flash-intensity` | `ImpactFlashIntensity` 0–100 | va chạm | 0 / 50 / 100 | 0 = không flash |
+| `release-intensity` | `ReleaseIntensity` 0–100 | nhả phím | 0 / 50 / 100 | 0 = không vẽ, 50 ↔ 100 = gấp đôi |
+
+⇒ **27 cảnh × 2 renderer = 54 ảnh**.
+
+**Cổng:** mọi **cặp** giá trị trong một trục phải đổi **≥ 12 px** trên **cả hai** renderer (cùng ngưỡng với §2).
+Cộng thêm một bất biến chống "manifest nói dối": mỗi ảnh **đọc lại** setting sau `Clamp()` và lượt chạy đỏ nếu
+sản phẩm đã âm thầm đổi giá trị — nếu không, một giá trị ngoài khoảng slider sẽ được ghi dưới một mức nó chưa
+từng vẽ. Ảnh vẫn lấy sha256 **của pixel đọc lại từ tệp**.
+
+**Cảnh `Held` (mới):** `OptionMatrixPlan.Scene.Held` — nhấn ở khung 0 và **không nhả**, chụp ở 0,5 s. Đây là mốc
+duy nhất nhìn thấy thanh giữ phím; bốn cảnh cũ không có nó (Release nhả ở khung 8). Không family rời rạc nào dùng
+cảnh này nên ma trận §2 không đổi.
+
+**Dùng chung một đường render:** review gọi `OptionMatrixReview.CaptureWpf`/`CaptureGpu` (đã tách theo `Scene`)
+chứ không có vòng lặp riêng — hai bản sao của vòng lặp là cách hai review mô tả hai khung hình khác nhau.
+
+**Không chứng nhận:** không duyệt mỹ thuật, **không** chứng minh phản ứng tuyến tính hay đơn điệu (chỉ chứng minh
+hai mức khác nhau *khác ảnh*), không phủ AR (N12(d)), không phải GPU thật/khung hình thật, không đổi mặc định hay
+preset.
 
 ## 8. N12(d), phần 1 — cùng option đó qua ba pose AR
 

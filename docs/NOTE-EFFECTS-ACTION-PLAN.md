@@ -31,7 +31,9 @@
    trên **WPF và D3D/WARP**: 62 giá trị (9 trong đó là trạng thái tắt) + 11 baseline = **64 cảnh, 128 ảnh 960×540**, cùng cảnh/cùng seed; mỗi giá
    trị phải đổi pixel so với baseline và không trùng ảnh với giá trị khác. Đã có phần 1 của ma trận **AR/pose** (N12(d)):
    5 trục hiệu ứng × 3 pose đã hiệu chỉnh × (tắt + bật) = 27 ảnh WARP, mỗi giá trị phải đổi ≥12 px so với ảnh tắt cùng
-   pose. Còn thiếu: phần còn lại của AR/pose (nốt, ambient), duyệt mỹ thuật và cổng phần cứng.
+   pose. Đã có thêm **ma trận trục số** (N12(e)): 9 trục slider × 3 giá trị × WPF/WARP = 54 ảnh, cổng "mọi cặp
+   trong một trục đổi ≥12 px trên cả hai renderer" — bắt đúng lớp lỗi kẹp 60% ở §3.2b. Còn thiếu: phần còn lại của
+   AR/pose (nốt, ambient), các trục số ngoài nhóm trên, duyệt mỹ thuật và cổng phần cứng.
 6. **Những thứ đang tốt, không nên phá**: bảng màu nốt dùng chung (`GpuLook.NoteColor` lấy từ stage), vật liệu
    nốt dùng chung `ShadeNoteMaterial` cho stage và AR, công thức hình học WPF/GPU trùng nhau, brush/pen đã được
    cache, seed tất định. Vấn đề nằm ở **hợp đồng giữa các đường vẽ**, không phải ở chất lượng một đường.
@@ -528,7 +530,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N9 | Benchmark khung hình nốt/hiệu ứng | **đã có kịch bản**: `--bench-detail` (GPU, 18 ô) + `VerifyWpfNoteDensity` (WPF, cùng 18 ô, tự chạy); còn số p95 trên máy GPU | M | tài liệu này |
 | N10 | Occlusion bàn tay AR | không vẽ xuyên tay | L | AR roadmap |
 | N11 | Reduced Motion/giảm flash toàn cục | **đã xong**: hệ thống có sẵn từ Phase 2; P1 chốt tần số pulse 1,67 Hz + test toàn bộ preset | S | master roadmap |
-| N12 | Ma trận capture từng option | **đã xong (b) 2026-10-21**: 11 trục × mọi giá trị = 64 cảnh, 128 ảnh WPF/WARP; mỗi giá trị đổi pixel, mọi cặp giá trị khác ảnh, baseline chung cảnh trùng từng bit; **(d) phần 1 2026-10-21**: 5 trục hiệu ứng × 3 pose AR × (tắt + bật) = 27 ảnh, cổng ≥12 px mỗi pose; còn nốt/ambient trong AR; **trục số NoteWidth đã có parity + test** sau khi bắt lỗi kẹp 60% (§3.2b) | L | audit |
+| N12 | Ma trận capture từng option | **đã xong (b) 2026-10-21**: 11 trục × mọi giá trị = 64 cảnh, 128 ảnh WPF/WARP; mỗi giá trị đổi pixel, mọi cặp giá trị khác ảnh, baseline chung cảnh trùng từng bit; **(d) phần 1 2026-10-21**: 5 trục hiệu ứng × 3 pose AR × (tắt + bật) = 27 ảnh, cổng ≥12 px mỗi pose; còn nốt/ambient trong AR; **trục số NoteWidth đã có parity + test** sau khi bắt lỗi kẹp 60% (§3.2b); **(e) 2026-10-21**: 9 trục số × 3 giá trị × 2 renderer = 54 ảnh, mọi cặp trong một trục phải đổi ≥12 px trên cả hai — cặp 30/45 chính là cặp lỗi cũ | L | audit |
 | N13 | Lookahead stage ↔ AR | **đã chốt (b)**: AR có slider riêng 1–6 s; công thức stage ở §3.6 | S | tài liệu này |
 | N14 | Nhãn nốt AR phẳng | **đã chốt**: phẳng bỏ nhãn có chủ ý + tooltip; còn ảnh 3 nền | S | tài liệu này |
 | N15 | Nợ tài liệu/trạng thái | **đã xong**: tool + 3 checker trong làn tĩnh; audit đối chiếu CI 2026-10-20, hết câu "chờ chạy" | S | tài liệu này |

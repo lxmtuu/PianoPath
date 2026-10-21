@@ -116,6 +116,19 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
+        if (args.Contains("--verify-option-numeric-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Numeric option review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N12(e) numeric option review; this does not run or certify the full regression suite.");
+                VerifyOptionNumeric(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
         if (args.Contains("--verify-option-pose-only"))
         {
             try
@@ -129,7 +142,7 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); } }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); } }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -6839,6 +6852,13 @@ internal static partial class VerificationSuite
         var captures = OptionMatrixReview.Render(outputDirectory);
         Assert(captures == 128, "The option matrix must capture 64 scenes (every value of eleven settings families, each with its own off baseline) through two renderers.");
         Results.Add($"PASS option matrix (N12(b)): {captures} WPF/GPU-WARP captures at 960×540 over 11 settings families — every value drawn, every value distinguishable from its own off state and from its siblings, every family's off state bit-identical inside its scene at one fixed seed. The morph and release families are captured with Embers, Impact rings, Impact flash and wisps off, so those captures also prove both channels draw on their own. Renderer-branching evidence, not art approval, AR projection or a default change; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyOptionNumeric(string outputDirectory)
+    {
+        var captures = OptionNumericReview.Render(outputDirectory);
+        Assert(captures == 54, "The numeric option review must capture nine axes at three values on two renderers.");
+        Results.Add($"PASS numeric option review (N12(e)): {captures} WPF/GPU-WARP captures at 960×540 — nine slider axes (note width on a falling note and on a held bar, fall speed, trail/wave/flash/release intensity, wave size, burst amount) shot at three values on both renderers; every pair of values on an axis moves pixels on both, so no hidden floor, clamp or rounding can collapse two slider positions onto one picture, and every capture reads its setting back after Clamp(). Renderer-branching evidence, not art approval, linearity or a default change; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
     }
 
     private static void VerifyOptionPose(string outputDirectory)

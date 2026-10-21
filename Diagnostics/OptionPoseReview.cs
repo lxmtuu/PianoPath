@@ -104,7 +104,8 @@ internal static class OptionPoseReview
         var seconds = OptionMatrixPlan.Seconds(family);
         var pixels = CaptureGpu(renderer, pose, camera, family, settings);
         var relative = Path.Combine("option-pose", pose.Id, family.Id, $"{label}.png");
-        var sha = WritePng(Path.Combine(root, relative), pixels, $"{family.Id}/{value ?? "off"} in {pose.Id}");
+        var sha = ReviewPng.Write(Path.Combine(root, relative), pixels, Width, Height,
+            $"{family.Id}/{value ?? "off"} in {pose.Id}");
         return new Shot(pose.Id, family.Id, family.Setting, value ?? family.Neutral, neutral,
             relative.Replace('\\', '/'), sha, 0, seconds,
             new Counters(renderer.StageSpriteCount, renderer.ArParticleFxCount)) { PixelBytes = pixels };
@@ -149,40 +150,14 @@ internal static class OptionPoseReview
             OptionMatrixPlan.Seed);
     }
 
-    private static string WritePng(string path, byte[] pixels, string what)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        if (pixels.Length != Width * Height * 4)
-            throw new InvalidDataException($"{what} returned {pixels.Length} bytes; expected {Width}×{Height} BGRA.");
-        var source = BitmapSource.Create(Width, Height, 96, 96, PixelFormats.Bgra32, null, pixels, Width * 4);
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(source));
-        using (var stream = File.Create(path)) encoder.Save(stream);
-        // Hash the pixels as they decode back from the file, not the buffer the renderer held: the manifest has
-        // to name the picture a reviewer opens, and the encoder is allowed to treat alpha differently.
-        var decoded = DecodePixels(path);
-        return Convert.ToHexString(SHA256.HashData(decoded));
-    }
-
     private static void VerifyWrittenArtifacts(string root, IReadOnlyList<Shot> captures)
     {
         foreach (var capture in captures)
         {
-            var pixels = DecodePixels(Path.Combine(root, capture.File));
+            var pixels = ReviewPng.Decode(Path.Combine(root, capture.File), Width, Height);
             if (Convert.ToHexString(SHA256.HashData(pixels)) != capture.PixelSha256)
                 throw new InvalidDataException($"{capture.File} no longer decodes to the pixels the manifest names.");
         }
-    }
-
-    private static byte[] DecodePixels(string path)
-    {
-        using var stream = File.OpenRead(path);
-        var frame = PngBitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
-        if (frame.PixelWidth != Width || frame.PixelHeight != Height)
-            throw new InvalidDataException($"{Path.GetFileName(path)} is {frame.PixelWidth}×{frame.PixelHeight}, not {Width}×{Height}.");
-        var pixels = new byte[Width * Height * 4];
-        frame.CopyPixels(pixels, Width * 4, 0);
-        return pixels;
     }
 
     private static void WriteManifest(string root, string adapter, IReadOnlyList<HeldParticleControlPlan.View> poses,
