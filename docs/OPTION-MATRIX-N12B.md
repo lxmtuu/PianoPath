@@ -129,7 +129,10 @@ Chạy trên nhánh push thì cả hai chỉ lên artifact, không vào Git.
 - **Không** phủ AR ngoài lát N12(d) ở §8: ba pose đã hiệu chỉnh × (năm trục hiệu ứng vẽ vào ảnh camera, chất
   liệu nốt, trail và bốn lớp ambient); ở AR mỗi trục của phần 2 chỉ có **một** giá trị, phần còn lại của ma trận
   (các giá trị khác của nốt/ambient) vẫn chỉ có bằng chứng ở sân khấu phẳng.
-- **Không** phủ **giá trị số**: amount/speed/size/intensity/curve, seek/reset, round-trip preset.
+- **Không** phủ **hết giá trị số**: §9 chụp **chín** trục số ở ba mức mỗi trục trên cả hai renderer (54 ảnh),
+  nên nó chứng minh *ba mức đó* phân biệt được — không phải mọi mức của mọi slider, và không phủ các trục còn lại
+  (màu, hình học nốt, ambient, curve). §10 chứng minh look lưu rồi mở lại **không đổi một pixel**, không chứng minh
+  look đó đẹp hay preset nào đúng gu. `seek`/`reset` không được chụp ở đâu cả.
 - **Không** phủ smart modulator (`VelocityColor`, `OctaveColor`, `PedalGlow`, `TempoSync`, `AudioReactive`,
   `ZoneSplit`) hay theme graph.
 - **Không** phải hiệu năng: WARP trên runner, không phải GPU thật, không đo FPS.
@@ -173,104 +176,6 @@ giá trị morph lẫn **cả năm** kiểu release "được nhận nhưng khô
 
 Đổi lại: người dùng chọn Shatter với Sparks tắt giờ **thấy** shard (và bản ghi WPF khớp bản ghi GPU), còn ring
 morph/release sáng theo đúng slider của chúng thay vì theo slider wave.
-
-## 10. N12(f) — round-trip preset: look đã lưu phải là look mở lại
-
-Ba review trước đều dựng settings **trong bộ nhớ**. Một look mà người chơi lưu hôm nay và mở lại mai đi qua một
-con đường khác: `CopyFrom` vào settings đang sống → `WritePresetFile` ra tệp → `ReadPresetFile` đọc lại (kèm
-`ApplyMigrations` + `Clamp`) → `CopyFrom` lần nữa. Một thuộc tính mà tệp **không mang** (hoặc một migration viết
-lại) sẽ quay về mặc định, và look đổi hình sau khi mở lại — im lặng, không có ngoại lệ nào.
-
-`Diagnostics/PresetRoundTripReview.cs` (`--verify-preset-roundtrip-only`, artifact `preset-roundtrip-n12f`) đi
-đúng con đường đó cho **mọi preset đang ship** — 14 built-in + 6 tệp shelf, lấy từ `VisualPresets.BuiltIn` và
-`CommunityPresets.All` chứ không từ danh sách chép tay — và kiểm **ba** điều, đỏ ở cả ba:
-
-1. **Mọi thuộc tính ghi được** (255) của `PianoVisualSettings`, so bằng reflection và **không có danh sách bỏ
-   qua, cũng không có danh sách chỉ định**, phải giống nhau giữa settings đã ghi và settings **đọc lại từ tệp**;
-   lỗi **nêu đúng tên thuộc tính** và hai giá trị. Đây là phần phủ các trường mà cảnh được chụp không vẽ (burst,
-   wave, flash, morph, AR…): chỉ so ảnh sẽ không thấy chúng.
-2. Cùng phép so đó chạy lần nữa giữa settings đã ghi và settings **sau đường áp của dock**, nên một bước
-   `Clamp`/migration trên đường vào settings sống cũng bị bắt chứ không chỉ đường ra tệp.
-3. Khung hình **90 frame** của cảnh `Falling` phải **trùng từng byte** trên **cả WPF và D3D/WARP** trước và sau
-   vòng tệp — so byte thật, **không** dùng dung sai 2/255 của ma trận phẳng, vì ở đây hai bên phải dựng lại đúng
-   cùng một sân khấu chứ không phải "gần giống".
-
-⇒ **20 preset × 2 renderer = 40 ảnh lưu** (ảnh "trước"), **80 frame so sánh**; manifest ghi hash của **cả hai**
-khung, hash của ảnh đọc lại từ tệp, hash JSON settings trước **và** sau, `changed = 0`, `changedPixels = 0` và số
-thuộc tính đã so. Một cảnh là đủ vì lý do ở (1): trường bị rơi bị bắt bởi phép so thuộc tính dù cảnh có vẽ nó
-hay không.
-
-Phần áp preset trong review **chép đúng ba dòng** của `MainWindow.ApplyPreset` (copy với `keepBackgroundImage`,
-đặt `PresetName`/`PresetModified`, và luật "Image không có đường dẫn thì về Solid"); review ghi tệp **trực tiếp**
-bằng `WritePresetFile` chứ không qua `VisualPresetStore.Save`, vì `CopyFrom` không bao giờ chép trường riêng của
-máy (ngôn ngữ, GPU, camera, thiết bị âm thanh, hiệu chỉnh phím) — nên settings đang ghi đã ở đúng mặc định của
-máy này, và bước `ClearMachineLocal` của `Save` không đổi gì để mà kiểm. `scan_preset_roundtrip` đỏ nếu một
-trong ba dòng đó đổi ở dock mà review không đổi theo, nếu review bỏ `WritePresetFile`/`ReadPresetFile`, bỏ một
-trong hai phép so thuộc tính, nới dung sai khung hình khỏi 0, hoặc bỏ `ExpectedPresets = 20`.
-
-**Không chứng nhận:** không duyệt mỹ thuật; không phủ mọi phiên bản migration (chỉ cặp hiện tại) hay preset do
-người dùng tạo trên máy khác; không phải GPU thật, không đổi mặc định.
-
-**Lượt chạy đầu (2026-10-21):** run `39654999481` trên `f38574a` xanh toàn bộ — `static`, `test`,
-`keyboard-light` và `build`. Bước `Verification suite` mất **7 phút 06 giây**, chỉ **+57 giây** so với lượt
-N12(e) (6:09) dù thêm 20 preset × 4 lần dựng cảnh 90 frame = **7.200 khung hình**; bước đó chạy
-`--verify --verify-review-out=...` nên `VerifyPresetRoundTrip` nằm trong cùng `try` — một thuộc tính lệch, một
-khung lệch byte hay một preset thừa/thiếu đều làm bước **đỏ**, nên xanh nghĩa là cả 20 preset đã đi hết đường
-lưu/mở. Ảnh nằm trong artifact `preset-roundtrip-n12f` (chỉ upload ở `main` để không đội quota), nên trên nhánh
-bằng chứng là dòng `PASS preset round trip (N12(f))` trong `keyflow-verification-log`.
-
-**Sửa ngay trong lượt đầu:** bản đầu gọi `VisualPresets.WritePresetFile`/`ReadPresetFile`, nhưng hai hàm đó
-thuộc `VisualPresetStore`; run `39654504807` đỏ ở bước `Build` (kéo theo `keyboard-light`) trước khi chạy được
-gì. `f38574a` sửa đúng tên kiểu, và `scan_preset_roundtrip` bám theo cách gọi mới để vẫn đỏ khi review rời khỏi
-writer/reader của sản phẩm.
-
-## 9. N12(e) — trục số: hai mức slider không được ra cùng một khung hình
-
-Ma trận ở §2 chỉ chụp **giá trị rời rạc**: `ImpactWave = "Ripple"`, `NoteStyle = "Gem"`. Nó không nhìn thấy một
-slider, và slider che một lỗi khác hẳn: một ngưỡng/kẹp nằm trong **một** đường vẽ làm hai mức slider ra **cùng một
-khung hình**, trong khi mỗi mức vẫn khác ảnh "tắt" — nên một review chỉ so với baseline sẽ gọi nó là xanh. Sân
-khấu phần mềm đã có đúng lỗi đó: thanh giữ phím kẹp `Note width` ở 60, nên preset 30% vẽ thanh 60% trên WPF và
-thanh 30% trên engine (xem `docs/NOTE-EFFECTS-ACTION-PLAN.md` §3.2b).
-
-**Ma trận:** chín trục số, ba giá trị mỗi trục, mỗi giá trị chụp trên **WPF và D3D/WARP** ở 960×540, cùng cảnh,
-cùng seed (`--verify-option-numeric-only`, artifact `option-numeric-n12e`):
-
-| Trục | Setting | Cảnh | Giá trị | Vì sao ba mức đó |
-|---|---|---|---|---|
-| `note-width` | `NoteWidth` 30–100 | nốt rơi | 30 / 45 / 100 | 30 và 45 từng bị kẹp 60 ⇒ **trùng khung hình** trên WPF |
-| `bar-width` | `NoteWidth` 30–100 | **giữ phím** | 30 / 45 / 100 | chính thanh giữ phím — đường vẽ đã có lỗi |
-| `note-speed` | `NoteFallSpeed` 100–1000 | nốt rơi | 125 / 325 / 550 | 1000 px/s đã ra khỏi sân khấu trước mốc chụp, nên trục này là miễn trừ duy nhất của quy tắc "lấy đầu mút" (`EndpointExempt`) |
-| `trail-intensity` | `FallingTrailIntensity` 0–100 | nốt rơi | 0 / 50 / 100 | 0 = không vẽ, 50 ↔ 100 = gấp đôi độ sáng |
-| `wave-intensity` | `ImpactWaveIntensity` 0–150 | va chạm | 0 / 75 / 150 | 0 = ring vô hình, 75 ↔ 150 = gấp đôi |
-| `wave-size` | `RingSize` 0–100 | va chạm | 5 / 50 / 100 | bán kính đổi ⇒ hình học đổi |
-| `burst-amount` | `ParticleAmount` 0–120 | va chạm | 8 / 60 / 120 | số hạt đổi ⇒ khác **cấu trúc** |
-| `flash-intensity` | `ImpactFlashIntensity` 0–100 | va chạm | 0 / 50 / 100 | 0 = không flash |
-| `release-intensity` | `ReleaseIntensity` 0–100 | nhả phím | 0 / 50 / 100 | 0 = không vẽ, 50 ↔ 100 = gấp đôi |
-
-⇒ **27 cảnh × 2 renderer = 54 ảnh**.
-
-**Cổng:** mọi **cặp** giá trị trong một trục phải đổi **≥ 12 px** trên **cả hai** renderer (cùng ngưỡng với §2).
-Cộng thêm một bất biến chống "manifest nói dối": mỗi ảnh **đọc lại** setting sau `Clamp()` và lượt chạy đỏ nếu
-sản phẩm đã âm thầm đổi giá trị — nếu không, một giá trị ngoài khoảng slider sẽ được ghi dưới một mức nó chưa
-từng vẽ. Ảnh vẫn lấy sha256 **của pixel đọc lại từ tệp**.
-
-**Cảnh `Held` (mới):** `OptionMatrixPlan.Scene.Held` — nhấn ở khung 0 và **không nhả**, chụp ở 0,5 s. Đây là mốc
-duy nhất nhìn thấy thanh giữ phím; bốn cảnh cũ không có nó (Release nhả ở khung 8). Không family rời rạc nào dùng
-cảnh này nên ma trận §2 không đổi.
-
-**Dùng chung một đường render:** review gọi `OptionMatrixReview.CaptureWpf`/`CaptureGpu` (đã tách theo `Scene`)
-chứ không có vòng lặp riêng — hai bản sao của vòng lặp là cách hai review mô tả hai khung hình khác nhau.
-
-**Không chứng nhận:** không duyệt mỹ thuật, **không** chứng minh phản ứng tuyến tính hay đơn điệu (chỉ chứng minh
-hai mức khác nhau *khác ảnh*), không phủ AR (N12(d)), không phải GPU thật/khung hình thật, không đổi mặc định hay
-preset.
-
-**Lượt chạy đầu (2026-10-21):** run `39641339707` trên `4cde7a5` xanh toàn bộ — `Verification suite` render đủ
-**54 ảnh** và **cả 27 cặp** qua ngưỡng 12 px trên **cả WPF và WARP**, gồm cặp 30 ↔ 45 của `Note width` (cặp mà
-ngưỡng 60 cũ biến thành một khung hình duy nhất). Dòng `PASS numeric option review (N12(e))` trong log in thêm
-**cặp sát ngưỡng nhất** của từng trục trên từng renderer, nên không cần mở artifact mới biết cổng cách ngưỡng bao
-xa; log nằm trong artifact `keyflow-verification-log` (upload mọi lượt chạy), còn ảnh nằm trong
-`option-numeric-n12e` (chỉ upload ở `main` để không đội quota).
 
 ## 8. N12(d) — cùng option đó qua ba pose AR
 
@@ -327,3 +232,103 @@ chạy `--verify --verify-review-out=...`, và trong mã `VerifyOptionPose` đò
 rồi so **từng pose** với cổng 12 px, nên xanh nghĩa là **cả sáu family của phần 2 — kể cả chất liệu nốt và trail —
 đều đổi đủ pixel qua cả ba pose AR**, không phải chỉ một pose. Log nằm trong `keyflow-verification-log` (máy này
 không tải được artifact — blob trả `EOF` — nên bằng chứng đọc từ kết luận job + assert trong mã).
+
+## 9. N12(e) — trục số: hai mức slider không được ra cùng một khung hình
+
+Ma trận ở §2 chỉ chụp **giá trị rời rạc**: `ImpactWave = "Ripple"`, `NoteStyle = "Gem"`. Nó không nhìn thấy một
+slider, và slider che một lỗi khác hẳn: một ngưỡng/kẹp nằm trong **một** đường vẽ làm hai mức slider ra **cùng một
+khung hình**, trong khi mỗi mức vẫn khác ảnh "tắt" — nên một review chỉ so với baseline sẽ gọi nó là xanh. Sân
+khấu phần mềm đã có đúng lỗi đó: thanh giữ phím kẹp `Note width` ở 60, nên preset 30% vẽ thanh 60% trên WPF và
+thanh 30% trên engine (xem `docs/NOTE-EFFECTS-ACTION-PLAN.md` §3.2b).
+
+**Ma trận:** chín trục số, ba giá trị mỗi trục, mỗi giá trị chụp trên **WPF và D3D/WARP** ở 960×540, cùng cảnh,
+cùng seed (`--verify-option-numeric-only`, artifact `option-numeric-n12e`):
+
+| Trục | Setting | Cảnh | Giá trị | Vì sao ba mức đó |
+|---|---|---|---|---|
+| `note-width` | `NoteWidth` 30–100 | nốt rơi | 30 / 45 / 100 | 30 và 45 từng bị kẹp 60 ⇒ **trùng khung hình** trên WPF |
+| `bar-width` | `NoteWidth` 30–100 | **giữ phím** | 30 / 45 / 100 | chính thanh giữ phím — đường vẽ đã có lỗi |
+| `note-speed` | `NoteFallSpeed` 100–1000 | nốt rơi | 125 / 325 / 550 | 1000 px/s đã ra khỏi sân khấu trước mốc chụp, nên trục này là miễn trừ duy nhất của quy tắc "lấy đầu mút" (`EndpointExempt`) |
+| `trail-intensity` | `FallingTrailIntensity` 0–100 | nốt rơi | 0 / 50 / 100 | 0 = không vẽ, 50 ↔ 100 = gấp đôi độ sáng |
+| `wave-intensity` | `ImpactWaveIntensity` 0–150 | va chạm | 0 / 75 / 150 | 0 = ring vô hình, 75 ↔ 150 = gấp đôi |
+| `wave-size` | `RingSize` 0–100 | va chạm | 5 / 50 / 100 | bán kính đổi ⇒ hình học đổi |
+| `burst-amount` | `ParticleAmount` 0–120 | va chạm | 8 / 60 / 120 | số hạt đổi ⇒ khác **cấu trúc** |
+| `flash-intensity` | `ImpactFlashIntensity` 0–100 | va chạm | 0 / 50 / 100 | 0 = không flash |
+| `release-intensity` | `ReleaseIntensity` 0–100 | nhả phím | 0 / 50 / 100 | 0 = không vẽ, 50 ↔ 100 = gấp đôi |
+
+⇒ **27 cảnh × 2 renderer = 54 ảnh**.
+
+**Cổng:** mọi **cặp** giá trị trong một trục phải đổi **≥ 12 px** trên **cả hai** renderer (cùng ngưỡng với §2).
+Cộng thêm một bất biến chống "manifest nói dối": mỗi ảnh **đọc lại** setting sau `Clamp()` và lượt chạy đỏ nếu
+sản phẩm đã âm thầm đổi giá trị — nếu không, một giá trị ngoài khoảng slider sẽ được ghi dưới một mức nó chưa
+từng vẽ. Ảnh vẫn lấy sha256 **của pixel đọc lại từ tệp**.
+
+**Cảnh `Held` (mới):** `OptionMatrixPlan.Scene.Held` — nhấn ở khung 0 và **không nhả**, chụp ở 0,5 s. Đây là mốc
+duy nhất nhìn thấy thanh giữ phím; bốn cảnh cũ không có nó (Release nhả ở khung 8). Không family rời rạc nào dùng
+cảnh này nên ma trận §2 không đổi.
+
+**Dùng chung một đường render:** review gọi `OptionMatrixReview.CaptureWpf`/`CaptureGpu` (đã tách theo `Scene`)
+chứ không có vòng lặp riêng — hai bản sao của vòng lặp là cách hai review mô tả hai khung hình khác nhau.
+
+**Không chứng nhận:** không duyệt mỹ thuật, **không** chứng minh phản ứng tuyến tính hay đơn điệu (chỉ chứng minh
+hai mức khác nhau *khác ảnh*), không phủ AR (N12(d)), không phải GPU thật/khung hình thật, không đổi mặc định hay
+preset.
+
+**Lượt chạy đầu (2026-10-21):** run `39641339707` trên `4cde7a5` xanh toàn bộ — `Verification suite` render đủ
+**54 ảnh** và **cả 27 cặp** qua ngưỡng 12 px trên **cả WPF và WARP**, gồm cặp 30 ↔ 45 của `Note width` (cặp mà
+ngưỡng 60 cũ biến thành một khung hình duy nhất). Dòng `PASS numeric option review (N12(e))` trong log in thêm
+**cặp sát ngưỡng nhất** của từng trục trên từng renderer, nên không cần mở artifact mới biết cổng cách ngưỡng bao
+xa; log nằm trong artifact `keyflow-verification-log` (upload mọi lượt chạy), còn ảnh nằm trong
+`option-numeric-n12e` (chỉ upload ở `main` để không đội quota).
+
+
+## 10. N12(f) — round-trip preset: look đã lưu phải là look mở lại
+
+Ba review trước đều dựng settings **trong bộ nhớ**. Một look mà người chơi lưu hôm nay và mở lại mai đi qua một
+con đường khác: `CopyFrom` vào settings đang sống → `WritePresetFile` ra tệp → `ReadPresetFile` đọc lại (kèm
+`ApplyMigrations` + `Clamp`) → `CopyFrom` lần nữa. Một thuộc tính mà tệp **không mang** (hoặc một migration viết
+lại) sẽ quay về mặc định, và look đổi hình sau khi mở lại — im lặng, không có ngoại lệ nào.
+
+`Diagnostics/PresetRoundTripReview.cs` (`--verify-preset-roundtrip-only`, artifact `preset-roundtrip-n12f`) đi
+đúng con đường đó cho **mọi preset đang ship** — 14 built-in + 6 tệp shelf, lấy từ `VisualPresets.BuiltIn` và
+`CommunityPresets.All` chứ không từ danh sách chép tay — và kiểm **ba** điều, đỏ ở cả ba:
+
+1. **Mọi thuộc tính ghi được** (255) của `PianoVisualSettings`, so bằng reflection và **không có danh sách bỏ
+   qua, cũng không có danh sách chỉ định**, phải giống nhau giữa settings đã ghi và settings **đọc lại từ tệp**;
+   lỗi **nêu đúng tên thuộc tính** và hai giá trị. Đây là phần phủ các trường mà cảnh được chụp không vẽ (burst,
+   wave, flash, morph, AR…): chỉ so ảnh sẽ không thấy chúng.
+2. Cùng phép so đó chạy lần nữa giữa settings đã ghi và settings **sau đường áp của dock**, nên một bước
+   `Clamp`/migration trên đường vào settings sống cũng bị bắt chứ không chỉ đường ra tệp.
+3. Khung hình **90 frame** của cảnh `Falling` phải **trùng từng byte** trên **cả WPF và D3D/WARP** trước và sau
+   vòng tệp — so byte thật, **không** dùng dung sai 2/255 của ma trận phẳng, vì ở đây hai bên phải dựng lại đúng
+   cùng một sân khấu chứ không phải "gần giống".
+
+⇒ **20 preset × 2 renderer = 40 ảnh lưu** (ảnh "trước"), **80 frame so sánh**; manifest ghi hash của **cả hai**
+khung, hash của ảnh đọc lại từ tệp, hash JSON settings trước **và** sau, `changed = 0`, `changedPixels = 0` và số
+thuộc tính đã so. Một cảnh là đủ vì lý do ở (1): trường bị rơi bị bắt bởi phép so thuộc tính dù cảnh có vẽ nó
+hay không.
+
+Phần áp preset trong review **chép đúng ba dòng** của `MainWindow.ApplyPreset` (copy với `keepBackgroundImage`,
+đặt `PresetName`/`PresetModified`, và luật "Image không có đường dẫn thì về Solid"); review ghi tệp **trực tiếp**
+bằng `WritePresetFile` chứ không qua `VisualPresetStore.Save`, vì `CopyFrom` không bao giờ chép trường riêng của
+máy (ngôn ngữ, GPU, camera, thiết bị âm thanh, hiệu chỉnh phím) — nên settings đang ghi đã ở đúng mặc định của
+máy này, và bước `ClearMachineLocal` của `Save` không đổi gì để mà kiểm. `scan_preset_roundtrip` đỏ nếu một
+trong ba dòng đó đổi ở dock mà review không đổi theo, nếu review bỏ `WritePresetFile`/`ReadPresetFile`, bỏ một
+trong hai phép so thuộc tính, nới dung sai khung hình khỏi 0, hoặc bỏ `ExpectedPresets = 20`.
+
+**Không chứng nhận:** không duyệt mỹ thuật; không phủ mọi phiên bản migration (chỉ cặp hiện tại) hay preset do
+người dùng tạo trên máy khác; không phải GPU thật, không đổi mặc định.
+
+**Lượt chạy đầu (2026-10-21):** run `39654999481` trên `f38574a` xanh toàn bộ — `static`, `test`,
+`keyboard-light` và `build`. Bước `Verification suite` mất **7 phút 06 giây**, chỉ **+57 giây** so với lượt
+N12(e) (6:09) dù thêm 20 preset × 4 lần dựng cảnh 90 frame = **7.200 khung hình**; bước đó chạy
+`--verify --verify-review-out=...` nên `VerifyPresetRoundTrip` nằm trong cùng `try` — một thuộc tính lệch, một
+khung lệch byte hay một preset thừa/thiếu đều làm bước **đỏ**, nên xanh nghĩa là cả 20 preset đã đi hết đường
+lưu/mở. Ảnh nằm trong artifact `preset-roundtrip-n12f` (chỉ upload ở `main` để không đội quota), nên trên nhánh
+bằng chứng là dòng `PASS preset round trip (N12(f))` trong `keyflow-verification-log`.
+
+**Sửa ngay trong lượt đầu:** bản đầu gọi `VisualPresets.WritePresetFile`/`ReadPresetFile`, nhưng hai hàm đó
+thuộc `VisualPresetStore`; run `39654504807` đỏ ở bước `Build` (kéo theo `keyboard-light`) trước khi chạy được
+gì. `f38574a` sửa đúng tên kiểu, và `scan_preset_roundtrip` bám theo cách gọi mới để vẫn đỏ khi review rời khỏi
+writer/reader của sản phẩm.
+
