@@ -211,6 +211,13 @@ chứ không có vòng lặp riêng — hai bản sao của vòng lặp là các
 hai mức khác nhau *khác ảnh*), không phủ AR (N12(d)), không phải GPU thật/khung hình thật, không đổi mặc định hay
 preset.
 
+**Lượt chạy đầu (2026-10-21):** run `39641339707` trên `4cde7a5` xanh toàn bộ — `Verification suite` render đủ
+**54 ảnh** và **cả 27 cặp** qua ngưỡng 12 px trên **cả WPF và WARP**, gồm cặp 30 ↔ 45 của `Note width` (cặp mà
+ngưỡng 60 cũ biến thành một khung hình duy nhất). Dòng `PASS numeric option review (N12(e))` trong log in thêm
+**cặp sát ngưỡng nhất** của từng trục trên từng renderer, nên không cần mở artifact mới biết cổng cách ngưỡng bao
+xa; log nằm trong artifact `keyflow-verification-log` (upload mọi lượt chạy), còn ảnh nằm trong
+`option-numeric-n12e` (chỉ upload ở `main` để không đội quota).
+
 ## 8. N12(d), phần 1 — cùng option đó qua ba pose AR
 
 Ma trận ở mục 2 chỉ chạy renderer sân khấu. Một option có thể vẽ đúng ở đó mà **không** đi qua đường chiếu AR —
