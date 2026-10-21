@@ -131,11 +131,11 @@ public class OptionMatrixPlanTests
     }
 
     [Fact]
-    public void The_second_ar_slice_covers_the_ambient_layers_without_repeating_part_one()
+    public void The_second_ar_slice_covers_the_note_and_ambient_axes_without_repeating_part_one()
     {
-        Assert.Equal(4, OptionMatrixPlan.PoseSliceSelections.Count);
-        // One row per family: a family that appeared twice would be compared against an off state it cannot
-        // tell apart from its own sibling.
+        Assert.Equal(6, OptionMatrixPlan.PoseSliceSelections.Count);
+        // One row per family: a family shot twice would be compared against an off state it cannot tell apart
+        // from its own sibling.
         Assert.Equal(OptionMatrixPlan.PoseSliceSelections.Count,
             OptionMatrixPlan.PoseSliceSelections.Select(selection => selection.Family).Distinct(StringComparer.Ordinal).Count());
         foreach (var (id, value) in OptionMatrixPlan.PoseSliceSelections)
@@ -145,16 +145,41 @@ public class OptionMatrixPlanTests
             Assert.NotEqual(family.Neutral, value);
             Assert.Contains(value, OptionMatrixPlan.CapturedValues(family));
         }
-        // Part 2 is the four ambient layers and nothing else: the note material and the trail cannot be shot in
-        // this fixture (a note in flight sits key-depths behind its key, outside the calibrated frame), and part
-        // 1's five effect axes must not leak in.
+        // Part 2 is exactly the rest of what the overlay draws: the two song-note axes and the four ambient
+        // layers. Part 1's five effect axes must not leak in.
         var settings = OptionMatrixPlan.PoseSliceSelections.Select(selection => OptionMatrixPlan.PoseFamily(selection.Family).Setting).ToArray();
-        Assert.Equal(new[] { "AmbientEnergy", "AmbientNature", "AmbientLight", "AmbientCosmic" }, settings);
+        Assert.Equal(new[] { "NoteStyle", "FallingTrail", "AmbientEnergy", "AmbientNature", "AmbientLight", "AmbientCosmic" }, settings);
         var partOne = OptionMatrixPlan.PoseSelections.Select(selection => selection.Family).ToHashSet(StringComparer.Ordinal);
         Assert.All(OptionMatrixPlan.PoseSliceSelections, selection => Assert.DoesNotContain(selection.Family, partOne));
-        // The ambient axes need the empty scene: a scene with a note in it would compare the note, not the layer.
-        Assert.All(OptionMatrixPlan.PoseSliceSelections,
+        // The note axes keep their family's own scene; the ambient axes need the empty one, because a scene with a
+        // note in it would compare the note rather than the layer.
+        Assert.Equal(OptionMatrixPlan.Scene.Falling, OptionMatrixPlan.PoseFamily("note-style").Scene);
+        Assert.Equal(OptionMatrixPlan.Scene.Falling, OptionMatrixPlan.PoseFamily("falling-trail").Scene);
+        Assert.All(OptionMatrixPlan.PoseSliceSelections.Where(selection => selection.Family.StartsWith("ambient-", StringComparison.Ordinal)),
             selection => Assert.Equal(OptionMatrixPlan.Scene.Ambient, OptionMatrixPlan.PoseFamily(selection.Family).Scene));
+    }
+
+    [Fact]
+    public void The_falling_scene_note_is_still_inside_the_calibrated_picture()
+    {
+        // The note axes of the AR/pose slice are shot at the Falling scene, which only works while the note's
+        // visible body is close enough to the keys to be inside a picture calibrated around the keyboard. The
+        // projection clamps the leading edge at the key plane and shortens the tail by however long the note has
+        // been sounding, so the body is the part still above the keys, not the whole two seconds of note.
+        var style = ArNoteStyle.Default;
+        var note = Assert.Single(OptionMatrixPlan.Notes(OptionMatrixPlan.Scene.Falling));
+        var position = OptionMatrixPlan.Seconds(OptionMatrixPlan.Scene.Falling);
+        Assert.True(note.Start < position, "the sampled note has to have begun, or the body would start above the picture");
+        var signedHead = (note.Start - position) * style.FallSpeed;
+        var head = Math.Max(0, signedHead);
+        var natural = Math.Max(note.Duration * style.FallSpeed - style.Gap, style.MinLength);
+        var tail = Math.Min(Math.Max(signedHead + natural, head), style.Reach);
+        Assert.Equal(OptionMatrixPlan.FallingSceneNoteHeadDepth, head, 6);
+        Assert.Equal(OptionMatrixPlan.FallingSceneNoteTailDepth, tail, 6);
+        // A body of zero or negative length would draw nothing; a body past the reach would have been clipped and
+        // the capture would show a different note than the one this test describes.
+        Assert.True(tail > head + .1, "the scene's note must have a body above the keys at the capture");
+        Assert.True(tail < style.Reach, "the body has to be the note's real tail, not one clipped by the reach");
     }
 
     [Fact]

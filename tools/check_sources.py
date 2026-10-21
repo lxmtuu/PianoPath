@@ -1488,19 +1488,18 @@ def scan_option_pose():
     # the same off state, so the one-row-per-family rule belongs to part 2 only.
     part_one, problems = rows("PoseSelections", 5, "part 1 (the five effect axes drawn into the camera image)", False)
     errors.extend(problems)
-    part_two, problems = rows("PoseSliceSelections", 4, "part 2 (the four ambient layers emitted over the camera picture)", True)
+    part_two, problems = rows("PoseSliceSelections", 6, "part 2 (the note material, the trail and the four ambient layers)", True)
     errors.extend(problems)
     if part_one and part_two:
         overlap = {family_id for family_id, _ in part_one} & {family_id for family_id, _ in part_two}
         if overlap:
             errors.append(f"Diagnostics/OptionMatrixPlan.cs shoots {sorted(overlap)} in both AR parts; part 2 is the "
                           "rest of the option surface, not a second look at part 1")
-        expected_settings = {"AmbientEnergy", "AmbientNature", "AmbientLight", "AmbientCosmic"}
+        expected_settings = {"NoteStyle", "FallingTrail", "AmbientEnergy", "AmbientNature", "AmbientLight", "AmbientCosmic"}
         covered = {families[family_id][0] for family_id, _ in part_two if family_id in families}
         if covered != expected_settings:
             errors.append(f"Diagnostics/OptionMatrixPlan.cs part 2 covers {sorted(covered)}; it has to cover exactly "
-                          f"{sorted(expected_settings)} — the four ambient layers, the only option family this "
-                          "fixture can see drawn over the camera picture")
+                          f"{sorted(expected_settings)} — the two song-note axes and the four ambient layers")
 
     # The review: three calibrated poses, the shared floor and count, and one capture driver.
     if "HeldParticleControlPlan.Views.Where(view => view.OverCamera)" not in review or "poses.Length != 3" not in review:
@@ -1521,14 +1520,14 @@ def scan_option_pose():
         if counts["ExpectedPart1"].group(1).strip() != "27":
             errors.append("Diagnostics/OptionPoseReview.cs part 1 is no longer the 27 captures of three poses times "
                           "(four off states and five values); update it with the docs and the suite")
-        if counts["ExpectedPart2"].group(1).strip() != "24":
-            errors.append("Diagnostics/OptionPoseReview.cs part 2 is no longer the 24 captures of three poses times "
-                          "four ambient layers off and on; update it with the docs and the suite")
+        if counts["ExpectedPart2"].group(1).strip() != "36":
+            errors.append("Diagnostics/OptionPoseReview.cs part 2 is no longer the 36 captures of three poses times "
+                          "six families off and on; update it with the docs and the suite")
     if part_one and part_two:
         rows_per_pose = len({family_id for family_id, _ in part_one}) + len(part_one) + 2 * len(part_two)
-        if 3 * rows_per_pose != 51:
+        if 3 * rows_per_pose != 63:
             errors.append(f"Diagnostics/OptionPoseReview.cs would write {3 * rows_per_pose} captures for the rows it "
-                          "shoots, not the 51 the suite asserts")
+                          "shoots, not the 63 the suite asserts")
     if "OptionMatrixReview.Settings(" not in review or "OptionMatrixPlan.ChangedPixels(" not in review:
         errors.append("Diagnostics/OptionPoseReview.cs no longer shares the flat matrix's settings builder and pixel "
                       "comparison; two copies would describe two different frames")
@@ -1538,12 +1537,12 @@ def scan_option_pose():
     if '"--verify-option-pose-only"' not in suite or "OptionPoseReview.Render(" not in suite:
         errors.append("Diagnostics/VerificationSuite.cs lost the --verify-option-pose-only route or stopped calling "
                       "OptionPoseReview.Render")
-    if "captures == 51" not in suite:
-        errors.append("Diagnostics/VerificationSuite.cs no longer asserts the 51 AR/pose captures")
+    if "captures == 63" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs no longer asserts the 63 AR/pose captures")
     for name in ("README.md", "README.en.md"):
         readme = ROOT / name
-        if readme.exists() and "51 captures" not in readme.read_text(encoding="utf-8"):
-            errors.append(f"{name}: the --verify-option-pose-only row no longer states the 51 captures, so the "
+        if readme.exists() and "63 captures" not in readme.read_text(encoding="utf-8"):
+            errors.append(f"{name}: the --verify-option-pose-only row no longer states the 63 captures, so the "
                           "documented size of the AR/pose slice has drifted from the review")
     return errors
 

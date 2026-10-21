@@ -280,25 +280,32 @@ ring thành quad, flash thành billboard, shard bị xoay theo nốt — và kh�
 `Diagnostics/OptionPoseReview.cs` (route `--verify-option-pose-only`, artifact `option-pose-n12d`) chụp từng trục
 hai lần — **tắt** và **bật** — ở cùng pose, cùng input, cùng seed; ba pose là ba pose đã hiệu chỉnh sẵn của review
 hạt giữ phím (`HeldParticleControlPlan.Views`: reference, oblique, near-overhead), nên không thêm fixture camera
-hay tuyên bố pose mới. Hai phần cộng lại thành **51 ảnh WARP 1280×720**:
+hay tuyên bố pose mới. Hai phần cộng lại thành **63 ảnh WARP 1280×720**:
 
 - **Phần 1 (27 ảnh)** — năm trục mà nghệ thuật của chúng nằm **trong ảnh camera**: wave, burst, hai kênh morph
   (hạt và flash) và vòng release. Mỗi pose: bốn ảnh tắt + năm ảnh giá trị; hai giá trị của morph dùng chung một
   ảnh tắt vì chúng là hai kênh của cùng một nhà.
-- **Phần 2 (24 ảnh)** — **bốn lớp ambient** (`Laser Beams`, `Aurora`, `Color Splash`, `Galaxy`), thứ mà lớp phủ
-  phát ở không gian màn hình rồi đè lên ảnh camera: nằm trong khung hình bằng cách xây dựng, không phụ thuộc phép
-  chiếu. Mỗi pose: bốn cặp tắt/bật.
+- **Phần 2 (36 ảnh)** — phần còn lại mà lớp phủ AR vẽ được: **chất liệu nốt** (`Gem`) và **trail** (`Ribbon`), thứ
+  đi qua đường dựng mảng chiếu 3D chứ không phải sprite sân khấu, cùng **bốn lớp ambient** (`Laser Beams`,
+  `Aurora`, `Color Splash`, `Galaxy`) vốn được phát ở không gian màn hình rồi đè lên ảnh camera. Mỗi pose: sáu cặp
+  tắt/bật.
 
-**Vì sao không chụp trục nốt/trail ở đây** (và đó là lý do phần 2 chỉ có ambient): một nốt đang bay **không** nằm
-ở phím của nó. Đường camera đặt tâm nốt ở `(head + tail) / 2` độ sâu phím dọc theo vector bay; với
-`ArNoteStyle.Default` (rơi 1,5; tầm 4) và nốt 2 giây của cảnh mẫu, head cách phím **0,75** và tail **3,75** độ
-sâu phím, nên tâm nốt ở **2,25** độ sâu phím *phía sau* phím — còn trail treo ở đầu tail, xa hơn nữa. Fixture
-của review (`docs/samples/ar-keyboard-topdown.png`) hiệu chỉnh quanh đúng bàn phím: khung hình không có chỗ cho
-vùng đó, nên ảnh chụp ở đó sẽ đo **fixture**, không đo option. Muốn chứng minh chất liệu nốt và trail đi qua phép
-chiếu AR phải có **camera rộng hơn** (một fixture mới, khung bao vùng sau phím) — việc đó nằm trong danh sách còn
-lại, không phải một dòng trong bảng ở trên. Con số này lấy từ mã, không phải ước lượng: `Ar3DNoteProjection.Build`
-tính `headDistance = max(0, (start − position) × fall)`, `tailDistance = head + duration × fall − gap`, và
-`TryPatch` đặt `centreDistance = (headDistance + tailDistance) / 2`.
+**Vì sao nốt/trail nằm trong khung hình** (và đây là chỗ một bản trước của tài liệu này đã ghi **sai**): không
+phải `head + duration × fall`. `Ar3DNoteProjection.Build` kẹp đầu nốt ở mặt phím
+(`head = max(0, (start − position) × fall)`) và tính đuôi từ **vị trí chưa kẹp**
+(`tail = max((start − position) × fall + duration × fall − gap, head)`). Nốt của cảnh `Falling` bắt đầu ở 0 và vẫn
+đang ngân ở mốc chụp 1,5 s, nên phần **nhìn thấy được** chỉ là phần còn nằm trên phím: **head 0** và **tail 0,735**
+độ sâu phím phía sau mặt phím — không phải 3,75 như bản trước viết, và tâm nốt ở **0,37** chứ không phải 2,25.
+Trail chạy từ 0,735 tới `min(reach, tail + max(0,08; thân × 0,55 + 0,08))` ≈ **1,22** độ sâu phím. Toàn bộ vùng đó
+nằm **phía trên mép sau bàn phím**, đúng chỗ fixture (`docs/samples/ar-keyboard-topdown.png`, các góc hiệu chỉnh
+ở `y ≈ 268–292` cho mép sau) có nền trời/tường — nên nốt và trail đều vào khung. Con số được ghim bằng test
+(`The_falling_scene_note_is_still_inside_the_calibrated_picture`) đọc chính công thức trên qua
+`ArNoteStyle.Default`, nên đổi tốc độ rơi hay độ dài nốt sẽ đỏ trên Linux trước khi runner kịp dựng ảnh.
+
+**Bản sửa:** mục này từng kết luận "không chụp được nốt/trail vì nốt nằm 2,25 độ sâu phím phía sau" và để phần 2
+chỉ có ambient (51 ảnh, run `39666230753` xanh). Kết luận đó sai vì bỏ qua việc head bị kẹp về 0; đọc lại mã cho
+ra 0,37/0,735, tức là **trong** khung. Hình dạng đúng là 63 ảnh như trên; con số 51 chỉ còn là lịch sử của một
+lượt chạy.
 
 Cổng cho **cả hai** phần: mỗi giá trị phải đổi **≥ 12 px** so với ảnh tắt **ở từng pose** — cùng ngưỡng với ma
 trận phẳng. Nếu một option chỉ có nhánh ở sân khấu, lượt chạy đỏ ngay tại pose đầu tiên và câu lỗi nêu đúng pose
@@ -307,14 +314,7 @@ cặp; `scan_option_pose` giữ hai phần **rời nhau** (một family không �
 phần 2), giữ mọi giá trị là giá trị sản phẩm và khác giá trị trung tính, và giữ 27 + 36 = 63 khớp với suite.
 
 **Không chứng nhận:** ảnh tĩnh, không phải clip; mỗi trục chỉ một giá trị ở phần 2 (câu hỏi "*mọi* giá trị của
-ambient có đi qua AR không" vẫn do ma trận phẳng trả lời ở sân khấu); sai số chiếu ảnh hưởng mọi giá trị của một
-trục như nhau; **chưa** phủ che tay (N10), camera thật hay GPU thật.
-
-**Lượt chạy đầu (2026-10-21):** run `39666230753` trên `4b39ae8` xanh toàn bộ — `static`, `test`,
-`keyboard-light`, `build` (installer + preview). Bước `Verification suite` mất **7 phút 39 giây**, chỉ **+33
-giây** so với lượt N12(f) (7:06) dù thêm 24 lần dựng cảnh 90 frame ở 1280×720 (~1,4 s mỗi lần); bước đó chạy
-`--verify --verify-review-out=...` nên `VerifyOptionPose` nằm trong cùng `try`, và cổng 12 px chạy cho **từng
-pose** trên cả 51 ảnh — xanh nghĩa là **bốn lớp ambient đều vẽ qua cả ba pose AR**, không phải chỉ một pose.
-`scan_option_pose` đã được mutation-test cục bộ: đổi một giá trị thành giá trị không có trong sản phẩm, chụp đúng
-giá trị trung tính, để một family xuất hiện hai lần ở phần 2, để family của phần 1 lọt vào phần 2, hạ ngưỡng
-xuống 8 px và sửa `ExpectedPart2` — cả sáu đều đỏ.
+ambient hay của chất liệu nốt có đi qua AR không" vẫn do ma trận phẳng trả lời ở sân khấu); nốt chỉ được chụp ở
+một mốc — 1,5 s của cảnh `Falling`, khi đầu nốt đã ở mặt phím và chỉ còn thân nằm trên phím — nên không chứng minh
+mọi khoảng cách tới phím; sai số chiếu ảnh hưởng mọi giá trị của một trục như nhau; **chưa** phủ che tay (N10),
+camera thật hay GPU thật.

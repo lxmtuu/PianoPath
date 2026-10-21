@@ -15,12 +15,11 @@ namespace PianoPath;
 /// <para>
 /// Part 1 is the art drawn <em>into the camera image</em> — the impact wave, the impact burst, the two morph
 /// channels and the release ring, where a ring becomes a quad, a flash becomes a billboard and a shard is
-/// re-aimed along the note. Part 2 is the four ambient layers, which the overlay emits in screen space over the
-/// camera picture (and which part 1 never touches). Both parts hold the camera and the input fixed and change one
+/// re-aimed along the note. Part 2 is the rest the overlay draws: the note material and the falling trail, built as
+/// projected patches (the sampled note is still sounding, so its visible body is 0–0.735 key-depths behind the key
+/// plane and its trail reaches about 1.22 — above the keyboard's back edge, inside the picture), and the four
+/// ambient layers, emitted screen space over it. Both parts hold the camera and the input fixed and change one
 /// option, exactly like the flat matrix, so a zero-pixel result means the AR layer never drew the option at all.
-/// The song-note axes are not shot here on purpose: a note in flight sits up to four key-depths behind its key,
-/// outside a frame that is calibrated around the keyboard itself — <see cref="OptionMatrixPlan.PoseSliceSelections"/>
-/// records the numbers.
 /// </para>
 ///
 /// <para>
@@ -37,8 +36,8 @@ internal static class OptionPoseReview
     private static readonly IReadOnlySet<int> NoPressed = new HashSet<int>();
     /// <summary>3 poses × (4 off states + 5 values; the morph axis has two values).</summary>
     private const int ExpectedPart1 = 27;
-    /// <summary>3 poses × 4 ambient layers × (one off state + one value).</summary>
-    private const int ExpectedPart2 = 24;
+    /// <summary>3 poses × 6 families × (one off state + one value): the note material, the trail, four ambient layers.</summary>
+    private const int ExpectedPart2 = 36;
     private const int ExpectedCaptures = ExpectedPart1 + ExpectedPart2;
 
     private sealed record Counters(int Sprites, int ArParticles);
@@ -186,8 +185,8 @@ internal static class OptionPoseReview
         File.WriteAllText(Path.Combine(root, "manifest.json"), JsonSerializer.Serialize(new
         {
             schema = 1,
-            claim = "N12(d): the option surface this fixture can see in AR is re-shot through the three calibrated AR poses against its own off state at the same pose, input and seed — part 1 the five effects drawn into the camera image, part 2 the four ambient layers emitted screen-space over the picture.",
-            notClaimed = "No art, hardware, real-camera, occlusion, hand-occlusion or default change; each axis is shot at one value on both sides, so this proves the option reaches the projection, not that every value does. The note material and the projected trail are not shot at all: a note in flight sits up to four key-depths behind its key, outside a frame calibrated around the keyboard itself.",
+            claim = "N12(d): every option the overlay draws is re-shot through the three calibrated AR poses against its own off state at the same pose, input and seed — part 1 the five effects drawn into the camera image, part 2 the note material and the falling trail as projected patches plus the four ambient layers emitted screen-space over the picture.",
+            notClaimed = "No art, hardware, real-camera, occlusion, hand-occlusion or default change; each axis is shot at one value on both sides, so this proves the option reaches the projection, not that every value does. The note axes are shot at one moment of the note's flight, so this does not claim every distance from the key plane.",
             renderer = "GPU-WARP", adapter,
             width = Width, height = Height, fps = OptionMatrixPlan.Fps, seed = OptionMatrixPlan.Seed,
             pitch = OptionMatrixPlan.Pitch, strength = OptionMatrixPlan.Strength,
@@ -229,16 +228,15 @@ internal static class OptionPoseReview
             .Append(".row{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}</style>")
             .Append("<h1>Ma trận option × pose AR (N12(d))</h1><p>Mỗi option được chụp hai lần — <b>tắt</b> và <b>bật</b> — ")
             .Append("ở cùng pose, cùng input, cùng seed trên WARP, ảnh native 1280×720, không cắt, không ghép. Phần 1 là năm ")
-            .Append("trục hiệu ứng được vẽ <em>vào</em> ảnh camera; phần 2 là bốn lớp ambient mà lớp phủ phát ở không gian màn ")
-            .Append("hình rồi đè lên ảnh. Đây là bằng chứng renderer có nhánh cho từng option ở cả ba pose — không phải nghiệm ")
-            .Append("thu mỹ thuật, hardware hay camera thật. Chất liệu nốt và trail <b>không</b> có ở đây: một nốt đang bay nằm ")
-            .Append("tới bốn độ sâu phím phía sau phím của nó, ngoài khung đã hiệu chỉnh quanh bàn phím.</p>");
+            .Append("trục hiệu ứng được vẽ <em>vào</em> ảnh camera; phần 2 là chất liệu nốt và trail dựng thành mảng chiếu ")
+            .Append("cùng bốn lớp ambient mà lớp phủ phát ở không gian màn hình rồi đè lên ảnh. Đây là bằng chứng renderer có ")
+            .Append("nhánh cho từng option ở cả ba pose — không phải nghiệm thu mỹ thuật, hardware hay camera thật.</p>");
         var parts = new (int Part, string Title, string Note)[]
         {
             (1, "Phần 1 — hiệu ứng vẽ vào ảnh camera",
                 "wave, burst, hai kênh morph, vòng release: mỗi giá trị so với ảnh tắt ở cùng pose."),
-            (2, "Phần 2 — bốn lớp ambient screen-space",
-                "mỗi lớp được bật một mình và so với khung hình không có lớp nào; ambient nằm trong khung bằng cách xây dựng.")
+            (2, "Phần 2 — nốt chiếu và bốn lớp ambient",
+                "chất liệu nốt và trail đi qua đường dựng mảng chiếu 3D của một nốt còn ngân trên phím; bốn lớp ambient đè lên ảnh ở cùng khung hình.")
         };
         foreach (var pose in captures.Select(capture => capture.Pose).Distinct())
         {

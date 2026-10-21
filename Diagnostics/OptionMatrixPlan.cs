@@ -102,27 +102,41 @@ internal static class OptionMatrixPlan
     });
 
     /// <summary>
-    /// N12(d), part 2 — the four ambient layers, which the overlay emits in screen space over the camera picture
-    /// and which part 1 does not touch. One row per family, so a family cannot appear in both parts.
+    /// N12(d), part 2 — the rest of what the overlay draws and part 1 does not touch: the two song-note axes, whose
+    /// art is built as projected patches rather than screen sprites, and the four ambient layers, which are emitted
+    /// in screen space over the camera picture. One row per family, so a family cannot appear in both parts.
     ///
     /// <para>
-    /// The two song-note axes are deliberately <b>not</b> here. A note in flight is not drawn where its key is: the
-    /// camera path places its centre <c>(head + tail) / 2</c> key-depths along the travel vector, and with
-    /// <see cref="ArNoteStyle.Default"/> (fall 1.5, reach 4) the sampled two-second note has its head 0.75 and its
-    /// tail 3.75 behind the keys — the centre sits 2.25 key-depths off the key plane, and a trail hangs at the tail
-    /// end of that. The calibrated fixture frames the keyboard and little else, so that volume is outside its
-    /// picture: shooting the note axes there would measure the fixture, not the option. Proving the note material
-    /// and the projected trail in AR needs a camera whose frame covers the space behind the keys, which is a new
-    /// fixture rather than a row here — see <c>docs/OPTION-MATRIX-N12B.md</c> §8.
+    /// The note rows are shot at the family's own <see cref="Scene.Falling"/> scene, and the reason they are inside a
+    /// picture calibrated around the keyboard is worth writing down, because the naive reading of the projection says
+    /// otherwise. <see cref="Ar3DNoteProjection"/> clamps the leading edge at the key plane
+    /// (<c>head = max(0, (start − position) × fall)</c>) and takes the tail as
+    /// <c>max((start − position) × fall + duration × fall − gap, head)</c>: at the Falling capture the five-second-old
+    /// note has already begun to sound, so its visible body is the part still above the keys — <b>0</b> to
+    /// <b>0.735</b> key-depths behind the key plane, with its trail running from 0.735 to about <b>1.22</b>
+    /// (<c>tail + body × FallingTrailLength + 0.08</c>, clipped by the style's reach of 4). All of that is above the
+    /// keyboard's back edge, which is where the fixture's backdrop is.
     /// </para>
     /// </summary>
     internal static IReadOnlyList<(string Family, string Value)> PoseSliceSelections { get; } = Array.AsReadOnly(new[]
     {
+        ("note-style", "Gem"),              // projected note material
+        ("falling-trail", "Ribbon"),        // projected note trail
         ("ambient-energy", "Laser Beams"),
         ("ambient-nature", "Aurora"),
         ("ambient-light", "Color Splash"),
         ("ambient-cosmic", "Galaxy")
     });
+
+    /// <summary>
+    /// Where the Falling scene's note body ends up at the capture, in key-depths behind the key plane. Its trail
+    /// runs from <see cref="FallingSceneNoteTailDepth"/> to about 1.22 with the shipped trail length of 55 %
+    /// (<c>tail + max(.08, body × .55 + .08)</c>, clipped by the style's reach). Pinned by
+    /// <c>OptionMatrixPlanTests</c> against <see cref="ArNoteStyle.Default"/>, so a slower fall or a longer note
+    /// fails on Linux instead of quietly sliding the note out of the calibrated picture on the runner.
+    /// </summary>
+    internal const double FallingSceneNoteHeadDepth = 0;
+    internal const double FallingSceneNoteTailDepth = 0.735;
 
     internal static Family FamilyById(string id) => Families.SingleOrDefault(family => family.Id == id)
         ?? throw new ArgumentException($"The option plan names unknown family '{id}'.", nameof(id));

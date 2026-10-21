@@ -30,13 +30,12 @@
    86 `Available`, 1 `Planned`; AR có 24 family (6 `Native`, 17 `Unverified`, 1 `Unsupported`). Ma trận option chạy
    trên **WPF và D3D/WARP**: 62 giá trị (9 trong đó là trạng thái tắt) + 11 baseline = **64 cảnh, 128 ảnh 960×540**, cùng cảnh/cùng seed; mỗi giá
    trị phải đổi pixel so với baseline và không trùng ảnh với giá trị khác. Đã có ma trận **AR/pose** (N12(d)):
-   phần 1 là 5 trục hiệu ứng × 3 pose đã hiệu chỉnh × (tắt + bật) = 27 ảnh, phần 2 là 4 lớp ambient (vẽ screen-space
-   đè lên ảnh) × 3 pose × (tắt + bật) = 24 ảnh — **51 ảnh WARP** cả thảy, mỗi giá trị phải đổi ≥12 px so với ảnh tắt
-   cùng pose. Chất liệu nốt và trail **chưa** chụp được trong AR: nốt đang bay nằm tới bốn độ sâu phím phía sau
-   phím, ngoài khung của fixture hiện tại — cần một camera rộng hơn (xem `OPTION-MATRIX-N12B.md` §8). Đã có thêm **ma trận trục số** (N12(e)): 9 trục slider × 3 giá trị × WPF/WARP = 54 ảnh, cổng "mọi cặp
+   phần 1 là 5 trục hiệu ứng × 3 pose đã hiệu chỉnh × (tắt + bật) = 27 ảnh, phần 2 là chất liệu nốt, trail (thân nốt
+   0–0,735 độ sâu phím, trail tới ~1,22 nên vẫn trong khung) và 4 lớp ambient × 3 pose × (tắt + bật) = 36 ảnh —
+   **63 ảnh WARP** cả thảy, mỗi giá trị phải đổi ≥12 px so với ảnh tắt cùng pose. Đã có thêm **ma trận trục số** (N12(e)): 9 trục slider × 3 giá trị × WPF/WARP = 54 ảnh, cổng "mọi cặp
    trong một trục đổi ≥12 px trên cả hai renderer" — bắt đúng lớp lỗi kẹp 60% ở §3.2b. Còn thiếu: phần còn lại của
-   chất liệu nốt và trail trong AR (cần fixture rộng hơn) cùng các **giá trị khác** của ambient trong AR (mỗi trục
-   một giá trị), các trục số ngoài nhóm trên, duyệt mỹ thuật và cổng phần cứng.
+   các **giá trị khác** của nốt/ambient trong AR (mỗi trục một giá trị), các trục số ngoài nhóm trên, duyệt mỹ
+   thuật và cổng phần cứng.
 6. **Những thứ đang tốt, không nên phá**: bảng màu nốt dùng chung (`GpuLook.NoteColor` lấy từ stage), vật liệu
    nốt dùng chung `ShadeNoteMaterial` cho stage và AR, công thức hình học WPF/GPU trùng nhau, brush/pen đã được
    cache, seed tất định. Vấn đề nằm ở **hợp đồng giữa các đường vẽ**, không phải ở chất lượng một đường.
@@ -533,7 +532,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N9 | Benchmark khung hình nốt/hiệu ứng | **đã có kịch bản**: `--bench-detail` (GPU, 18 ô) + `VerifyWpfNoteDensity` (WPF, cùng 18 ô, tự chạy); còn số p95 trên máy GPU | M | tài liệu này |
 | N10 | Occlusion bàn tay AR | không vẽ xuyên tay | L | AR roadmap |
 | N11 | Reduced Motion/giảm flash toàn cục | **đã xong**: hệ thống có sẵn từ Phase 2; P1 chốt tần số pulse 1,67 Hz + test toàn bộ preset | S | master roadmap |
-| N12 | Ma trận capture từng option | **đã xong (b) 2026-10-21**: 11 trục × mọi giá trị = 64 cảnh, 128 ảnh WPF/WARP; mỗi giá trị đổi pixel, mọi cặp giá trị khác ảnh, baseline chung cảnh trùng từng bit; **(d) 2026-10-21**: phần 1 là 5 trục hiệu ứng × 3 pose AR × (tắt + bật) = 27 ảnh, phần 2 là 4 lớp ambient × 3 pose × (tắt + bật) = 24 ảnh, cổng ≥12 px mỗi pose — 51 ảnh chạy xanh trên `4b39ae8`; chất liệu nốt và trail trong AR còn thiếu vì nốt đang bay nằm ngoài khung của fixture hiện tại; **trục số NoteWidth đã có parity + test** sau khi bắt lỗi kẹp 60% (§3.2b); **(e) 2026-10-21**: 9 trục số × 3 giá trị × 2 renderer = 54 ảnh, mọi cặp trong một trục phải đổi ≥12 px trên cả hai — cặp 30/45 chính là cặp lỗi cũ; **(f) 2026-10-21**: 20 preset đang ship đi đúng đường lưu/mở, cả 255 thuộc tính ghi được (bản từ tệp và bản dock áp) + khung hình trùng từng byte trên cả hai renderer | L | audit |
+| N12 | Ma trận capture từng option | **đã xong (b) 2026-10-21**: 11 trục × mọi giá trị = 64 cảnh, 128 ảnh WPF/WARP; mỗi giá trị đổi pixel, mọi cặp giá trị khác ảnh, baseline chung cảnh trùng từng bit; **(d) 2026-10-21**: phần 1 là 5 trục hiệu ứng × 3 pose AR × (tắt + bật) = 27 ảnh, phần 2 là chất liệu nốt, trail và 4 lớp ambient × 3 pose × (tắt + bật) = 36 ảnh, cổng ≥12 px mỗi pose — 63 ảnh; **trục số NoteWidth đã có parity + test** sau khi bắt lỗi kẹp 60% (§3.2b); **(e) 2026-10-21**: 9 trục số × 3 giá trị × 2 renderer = 54 ảnh, mọi cặp trong một trục phải đổi ≥12 px trên cả hai — cặp 30/45 chính là cặp lỗi cũ; **(f) 2026-10-21**: 20 preset đang ship đi đúng đường lưu/mở, cả 255 thuộc tính ghi được (bản từ tệp và bản dock áp) + khung hình trùng từng byte trên cả hai renderer | L | audit |
 | N13 | Lookahead stage ↔ AR | **đã chốt (b)**: AR có slider riêng 1–6 s; công thức stage ở §3.6 | S | tài liệu này |
 | N14 | Nhãn nốt AR phẳng | **đã chốt**: phẳng bỏ nhãn có chủ ý + tooltip; còn ảnh 3 nền | S | tài liệu này |
 | N15 | Nợ tài liệu/trạng thái | **đã xong**: tool + 3 checker trong làn tĩnh; audit đối chiếu CI 2026-10-20, hết câu "chờ chạy" | S | tài liệu này |
