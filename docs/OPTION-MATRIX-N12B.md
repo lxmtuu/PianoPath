@@ -309,3 +309,12 @@ phần 2), giữ mọi giá trị là giá trị sản phẩm và khác giá tr�
 **Không chứng nhận:** ảnh tĩnh, không phải clip; mỗi trục chỉ một giá trị ở phần 2 (câu hỏi "*mọi* giá trị của
 ambient có đi qua AR không" vẫn do ma trận phẳng trả lời ở sân khấu); sai số chiếu ảnh hưởng mọi giá trị của một
 trục như nhau; **chưa** phủ che tay (N10), camera thật hay GPU thật.
+
+**Lượt chạy đầu (2026-10-21):** run `39666230753` trên `4b39ae8` xanh toàn bộ — `static`, `test`,
+`keyboard-light`, `build` (installer + preview). Bước `Verification suite` mất **7 phút 39 giây**, chỉ **+33
+giây** so với lượt N12(f) (7:06) dù thêm 24 lần dựng cảnh 90 frame ở 1280×720 (~1,4 s mỗi lần); bước đó chạy
+`--verify --verify-review-out=...` nên `VerifyOptionPose` nằm trong cùng `try`, và cổng 12 px chạy cho **từng
+pose** trên cả 51 ảnh — xanh nghĩa là **bốn lớp ambient đều vẽ qua cả ba pose AR**, không phải chỉ một pose.
+`scan_option_pose` đã được mutation-test cục bộ: đổi một giá trị thành giá trị không có trong sản phẩm, chụp đúng
+giá trị trung tính, để một family xuất hiện hai lần ở phần 2, để family của phần 1 lọt vào phần 2, hạ ngưỡng
+xuống 8 px và sửa `ExpectedPart2` — cả sáu đều đỏ.
