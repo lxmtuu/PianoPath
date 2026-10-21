@@ -1111,6 +1111,45 @@ def scan_flame_motion_contract():
     return errors
 
 
+def scan_note_width_parity():
+    """One bar, one slider: the held-key bar and the falling note must take ``Note width`` as it is.
+
+    The slider runs 30-100. The software stage's held bar used to floor it at 60%, so a 30% preset drew a bar
+    twice as wide as its own falling notes - and twice as wide as the same preset on a GPU, where the engine has
+    always read the slider. ``NoteGeometry.BarWidth`` is now the one law for that slider; this scan fails if the
+    floor comes back, if either software path stops going through the helper, or if the engine stops reading the
+    same slider.
+    """
+    errors = []
+    geometry_path = ROOT / "Stage" / "NoteGeometry.cs"
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    gpu_path = ROOT / "Gpu" / "GpuStageSimulation.cs"
+    look_path = ROOT / "Gpu" / "GpuLook.cs"
+    for path in (geometry_path, stage_path, gpu_path, look_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; it is part of the note-width contract"]
+    geometry = _code(geometry_path.read_text(encoding="utf-8"))
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    gpu = _code(gpu_path.read_text(encoding="utf-8"))
+    look = _code(look_path.read_text(encoding="utf-8"))
+    if "internal static double BarWidth(double lane, double noteWidthPercent, double blackKeyWidth)" not in geometry:
+        errors.append("Stage/NoteGeometry.cs: BarWidth is gone, so the two software note paths no longer share a law")
+    if stage.count("NoteGeometry.BarWidth(lane, _visual.NoteWidth,") != 2:
+        errors.append("Stage/PianoStage.cs: the falling note and the held bar must both take NoteWidth through "
+                      "NoteGeometry.BarWidth (exactly two call sites)")
+    if "Math.Max(_visual.NoteWidth" in stage:
+        errors.append("Stage/PianoStage.cs: the held bar's 60% floor is back; it makes a thin preset draw a wide "
+                      "bar on the software stage and a thin one on the engine")
+    if "NoteGeometry.Width(lane, _visual.NoteWidth" in stage:
+        errors.append("Stage/PianoStage.cs: a note path passes the raw slider as a fraction again; use BarWidth")
+    if "NoteGeometry.Width(layout.Lane, look.NoteWidth," not in gpu:
+        errors.append("Gpu/GpuStageSimulation.cs: the engine stopped sizing its notes from look.NoteWidth")
+    if "NoteWidth = P(s.NoteWidth)" not in look:
+        errors.append("Gpu/GpuLook.cs: NoteWidth is no longer the slider divided by 100, so the engine and the "
+                      "software stage disagree about the unit")
+    return errors
+
+
 def scan_held_emission_parity():
     """A held key must let off the same amount on both renderers.
 
@@ -2344,6 +2383,7 @@ def main():
     errors.extend(scan_stage_clock_contract())
     errors.extend(scan_flame_motion_contract())
     errors.extend(scan_held_emission_parity())
+    errors.extend(scan_note_width_parity())
     errors.extend(scan_option_matrix())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
@@ -2370,6 +2410,7 @@ def main():
     print("checked that slow motion scales the particles on both renderers and leaves the held bar, rings and flashes on the real clock")
     print("checked that the held-key flame keeps the engine's law on the software stage instead of a plume pinned to the key")
     print("checked that a held key lets off the engine's amount of embers and wisps on both renderers, ceilings aside")
+    print("checked that the falling note and the held bar size themselves from one Note width slider, with no floor of their own")
     print("checked that every option the settings offer is captured by the N12(b) matrix on both renderers, off state included")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "

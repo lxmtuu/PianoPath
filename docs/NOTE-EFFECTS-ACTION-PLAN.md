@@ -120,6 +120,29 @@ bên phím đen); AR vẫn 86% vì `WidthShare` bị chặn ở 0,86. Đây là 
 pitch, AR phủ theo phím thật. Tỉ lệ 1,82× là hệ quả của hai quy ước, không phải lỗi pixel. Sau N1, stage kẹp ở
 98% phím đen nên 100% chỉ còn 18,82 px (59,1% phím trắng, 98% phím đen).
 
+### 3.2b Thanh giữ phím từng bị kẹp ở 60% (đã sửa)
+
+`Note width` là slider **30–100**. Nốt rơi trên WPF và mọi thứ trên GPU đọc thẳng giá trị đó, nhưng
+`PianoStage.DrawLiveTrails` — đúng đường vẽ **thanh giữ phím** — kẹp `Math.Max(NoteWidth, 60)`. Ở 1920×1080
+(lane 21,82 px):
+
+| `NoteWidth` | Nốt rơi (WPF + GPU) | Thanh giữ phím (WPF, trước) | Thanh giữ phím (GPU) | Chênh |
+|---|---|---|---|---|
+| 30 | 6,55 px | **13,09 px** | 6,55 px | 2,00× |
+| 45 | 9,82 px | **13,09 px** | 9,82 px | 1,33× |
+| 60 | 13,09 px | 13,09 px | 13,09 px | 1,00× |
+| 80 | 17,45 px | 17,45 px | 17,45 px | 1,00× |
+
+Hệ quả kép: trong **cùng một khung hình** trên máy không GPU, thanh giữ phím rộng gấp đôi nốt rơi cùng cao độ;
+và cùng một preset cho **hai bề rộng khác nhau tuỳ máy** (GPU đúng slider, WPF kẹp 60%). Đây là lỗi thuộc đúng
+phần "giá trị số" mà N12 còn ghi *chưa phủ* — ma trận option chỉ chụp các trục **rời rạc**.
+
+**Đã sửa:** `NoteGeometry.BarWidth(lane, noteWidthPercent, blackKeyWidth)` là luật duy nhất cho slider này, và
+**cả hai** đường vẽ nốt trên WPF gọi nó (không còn hệ số riêng). Ghim ba lớp: `NoteGeometryTests` (30% ra 30% chứ
+không phải 60%, 30 ≠ 60, cùng kết quả với `Width` ở mọi mức, trần phím đen vẫn thắng ở 100%),
+`tools/check_sources.py` (`scan_note_width_parity`: đúng hai call site, không được có `Math.Max(_visual.NoteWidth`,
+engine vẫn đọc `look.NoteWidth = P(s.NoteWidth)`), và chính §3.2b này. Thử phá: đặt lại floor ⇒ scan đỏ 2 lỗi.
+
 ### 3.3 Nốt dài: thanh từng bị cắt ngắn (đã sửa)
 
 Nốt **xuất hiện** ở đúng lookahead cho mọi độ dài (`bottom = 0` khi `start − position = hitY/speed`). Trước N2,
@@ -505,7 +528,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N9 | Benchmark khung hình nốt/hiệu ứng | **đã có kịch bản**: `--bench-detail` (GPU, 18 ô) + `VerifyWpfNoteDensity` (WPF, cùng 18 ô, tự chạy); còn số p95 trên máy GPU | M | tài liệu này |
 | N10 | Occlusion bàn tay AR | không vẽ xuyên tay | L | AR roadmap |
 | N11 | Reduced Motion/giảm flash toàn cục | **đã xong**: hệ thống có sẵn từ Phase 2; P1 chốt tần số pulse 1,67 Hz + test toàn bộ preset | S | master roadmap |
-| N12 | Ma trận capture từng option | **đã xong (b) 2026-10-21**: 11 trục × mọi giá trị = 64 cảnh, 128 ảnh WPF/WARP; mỗi giá trị đổi pixel, mọi cặp giá trị khác ảnh, baseline chung cảnh trùng từng bit; **(d) phần 1 2026-10-21**: 5 trục hiệu ứng × 3 pose AR × (tắt + bật) = 27 ảnh, cổng ≥12 px mỗi pose; còn nốt/ambient trong AR | L | audit |
+| N12 | Ma trận capture từng option | **đã xong (b) 2026-10-21**: 11 trục × mọi giá trị = 64 cảnh, 128 ảnh WPF/WARP; mỗi giá trị đổi pixel, mọi cặp giá trị khác ảnh, baseline chung cảnh trùng từng bit; **(d) phần 1 2026-10-21**: 5 trục hiệu ứng × 3 pose AR × (tắt + bật) = 27 ảnh, cổng ≥12 px mỗi pose; còn nốt/ambient trong AR; **trục số NoteWidth đã có parity + test** sau khi bắt lỗi kẹp 60% (§3.2b) | L | audit |
 | N13 | Lookahead stage ↔ AR | **đã chốt (b)**: AR có slider riêng 1–6 s; công thức stage ở §3.6 | S | tài liệu này |
 | N14 | Nhãn nốt AR phẳng | **đã chốt**: phẳng bỏ nhãn có chủ ý + tooltip; còn ảnh 3 nền | S | tài liệu này |
 | N15 | Nợ tài liệu/trạng thái | **đã xong**: tool + 3 checker trong làn tĩnh; audit đối chiếu CI 2026-10-20, hết câu "chờ chạy" | S | tài liệu này |

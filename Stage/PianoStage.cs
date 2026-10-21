@@ -1445,7 +1445,7 @@ internal sealed partial class PianoStage : FrameworkElement
         var lookBehind = hitY / noteSpeed + 1;
         // Notes are sorted by start time: anything still on screen started no earlier than (position - 1 s - longest note).
         var latestStart = _position + lookBehind;
-        var noteWidth = NoteGeometry.Width(lane, _visual.NoteWidth / 100,
+        var noteWidth = NoteGeometry.BarWidth(lane, _visual.NoteWidth,
             NoteGeometry.BlackKeyWidth(width, KeyboardLayout.Active.WhiteCount));
         var gap = Math.Min(_visual.NoteGap, 12);
         var rising = _visual.NoteDirection == "Up";
@@ -2020,7 +2020,9 @@ internal sealed partial class PianoStage : FrameworkElement
 
     private void DrawLiveTrails(DrawingContext dc, double width, double hitY, double lane)
     {
-        var noteWidth = NoteGeometry.Width(lane, Math.Max(_visual.NoteWidth, 60) / 100,
+        // The held bar and the falling note are the same bar: both read the slider, with no floor of their own
+        // (the engine never had one, so a floor here made the two renderers disagree below 60%).
+        var noteWidth = NoteGeometry.BarWidth(lane, _visual.NoteWidth,
             NoteGeometry.BlackKeyWidth(width, KeyboardLayout.Active.WhiteCount));
         var rising = _visual.NoteDirection == "Up";
         foreach (var trail in _liveTrails)

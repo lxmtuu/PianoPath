@@ -24,6 +24,27 @@ public class NoteGeometryTests
         Assert.Equal(47.2727, NoteGeometry.Width(Lane, .8, Black) / (1920.0 / 52) * 100, 3);
     }
 
+    [Fact]
+    public void Bar_width_takes_the_slider_without_a_floor_of_its_own()
+    {
+        // The settings clamp the slider to 30-100 and the dock starts it at 30, so the low end is reachable.
+        // It used to be floored at 60 for the held bar only: a 30% preset drew a 60% bar on the software stage,
+        // next to 30% falling notes and 30% bars on the GPU.
+        Assert.Equal(30, NoteGeometry.BarWidth(100, 30, 100), 9);
+        Assert.Equal(45, NoteGeometry.BarWidth(100, 45, 100), 9);
+        Assert.Equal(60, NoteGeometry.BarWidth(100, 60, 100), 9);
+        // The floor would have made 30 and 60 the same bar; they are not.
+        Assert.NotEqual(NoteGeometry.BarWidth(100, 30, 100), NoteGeometry.BarWidth(100, 60, 100));
+        // Same law as Width, which the engine and AR already call with a fraction.
+        foreach (var percent in new[] { 30, 45, 60, 80, 100 })
+        {
+            Assert.Equal(NoteGeometry.Width(Lane, percent / 100.0, Black), NoteGeometry.BarWidth(Lane, percent, Black), 12);
+            // And the black-key cap still wins at the top of the range.
+            Assert.True(NoteGeometry.BarWidth(Lane, percent, Black) <= Black * NoteGeometry.BlackKeyFill + 1e-12);
+        }
+        Assert.Equal(19.6, NoteGeometry.BarWidth(100, 100, 20), 9);
+    }
+
     [Theory]
     [InlineData(1600, 80, 14.5455)]   // 900p, unchanged
     [InlineData(1600, 100, 15.68)]     // 900p, 98% of a 16 px black key

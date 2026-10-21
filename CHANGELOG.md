@@ -26,6 +26,7 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
 - Thẻ **Note morph** trong Settings luôn hiện đủ lựa chọn, và thanh **Morph intensity** chỉ hiện khi đã chọn một kiểu morph.
 
 ### Sửa lỗi
+- **Bề rộng nốt dưới 60%** giờ vẽ thanh giữ phím đúng bằng nốt rơi trên cả hai đường render: bản phần mềm từng kẹp thanh giữ phím ở 60% nên cùng một preset cho thanh rộng gấp đôi nốt rơi cùng cao độ — và rộng gấp đôi so với máy có GPU, nơi slider luôn được đọc đúng.
 - Nhịp mô phỏng hạt tách khỏi nhịp khung hình: cùng một preset cho cùng một chuyển động ở 60 Hz, 144 Hz và khi xuất video, thay vì nhanh dần theo tần số quét.
 
 ## 2.2.0 — 2026-10-18

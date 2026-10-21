@@ -27,6 +27,7 @@ section and are not repeated here; the internal development roadmap is not part 
 - The **Note morph** card in Settings always offers its choices, and **Morph intensity** only appears once a morph is selected.
 
 ### Fixes
+- **Note widths below 60%** now draw the held-key bar exactly as wide as the falling note on both renderers: the software stage used to floor the held bar at 60%, so one preset produced a bar twice as wide as its own falling note — and twice as wide as the same preset on a GPU machine, which has always read the slider.
 - Particle pacing is decoupled from the frame rate: one preset now moves the same at 60 Hz, 144 Hz and in an exported video, instead of speeding up with the refresh rate.
 
 ## 2.2.0 — 2026-10-18

@@ -32,6 +32,19 @@ internal static class NoteGeometry
         => Math.Min(lane * noteWidthFraction, blackKeyWidth * BlackKeyFill);
 
     /// <summary>
+    /// The same width, read from the <c>Note width</c> slider's percentage (the settings clamp it to 30-100).
+    ///
+    /// <para>
+    /// Every bar the user compares against each other goes through this: the falling note and the held-key bar
+    /// are the same bar at different moments, so they cannot be allowed to disagree. The software stage's held
+    /// bar used to floor the slider at 60%, which meant a 30% preset drew a bar twice as wide as its own falling
+    /// notes - and twice as wide as the same preset on a machine with a GPU, which never had the floor.
+    /// </para>
+    /// </summary>
+    internal static double BarWidth(double lane, double noteWidthPercent, double blackKeyWidth)
+        => Width(lane, noteWidthPercent / 100, blackKeyWidth);
+
+    /// <summary>
     /// A note's height in DIPs: its sounding time at the current speed, minus the gap between
     /// consecutive notes, floored at the readable minimum and capped at <see cref="MaxNoteSeconds"/>.
     /// It deliberately does not depend on the window height: a four-second note is a four-second bar
