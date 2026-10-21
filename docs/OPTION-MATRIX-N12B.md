@@ -318,3 +318,12 @@ ambient hay của chất liệu nốt có đi qua AR không" vẫn do ma trận 
 một mốc — 1,5 s của cảnh `Falling`, khi đầu nốt đã ở mặt phím và chỉ còn thân nằm trên phím — nên không chứng minh
 mọi khoảng cách tới phím; sai số chiếu ảnh hưởng mọi giá trị của một trục như nhau; **chưa** phủ che tay (N10),
 camera thật hay GPU thật.
+
+**Lượt chạy (2026-10-21):** hình dạng 51 ảnh (chỉ ambient) chạy xanh trên `4b39ae8` (run `39666230753`); hình
+dạng đúng **63 ảnh** chạy xanh trên `fa5e534` (run `39678491981`) — `static`, `test`, `keyboard-light`, `build`
+(installer + preview + gói phát hành) đều xanh, bước `Verification suite` mất **4 phút 30 giây** trên runner đó
+(cùng lượt, bước `Build` chỉ 23 s so với 40 s ở lượt trước, nên máy nhanh hơn chứ không phải làm ít hơn). Bước này
+chạy `--verify --verify-review-out=...`, và trong mã `VerifyOptionPose` đòi đúng **27 ảnh phần 1 + 36 ảnh phần 2**
+rồi so **từng pose** với cổng 12 px, nên xanh nghĩa là **cả sáu family của phần 2 — kể cả chất liệu nốt và trail —
+đều đổi đủ pixel qua cả ba pose AR**, không phải chỉ một pose. Log nằm trong `keyflow-verification-log` (máy này
+không tải được artifact — blob trả `EOF` — nên bằng chứng đọc từ kết luận job + assert trong mã).
