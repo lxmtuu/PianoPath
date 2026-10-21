@@ -6856,9 +6856,15 @@ internal static partial class VerificationSuite
 
     private static void VerifyOptionNumeric(string outputDirectory)
     {
-        var captures = OptionNumericReview.Render(outputDirectory);
-        Assert(captures == 54, "The numeric option review must capture nine axes at three values on two renderers.");
-        Results.Add($"PASS numeric option review (N12(e)): {captures} WPF/GPU-WARP captures at 960×540 — nine slider axes (note width on a falling note and on a held bar, fall speed, trail/wave/flash/release intensity, wave size, burst amount) shot at three values on both renderers; every pair of values on an axis moves pixels on both, so no hidden floor, clamp or rounding can collapse two slider positions onto one picture, and every capture reads its setting back after Clamp(). Renderer-branching evidence, not art approval, linearity or a default change; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+        var result = OptionNumericReview.Render(outputDirectory);
+        Assert(result.Captures == 54, "The numeric option review must capture nine axes at three values on two renderers.");
+        var captures = result.Captures;
+        // The tightest pair per axis, both renderers, so the log carries the number the gate is close to.
+        var tightest = string.Join("; ", result.Tightest
+            .GroupBy(pair => pair.Axis)
+            .Select(axis => $"{axis.Key} ✓"
+                + string.Join(" ", axis.Select(pair => $"{pair.Renderer} {pair.Left}↔{pair.Right}={pair.Changed}px"))));
+        Results.Add($"PASS numeric option review (N12(e)): {captures} WPF/GPU-WARP captures at 960×540 — nine slider axes (note width on a falling note and on a held bar, fall speed, trail/wave/flash/release intensity, wave size, burst amount) shot at three values on both renderers; every pair of values on an axis moves pixels on both, so no hidden floor, clamp or rounding can collapse two slider positions onto one picture, and every capture reads its setting back after Clamp(). Tightest pair per axis: {tightest}. Renderer-branching evidence, not art approval, linearity or a default change; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
     }
 
     private static void VerifyOptionPose(string outputDirectory)

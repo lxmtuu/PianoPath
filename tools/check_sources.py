@@ -1326,7 +1326,7 @@ def scan_option_numeric():
         errors.append("Diagnostics/VerificationSuite.cs lost the --verify-option-numeric-only route")
     if "OptionNumericReview.Render(" not in suite:
         errors.append("Diagnostics/VerificationSuite.cs does not call OptionNumericReview.Render, so the numeric review never runs")
-    if "captures == 54" not in suite:
+    if "Captures == 54" not in suite:
         errors.append("Diagnostics/VerificationSuite.cs no longer asserts 54 numeric captures; nine axes at three "
                       "values on two renderers is the whole plan")
     if "OptionMatrixPlan.Scene.Held" not in _code((ROOT / "Diagnostics" / "OptionMatrixReview.cs").read_text(encoding="utf-8")):

@@ -44,7 +44,21 @@ internal static class OptionNumericReview
         internal byte[]? Pixels { get; set; }
     }
 
-    internal static int Render(string output)
+    /// <summary>
+    /// What the run measured: the capture count and, for every axis and renderer, the pair of values that
+    /// differed least. The suite prints these so a log answers "how close was the tightest pair?" without the
+    /// artifact, which is what a reviewer asks when a gate is set at a floor.
+    /// </summary>
+    internal sealed record Result(int Captures, IReadOnlyList<(string Axis, string Renderer, string Left, string Right, int Changed)> Pairs)
+    {
+        /// <summary>The tightest pair per axis and renderer, in axis order.</summary>
+        internal IReadOnlyList<(string Axis, string Renderer, string Left, string Right, int Changed)> Tightest =>
+            Pairs.GroupBy(pair => (pair.Axis, pair.Renderer))
+                .Select(group => group.OrderBy(pair => pair.Changed).First())
+                .ToArray();
+    }
+
+    internal static Result Render(string output)
     {
         if (string.IsNullOrWhiteSpace(output)) throw new ArgumentException("The numeric option output directory is empty.", nameof(output));
         if (OptionNumericPlan.Axes.Count == 0) throw new InvalidDataException("The numeric plan has no axes; the review would never run.");
@@ -119,7 +133,7 @@ internal static class OptionNumericReview
             WriteManifest(root, renderer.AdapterName, shots, pairs);
             WriteHtmlIndex(root, shots, pairs);
             VerifyWrittenArtifacts(root, shots);
-            return shots.Count;
+            return new Result(shots.Count, pairs);
         }
         finally { KeyboardLayout.Use(previousLayout); }
     }
