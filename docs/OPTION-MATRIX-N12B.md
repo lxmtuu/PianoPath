@@ -114,8 +114,9 @@ Chạy trên nhánh push thì cả hai chỉ lên artifact, không vào Git.
   family mà ma trận §2 đã chụp.
 - `scan_option_numeric` (`tools/check_sources.py`): đọc **đầu mút slider từ `SliderRow`** trong
   `Ui/MainWindow.Settings.cs` và khoảng `Clamp` trong `PianoVisualSettings`, so với khoảng của plan; đòi ba điểm
-  tăng dần, có đầu mút (trừ `note-speed`, có lý do ghi trong scan), và review vẫn gọi đúng hai hàm render của ma
-  trận phẳng, vẫn `Clamp()` rồi đọc lại giá trị.
+  tăng dần, có đầu mút — trừ những trục nằm trong **`OptionNumericPlan.EndpointExempt`** (duy nhất `note-speed`,
+  lý do viết ngay cạnh tập đó); scan đối chiếu cả hai chiều nên một miễn trừ cũ cũng đỏ. Nó cũng đòi review vẫn gọi
+  đúng hai hàm render của ma trận phẳng, vẫn `Clamp()` rồi đọc lại giá trị.
 - `OptionMatrixPlanTests`: lát AR/pose chỉ được chọn **giá trị sản phẩm** (không phải `None`/`Fade`), phủ đúng
   hai kênh morph và kênh release, và không có công tắc riêng — tức cùng điều kiện "tự vẽ" như ma trận phẳng.
 
@@ -184,7 +185,7 @@ cùng seed (`--verify-option-numeric-only`, artifact `option-numeric-n12e`):
 |---|---|---|---|---|
 | `note-width` | `NoteWidth` 30–100 | nốt rơi | 30 / 45 / 100 | 30 và 45 từng bị kẹp 60 ⇒ **trùng khung hình** trên WPF |
 | `bar-width` | `NoteWidth` 30–100 | **giữ phím** | 30 / 45 / 100 | chính thanh giữ phím — đường vẽ đã có lỗi |
-| `note-speed` | `NoteFallSpeed` 100–1000 | nốt rơi | 125 / 325 / 550 | 1000 px/s đã ra khỏi sân khấu trước mốc chụp, nên không lấy hai đầu |
+| `note-speed` | `NoteFallSpeed` 100–1000 | nốt rơi | 125 / 325 / 550 | 1000 px/s đã ra khỏi sân khấu trước mốc chụp, nên trục này là miễn trừ duy nhất của quy tắc "lấy đầu mút" (`EndpointExempt`) |
 | `trail-intensity` | `FallingTrailIntensity` 0–100 | nốt rơi | 0 / 50 / 100 | 0 = không vẽ, 50 ↔ 100 = gấp đôi độ sáng |
 | `wave-intensity` | `ImpactWaveIntensity` 0–150 | va chạm | 0 / 75 / 150 | 0 = ring vô hình, 75 ↔ 150 = gấp đôi |
 | `wave-size` | `RingSize` 0–100 | va chạm | 5 / 50 / 100 | bán kính đổi ⇒ hình học đổi |

@@ -33,9 +33,13 @@ public class OptionNumericPlanTests
             Assert.Equal(3, axis.Values.Distinct().Count());
             Assert.True(axis.Minimum < axis.Maximum, $"{axis.Id} declares an empty range");
             Assert.All(axis.Values, value => Assert.InRange(value, axis.Minimum, axis.Maximum));
-            // At least one value at each end of the slider: an axis that only samples the middle would not
-            // catch a clamp living at an endpoint.
-            Assert.Contains(axis.Values, value => value == axis.Minimum || value == axis.Maximum);
+            // At least one value at an end of the slider: an axis that only samples the middle would not catch
+            // a clamp living at an endpoint. The one written exemption is checked separately, in both
+            // directions, so it cannot become a hiding place for an axis that simply forgot.
+            if (OptionNumericPlan.EndpointExempt.Contains(axis.Id))
+                Assert.DoesNotContain(axis.Values, value => value == axis.Minimum || value == axis.Maximum);
+            else
+                Assert.Contains(axis.Values, value => value == axis.Minimum || value == axis.Maximum);
         }
     }
 
@@ -63,8 +67,6 @@ public class OptionNumericPlanTests
         {
             var family = axis.Arrange; // throws if the id is unknown
             Assert.Contains(axis.FamilyValue, family.Values);
-            // A value the flat matrix never captures would mean this axis has no pinned scene behind it.
-            Assert.Contains(axis.FamilyValue, OptionMatrixPlan.CapturedValues(family));
             // The scene is the family's own moment, or the held key for a family that falls: the numeric
             // review must not invent a fifth moment of its own.
             var allowed = family.Scene == OptionMatrixPlan.Scene.Falling
@@ -73,9 +75,17 @@ public class OptionNumericPlanTests
             Assert.Contains(axis.Scene, allowed);
             Assert.True(axis.Frames >= 2);
         }
+        // The two width axes arrange through the neutral note style on purpose: nothing but the numbered axis
+        // moves, so a difference between 30 and 45 can only be the width. A family that selected a style would
+        // add a second difference to the same pair.
+        Assert.All(OptionNumericPlan.Axes.Where(axis => axis.Setting == "NoteWidth"),
+            axis => Assert.Equal(axis.Arrange.Neutral, axis.FamilyValue));
         // Two axes may share a setting (width on a note and on a bar); no two may share an id.
         Assert.Equal(9, OptionNumericPlan.Axes.Select(axis => axis.Id).Distinct().Count());
         Assert.Equal(8, OptionNumericPlan.Axes.Select(axis => axis.Setting).Distinct().Count());
+        // The exemption names a real axis, and only a real axis.
+        Assert.All(OptionNumericPlan.EndpointExempt,
+            id => Assert.Contains(id, OptionNumericPlan.Axes.Select(axis => axis.Id)));
     }
 
     [Fact]

@@ -1199,13 +1199,6 @@ def scan_held_emission_parity():
 # The eleven settings strings that are a user-visible choice in both renderers. The value lists live in
 # PianoVisualSettings; the option matrix (Diagnostics/OptionMatrixPlan.cs) copies them so a Windows capture run
 # can walk them without WPF. This table is the only place that knows the two are the same list.
-# An axis may skip the slider's endpoints only with a written reason. Fall speed is the one case: at 1000 px/s
-# a two-second note has left the 960x540 stage before the fixed sample time, so the capture would be a picture
-# of nothing and could not be compared with its siblings in any meaningful way.
-NUMERIC_ENDPOINT_EXEMPT = {
-    "note-speed": "1000 px/s clears the stage before the 1.5 s sample, so the top of the range is not a picture",
-}
-
 NUMERIC_OPTION_SETTINGS = {
     "NoteWidth": "the width of a note and of a held bar",
     "NoteFallSpeed": "how fast a note falls",
@@ -1265,6 +1258,12 @@ def scan_option_numeric():
         plan, re.S)
     if len(axes) != 9:
         errors.append(f"Diagnostics/OptionNumericPlan.cs must declare nine numeric axes; it declares {len(axes)}")
+    exempt_match = re.search(
+        r"EndpointExempt\s*\{\s*get;\s*\}\s*=\s*new HashSet<string>\(StringComparer\.Ordinal\)\s*\{([^}]*)\}", plan)
+    exempt = set(re.findall(r'\"([^\"]+)\"', exempt_match.group(1))) if exempt_match else set()
+    if not exempt:
+        errors.append("Diagnostics/OptionNumericPlan.cs lost its EndpointExempt set; the endpoint rule below has no "
+                      "way to state which axis may skip an end of its slider")
     seen = set()
     for axis, setting, family, family_value, scene, low, high, values in axes:
         if axis in seen:
@@ -1296,17 +1295,23 @@ def scan_option_numeric():
             errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} needs three ascending distinct values; it has {points}")
         if points and (min(points) < float(low) - 1e-9 or max(points) > float(high) + 1e-9):
             errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} shoots {points}, outside its own {low}..{high}")
-        if axis not in NUMERIC_ENDPOINT_EXEMPT and not any(
-                abs(point - float(low)) < 1e-9 or abs(point - float(high)) < 1e-9 for point in points):
+        # An axis may skip an endpoint only if the plan's own EndpointExempt set says so, and the exemption has to
+        # be honest in both directions: an exempt axis really skips one, a non-exempt one really takes one.
+        at_endpoint = any(abs(point - float(low)) < 1e-9 or abs(point - float(high)) < 1e-9 for point in points)
+        if axis in exempt and at_endpoint:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs exempts {axis!r} from the endpoint rule, but it samples "
+                          "an endpoint anyway; the exemption has gone stale")
+        if axis not in exempt and not at_endpoint:
             errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} never samples an endpoint; a clamp at the "
                           "end of the range would stay invisible")
-        if axis in NUMERIC_ENDPOINT_EXEMPT and not NUMERIC_ENDPOINT_EXEMPT[axis]:
-            errors.append(f"Diagnostics/OptionNumericPlan.cs exempts {axis!r} from the endpoint rule without a reason")
         # The arrangement family must exist and offer the value, so the numeric scene is a pinned one.
         if f'new Family("{family}",' not in plan and f'"{family}"' not in plan:
             errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} arranges itself through unknown family {family!r}")
         if f'"{family_value}"' not in plan:
             errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} arranges through {family_value!r}, which it never names")
+
+    for axis in exempt - {declared[0] for declared in axes}:
+        errors.append(f"Diagnostics/OptionNumericPlan.cs exempts unknown axis {axis!r} from the endpoint rule")
 
     for contract in (
         ("OptionMatrixReview.CaptureWpf(", "the numeric review stopped using the flat matrix's WPF render path"),

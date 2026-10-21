@@ -54,6 +54,19 @@ internal static class OptionNumericPlan
         new Axis("release-intensity", "ReleaseIntensity", "release", "Float Up", OptionMatrixPlan.Scene.Release, 0, 100, [0d, 50d, 100d])
     });
 
+    /// <summary>
+    /// The axes that deliberately do not sample an endpoint of their slider, with the reason.
+    ///
+    /// <para>
+    /// <c>note-speed</c>: at 1000 px/s a note clears the 960×540 stage before the fixed 1.5 s sample, so the top
+    /// of the range is a picture of nothing and could not be compared with its siblings. Every other axis must
+    /// sample at least one end, because that is where a clamp hides. Both the unit test and
+    /// <c>tools/check_sources.py</c> read this set, so the exemption cannot quietly grow.
+    /// </para>
+    /// </summary>
+    internal static IReadOnlySet<string> EndpointExempt { get; } =
+        new HashSet<string>(StringComparer.Ordinal) { "note-speed" };
+
     /// <summary>One PNG per value per renderer.</summary>
     internal static int CaptureCount => Axes.Sum(axis => axis.Values.Count) * 2;
 
