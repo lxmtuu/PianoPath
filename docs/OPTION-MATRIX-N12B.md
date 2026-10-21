@@ -210,6 +210,19 @@ trong hai phép so thuộc tính, nới dung sai khung hình khỏi 0, hoặc b�
 **Không chứng nhận:** không duyệt mỹ thuật; không phủ mọi phiên bản migration (chỉ cặp hiện tại) hay preset do
 người dùng tạo trên máy khác; không phải GPU thật, không đổi mặc định.
 
+**Lượt chạy đầu (2026-10-21):** run `39654999481` trên `f38574a` xanh toàn bộ — `static`, `test`,
+`keyboard-light` và `build`. Bước `Verification suite` mất **7 phút 06 giây**, chỉ **+57 giây** so với lượt
+N12(e) (6:09) dù thêm 20 preset × 4 lần dựng cảnh 90 frame = **7.200 khung hình**; bước đó chạy
+`--verify --verify-review-out=...` nên `VerifyPresetRoundTrip` nằm trong cùng `try` — một thuộc tính lệch, một
+khung lệch byte hay một preset thừa/thiếu đều làm bước **đỏ**, nên xanh nghĩa là cả 20 preset đã đi hết đường
+lưu/mở. Ảnh nằm trong artifact `preset-roundtrip-n12f` (chỉ upload ở `main` để không đội quota), nên trên nhánh
+bằng chứng là dòng `PASS preset round trip (N12(f))` trong `keyflow-verification-log`.
+
+**Sửa ngay trong lượt đầu:** bản đầu gọi `VisualPresets.WritePresetFile`/`ReadPresetFile`, nhưng hai hàm đó
+thuộc `VisualPresetStore`; run `39654504807` đỏ ở bước `Build` (kéo theo `keyboard-light`) trước khi chạy được
+gì. `f38574a` sửa đúng tên kiểu, và `scan_preset_roundtrip` bám theo cách gọi mới để vẫn đỏ khi review rời khỏi
+writer/reader của sản phẩm.
+
 ## 9. N12(e) — trục số: hai mức slider không được ra cùng một khung hình
 
 Ma trận ở §2 chỉ chụp **giá trị rời rạc**: `ImpactWave = "Ripple"`, `NoteStyle = "Gem"`. Nó không nhìn thấy một
