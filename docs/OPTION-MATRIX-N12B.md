@@ -126,8 +126,9 @@ Chạy trên nhánh push thì cả hai chỉ lên artifact, không vào Git.
 ## 6. Không chứng nhận gì
 
 - **Không** phải duyệt mỹ thuật: ảnh để người xem, không có điểm chất lượng tự động.
-- **Không** phủ AR ngoài lát N12(d) ở §8: ba pose đã hiệu chỉnh × năm trục hiệu ứng được chiếu vào ảnh
-  camera; phần còn lại của ma trận (nốt, ambient) vẫn chỉ có bằng chứng ở sân khấu phẳng.
+- **Không** phủ AR ngoài lát N12(d) ở §8: ba pose đã hiệu chỉnh × (năm trục hiệu ứng vẽ vào ảnh camera, chất
+  liệu nốt, trail và bốn lớp ambient); ở AR mỗi trục của phần 2 chỉ có **một** giá trị, phần còn lại của ma trận
+  (các giá trị khác của nốt/ambient) vẫn chỉ có bằng chứng ở sân khấu phẳng.
 - **Không** phủ **giá trị số**: amount/speed/size/intensity/curve, seek/reset, round-trip preset.
 - **Không** phủ smart modulator (`VelocityColor`, `OctaveColor`, `PedalGlow`, `TempoSync`, `AudioReactive`,
   `ZoneSplit`) hay theme graph.
@@ -271,19 +272,40 @@ ngưỡng 60 cũ biến thành một khung hình duy nhất). Dòng `PASS numeri
 xa; log nằm trong artifact `keyflow-verification-log` (upload mọi lượt chạy), còn ảnh nằm trong
 `option-numeric-n12e` (chỉ upload ở `main` để không đội quota).
 
-## 8. N12(d), phần 1 — cùng option đó qua ba pose AR
+## 8. N12(d) — cùng option đó qua ba pose AR
 
 Ma trận ở mục 2 chỉ chạy renderer sân khấu. Một option có thể vẽ đúng ở đó mà **không** đi qua đường chiếu AR —
 ring thành quad, flash thành billboard, shard bị xoay theo nốt — và không ảnh nào ở mục 2 cho thấy điều đó.
 
-Phần 1 của N12(d) (`Diagnostics/OptionPoseReview.cs`, route `--verify-option-pose-only`) chụp đúng năm trục mà
-nghệ thuật của chúng nằm **trong ảnh camera**: wave, burst, hai kênh morph (hạt và flash) và vòng release. Mỗi
-trục hai lần chụp — **tắt** và **bật** — ở cùng pose, cùng input, cùng seed; ba pose là ba pose đã hiệu chỉnh sẵn
-của review hạt giữ phím (`HeldParticleControlPlan.Views`: reference, oblique, near-overhead), nên không thêm
-fixture camera hay tuyên bố pose mới. Tổng **27 ảnh WARP 1280×720** (mỗi pose: bốn ảnh tắt + năm ảnh giá trị) (artifact `option-pose-n12d`), manifest ghi
-góc pose, sha256 của ảnh camera và số pixel đổi của từng cặp.
+`Diagnostics/OptionPoseReview.cs` (route `--verify-option-pose-only`, artifact `option-pose-n12d`) chụp từng trục
+hai lần — **tắt** và **bật** — ở cùng pose, cùng input, cùng seed; ba pose là ba pose đã hiệu chỉnh sẵn của review
+hạt giữ phím (`HeldParticleControlPlan.Views`: reference, oblique, near-overhead), nên không thêm fixture camera
+hay tuyên bố pose mới. Hai phần cộng lại thành **51 ảnh WARP 1280×720**:
 
-Cổng: mỗi giá trị phải đổi **≥ 12 px** so với ảnh tắt **ở từng pose** — cùng ngưỡng với ma trận phẳng. Nếu một
-option chỉ có nhánh ở sân khấu, lượt chạy đỏ ngay tại pose đầu tiên. Ảnh tĩnh, không phải clip; chưa phủ
-ambient/nốt trong AR (sai số chiếu sẽ ảnh hưởng mọi giá trị của một trục như nhau, nên câu hỏi "option có nhánh
-không" đã được ma trận phẳng trả lời) và chưa phủ che tay (N10).
+- **Phần 1 (27 ảnh)** — năm trục mà nghệ thuật của chúng nằm **trong ảnh camera**: wave, burst, hai kênh morph
+  (hạt và flash) và vòng release. Mỗi pose: bốn ảnh tắt + năm ảnh giá trị; hai giá trị của morph dùng chung một
+  ảnh tắt vì chúng là hai kênh của cùng một nhà.
+- **Phần 2 (24 ảnh)** — **bốn lớp ambient** (`Laser Beams`, `Aurora`, `Color Splash`, `Galaxy`), thứ mà lớp phủ
+  phát ở không gian màn hình rồi đè lên ảnh camera: nằm trong khung hình bằng cách xây dựng, không phụ thuộc phép
+  chiếu. Mỗi pose: bốn cặp tắt/bật.
+
+**Vì sao không chụp trục nốt/trail ở đây** (và đó là lý do phần 2 chỉ có ambient): một nốt đang bay **không** nằm
+ở phím của nó. Đường camera đặt tâm nốt ở `(head + tail) / 2` độ sâu phím dọc theo vector bay; với
+`ArNoteStyle.Default` (rơi 1,5; tầm 4) và nốt 2 giây của cảnh mẫu, head cách phím **0,75** và tail **3,75** độ
+sâu phím, nên tâm nốt ở **2,25** độ sâu phím *phía sau* phím — còn trail treo ở đầu tail, xa hơn nữa. Fixture
+của review (`docs/samples/ar-keyboard-topdown.png`) hiệu chỉnh quanh đúng bàn phím: khung hình không có chỗ cho
+vùng đó, nên ảnh chụp ở đó sẽ đo **fixture**, không đo option. Muốn chứng minh chất liệu nốt và trail đi qua phép
+chiếu AR phải có **camera rộng hơn** (một fixture mới, khung bao vùng sau phím) — việc đó nằm trong danh sách còn
+lại, không phải một dòng trong bảng ở trên. Con số này lấy từ mã, không phải ước lượng: `Ar3DNoteProjection.Build`
+tính `headDistance = max(0, (start − position) × fall)`, `tailDistance = head + duration × fall − gap`, và
+`TryPatch` đặt `centreDistance = (headDistance + tailDistance) / 2`.
+
+Cổng cho **cả hai** phần: mỗi giá trị phải đổi **≥ 12 px** so với ảnh tắt **ở từng pose** — cùng ngưỡng với ma
+trận phẳng. Nếu một option chỉ có nhánh ở sân khấu, lượt chạy đỏ ngay tại pose đầu tiên và câu lỗi nêu đúng pose
++ family + số pixel. Manifest ghi góc pose, sha256 của ảnh camera, `part` của từng ảnh và số pixel đổi của từng
+cặp; `scan_option_pose` giữ hai phần **rời nhau** (một family không được nằm ở cả hai, mỗi family đúng một dòng ở
+phần 2), giữ mọi giá trị là giá trị sản phẩm và khác giá trị trung tính, và giữ 27 + 36 = 63 khớp với suite.
+
+**Không chứng nhận:** ảnh tĩnh, không phải clip; mỗi trục chỉ một giá trị ở phần 2 (câu hỏi "*mọi* giá trị của
+ambient có đi qua AR không" vẫn do ma trận phẳng trả lời ở sân khấu); sai số chiếu ảnh hưởng mọi giá trị của một
+trục như nhau; **chưa** phủ che tay (N10), camera thật hay GPU thật.

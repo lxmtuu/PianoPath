@@ -1423,6 +1423,130 @@ def scan_option_numeric():
     return errors
 
 
+def scan_option_pose():
+    """The AR/pose slice has to keep shooting the option surface the overlay can draw.
+
+    ``OptionPoseReview`` renders each axis twice — off and on — through three calibrated poses and fails when the
+    two frames differ by fewer than twelve pixels. That is only a claim about the product while the rows are
+    product values in two disjoint parts: this check reads the plan, keeps part 1 at five effect axes and part 2
+    at the two song-note axes plus four ambient layers, refuses a family in both parts or twice in one, and
+    keeps the capture count equal to three poses times the rows. It also keeps the review on the shared capture
+    driver and the suite on the route, so a family deleted from the plan cannot silently shrink the review.
+    """
+    errors = []
+    paths = {
+        "plan": ROOT / "Diagnostics" / "OptionMatrixPlan.cs",
+        "review": ROOT / "Diagnostics" / "OptionPoseReview.cs",
+        "suite": ROOT / "Diagnostics" / "VerificationSuite.cs",
+        "held": ROOT / "Diagnostics" / "HeldParticleControlPlan.cs",
+    }
+    for name, path in paths.items():
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the AR/pose slice needs it"]
+    plan = _code(paths["plan"].read_text(encoding="utf-8"))
+    review = _code(paths["review"].read_text(encoding="utf-8"))
+    suite = _code(paths["suite"].read_text(encoding="utf-8"))
+    held = _code(paths["held"].read_text(encoding="utf-8"))
+
+    # The families and their values, exactly as the flat matrix declares them.
+    declared = re.findall(
+        r'new Family\("([^\"]+)",\s*"([^\"]+)",\s*Scene\.(\w+),\s*\[(.*?)\],\s*"([^\"]+)"(?:,\s*"([^\"]+)")?\)',
+        plan, re.S)
+    families = {family_id: (setting, re.findall(r'"([^"]*)"', values), neutral)
+                for family_id, setting, _, values, neutral, _ in declared}
+
+    def rows(name, expected, what, one_per_family):
+        block = re.search(rf"{name}\s*\{{\s*get;\s*\}}\s*=\s*Array\.AsReadOnly\(new\[\]\s*\{{(.*?)\}}\);", plan, re.S)
+        if not block:
+            return None, [f"Diagnostics/OptionMatrixPlan.cs no longer declares {name}; {what}"]
+        found = re.findall(r'\("([^\"]+)",\s*"([^\"]+)"\)', block.group(1))
+        problems = []
+        if len(found) != expected:
+            problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} declares {len(found)} rows; {what} needs {expected}")
+        seen, families_seen = set(), set()
+        for family_id, value in found:
+            if (family_id, value) in seen:
+                problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} shoots {family_id}/{value!r} twice")
+            seen.add((family_id, value))
+            if one_per_family and family_id in families_seen:
+                problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} names the family {family_id!r} twice; part 2 "
+                                "shoots one value per family, so a second row would be a duplicate")
+            families_seen.add(family_id)
+            if family_id not in families:
+                problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} names unknown family {family_id!r}")
+                continue
+            setting, values, neutral = families[family_id]
+            if value not in values:
+                problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} shoots {family_id}/{value!r}, which "
+                                f"PianoVisualSettings.{setting} does not offer")
+            if value == neutral:
+                problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} shoots {family_id} at its neutral value "
+                                f"{neutral!r}; the two captures would be the same picture by construction")
+        return found, problems
+
+    # Part 1 deliberately shoots two channels of one family (the morph particles and its flash), both against
+    # the same off state, so the one-row-per-family rule belongs to part 2 only.
+    part_one, problems = rows("PoseSelections", 5, "part 1 (the five effect axes drawn into the camera image)", False)
+    errors.extend(problems)
+    part_two, problems = rows("PoseSliceSelections", 4, "part 2 (the four ambient layers emitted over the camera picture)", True)
+    errors.extend(problems)
+    if part_one and part_two:
+        overlap = {family_id for family_id, _ in part_one} & {family_id for family_id, _ in part_two}
+        if overlap:
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs shoots {sorted(overlap)} in both AR parts; part 2 is the "
+                          "rest of the option surface, not a second look at part 1")
+        expected_settings = {"AmbientEnergy", "AmbientNature", "AmbientLight", "AmbientCosmic"}
+        covered = {families[family_id][0] for family_id, _ in part_two if family_id in families}
+        if covered != expected_settings:
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs part 2 covers {sorted(covered)}; it has to cover exactly "
+                          f"{sorted(expected_settings)} — the four ambient layers, the only option family this "
+                          "fixture can see drawn over the camera picture")
+
+    # The review: three calibrated poses, the shared floor and count, and one capture driver.
+    if "HeldParticleControlPlan.Views.Where(view => view.OverCamera)" not in review or "poses.Length != 3" not in review:
+        errors.append("Diagnostics/OptionPoseReview.cs no longer requires the three calibrated poses from "
+                      "HeldParticleControlPlan.Views")
+    if "internal static IReadOnlyList<View> Views { get; }" not in held:
+        errors.append("Diagnostics/HeldParticleControlPlan.cs no longer publishes the calibrated views the AR/pose "
+                      "slice shoots; a new fixture would be an unreviewed pose")
+    floor = re.search(r"MinimumChangedPixels = (\d+)", review)
+    if not floor or floor.group(1) != "12":
+        errors.append("Diagnostics/OptionPoseReview.cs no longer keeps the 12-pixel floor of the flat matrix; a "
+                      "stray pixel is not a drawn option")
+    counts = {name: re.search(rf"private const int {name} = ([^;]+);", review) for name in ("ExpectedPart1", "ExpectedPart2")}
+    if not all(counts.values()):
+        errors.append("Diagnostics/OptionPoseReview.cs lost its per-part capture counts; a missing pose or family "
+                      "would have to name itself")
+    else:
+        if counts["ExpectedPart1"].group(1).strip() != "27":
+            errors.append("Diagnostics/OptionPoseReview.cs part 1 is no longer the 27 captures of three poses times "
+                          "(four off states and five values); update it with the docs and the suite")
+        if counts["ExpectedPart2"].group(1).strip() != "24":
+            errors.append("Diagnostics/OptionPoseReview.cs part 2 is no longer the 24 captures of three poses times "
+                          "four ambient layers off and on; update it with the docs and the suite")
+    if part_one and part_two:
+        rows_per_pose = len({family_id for family_id, _ in part_one}) + len(part_one) + 2 * len(part_two)
+        if 3 * rows_per_pose != 51:
+            errors.append(f"Diagnostics/OptionPoseReview.cs would write {3 * rows_per_pose} captures for the rows it "
+                          "shoots, not the 51 the suite asserts")
+    if "OptionMatrixReview.Settings(" not in review or "OptionMatrixPlan.ChangedPixels(" not in review:
+        errors.append("Diagnostics/OptionPoseReview.cs no longer shares the flat matrix's settings builder and pixel "
+                      "comparison; two copies would describe two different frames")
+    if "GpuStageRenderer.Create(forceWarp: true)" not in review or "!renderer.IsWarp" not in review:
+        errors.append("Diagnostics/OptionPoseReview.cs no longer pins itself to WARP; the artifact would claim "
+                      "hardware it never drew on")
+    if '"--verify-option-pose-only"' not in suite or "OptionPoseReview.Render(" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs lost the --verify-option-pose-only route or stopped calling "
+                      "OptionPoseReview.Render")
+    if "captures == 51" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs no longer asserts the 51 AR/pose captures")
+    for name in ("README.md", "README.en.md"):
+        readme = ROOT / name
+        if readme.exists() and "51 captures" not in readme.read_text(encoding="utf-8"):
+            errors.append(f"{name}: the --verify-option-pose-only row no longer states the 51 captures, so the "
+                          "documented size of the AR/pose slice has drifted from the review")
+    return errors
+
 def scan_option_matrix():
     """Every option the settings offer is a picture, not only a word in a combo box.
 
@@ -2595,6 +2719,7 @@ def main():
     errors.extend(scan_note_width_parity())
     errors.extend(scan_option_matrix())
     errors.extend(scan_option_numeric())
+    errors.extend(scan_option_pose())
     errors.extend(scan_preset_roundtrip())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())

@@ -29,11 +29,14 @@
 5. **Độ phủ hiệu ứng: từng option của 11 trục setting đã có ảnh riêng (N12(b), 2026-10-21)**: 87 mục,
    86 `Available`, 1 `Planned`; AR có 24 family (6 `Native`, 17 `Unverified`, 1 `Unsupported`). Ma trận option chạy
    trên **WPF và D3D/WARP**: 62 giá trị (9 trong đó là trạng thái tắt) + 11 baseline = **64 cảnh, 128 ảnh 960×540**, cùng cảnh/cùng seed; mỗi giá
-   trị phải đổi pixel so với baseline và không trùng ảnh với giá trị khác. Đã có phần 1 của ma trận **AR/pose** (N12(d)):
-   5 trục hiệu ứng × 3 pose đã hiệu chỉnh × (tắt + bật) = 27 ảnh WARP, mỗi giá trị phải đổi ≥12 px so với ảnh tắt cùng
-   pose. Đã có thêm **ma trận trục số** (N12(e)): 9 trục slider × 3 giá trị × WPF/WARP = 54 ảnh, cổng "mọi cặp
+   trị phải đổi pixel so với baseline và không trùng ảnh với giá trị khác. Đã có ma trận **AR/pose** (N12(d)):
+   phần 1 là 5 trục hiệu ứng × 3 pose đã hiệu chỉnh × (tắt + bật) = 27 ảnh, phần 2 là 4 lớp ambient (vẽ screen-space
+   đè lên ảnh) × 3 pose × (tắt + bật) = 24 ảnh — **51 ảnh WARP** cả thảy, mỗi giá trị phải đổi ≥12 px so với ảnh tắt
+   cùng pose. Chất liệu nốt và trail **chưa** chụp được trong AR: nốt đang bay nằm tới bốn độ sâu phím phía sau
+   phím, ngoài khung của fixture hiện tại — cần một camera rộng hơn (xem `OPTION-MATRIX-N12B.md` §8). Đã có thêm **ma trận trục số** (N12(e)): 9 trục slider × 3 giá trị × WPF/WARP = 54 ảnh, cổng "mọi cặp
    trong một trục đổi ≥12 px trên cả hai renderer" — bắt đúng lớp lỗi kẹp 60% ở §3.2b. Còn thiếu: phần còn lại của
-   AR/pose (nốt, ambient), các trục số ngoài nhóm trên, duyệt mỹ thuật và cổng phần cứng.
+   chất liệu nốt và trail trong AR (cần fixture rộng hơn) cùng các **giá trị khác** của ambient trong AR (mỗi trục
+   một giá trị), các trục số ngoài nhóm trên, duyệt mỹ thuật và cổng phần cứng.
 6. **Những thứ đang tốt, không nên phá**: bảng màu nốt dùng chung (`GpuLook.NoteColor` lấy từ stage), vật liệu
    nốt dùng chung `ShadeNoteMaterial` cho stage và AR, công thức hình học WPF/GPU trùng nhau, brush/pen đã được
    cache, seed tất định. Vấn đề nằm ở **hợp đồng giữa các đường vẽ**, không phải ở chất lượng một đường.

@@ -9,16 +9,18 @@ using System.Windows.Media.Imaging;
 namespace PianoPath;
 
 /// <summary>
-/// N12(d), first slice: the options whose art is drawn <em>into the camera image</em> — the impact wave, the
-/// impact burst, the two morph channels and the release ring — re-shot through the three calibrated AR poses
-/// with their own off state.
+/// N12(d): the option surface the AR overlay draws, re-shot through the three calibrated AR poses with each
+/// option's own off state.
 ///
 /// <para>
-/// The flat matrix (<see cref="OptionMatrixReview"/>) proves each value reaches the stage renderer. It cannot
-/// prove the same value survives the projection, where a ring becomes a quad, a flash becomes a billboard and
-/// a shard is re-aimed along the note; a value that only the stage path knows about would still be green there.
-/// This review holds the camera and the input fixed and changes one option, exactly like the flat matrix, so a
-/// zero-pixel result means the AR layer never drew the option at all.
+/// Part 1 is the art drawn <em>into the camera image</em> — the impact wave, the impact burst, the two morph
+/// channels and the release ring, where a ring becomes a quad, a flash becomes a billboard and a shard is
+/// re-aimed along the note. Part 2 is the four ambient layers, which the overlay emits in screen space over the
+/// camera picture (and which part 1 never touches). Both parts hold the camera and the input fixed and change one
+/// option, exactly like the flat matrix, so a zero-pixel result means the AR layer never drew the option at all.
+/// The song-note axes are not shot here on purpose: a note in flight sits up to four key-depths behind its key,
+/// outside a frame that is calibrated around the keyboard itself — <see cref="OptionMatrixPlan.PoseSliceSelections"/>
+/// records the numbers.
 /// </para>
 ///
 /// <para>
@@ -33,11 +35,15 @@ internal static class OptionPoseReview
     /// <summary>Matches the flat matrix's floor: a "drawn" claim needs more than a stray pixel.</summary>
     private const int MinimumChangedPixels = 12;
     private static readonly IReadOnlySet<int> NoPressed = new HashSet<int>();
-    private const int ExpectedCaptures = 27; // 3 poses × (4 off states + 5 values; the morph axis has two values)
+    /// <summary>3 poses × (4 off states + 5 values; the morph axis has two values).</summary>
+    private const int ExpectedPart1 = 27;
+    /// <summary>3 poses × 4 ambient layers × (one off state + one value).</summary>
+    private const int ExpectedPart2 = 24;
+    private const int ExpectedCaptures = ExpectedPart1 + ExpectedPart2;
 
     private sealed record Counters(int Sprites, int ArParticles);
 
-    private sealed record Shot(string Pose, string Family, string Setting, string Value, bool Neutral,
+    private sealed record Shot(int Part, string Pose, string Family, string Setting, string Value, bool Neutral,
         string File, string PixelSha256, int ChangedPixels, double SampleSeconds, Counters Counters)
     {
         /// <summary>Held only while the pair is compared; dropped before the manifest is written.</summary>
@@ -62,19 +68,27 @@ internal static class OptionPoseReview
             if (!renderer.IsWarp) throw new InvalidOperationException($"The AR/pose slice requires WARP, but Direct3D created '{renderer.AdapterName}'.");
 
             var captures = new List<Shot>(ExpectedCaptures);
+            // The two parts walk the same loop: one off state per family, then one capture per value. Part 1 has a
+            // family with two channels sharing that off state; part 2 has one row per family by construction.
+            (int Part, IReadOnlyList<(string Family, string Value)> Selections)[] parts =
+            [
+                (1, OptionMatrixPlan.PoseSelections),
+                (2, OptionMatrixPlan.PoseSliceSelections)
+            ];
             foreach (var pose in poses)
+            foreach (var (part, selections) in parts)
             // One off state per family: the morph axis is shot twice at the same pose (its particle channel and
             // its flash), and both values are compared against the same off frame instead of re-rendering it.
-            foreach (var group in OptionMatrixPlan.PoseSelections.GroupBy(selection => selection.Family))
+            foreach (var group in selections.GroupBy(selection => selection.Family))
             {
                 var family = OptionMatrixPlan.PoseFamily(group.Key);
-                var off = Capture(root, renderer, pose, cameras[pose.Id], family, null, "off", neutral: true);
+                var off = Capture(root, renderer, pose, cameras[pose.Id], part, family, null, "off", neutral: true);
                 captures.Add(off with { ChangedPixels = 0, PixelBytes = null });
                 foreach (var selection in group)
                 {
                     if (!family.Values.Contains(selection.Value))
                         throw new InvalidDataException($"The {family.Id} pose slice asks for '{selection.Value}', which the family does not offer.");
-                    var on = Capture(root, renderer, pose, cameras[pose.Id], family, selection.Value,
+                    var on = Capture(root, renderer, pose, cameras[pose.Id], part, family, selection.Value,
                         OptionMatrixPlan.Slug(selection.Value), neutral: false);
                     // The two shots differ in exactly one setting; anything else would make the comparison meaningless.
                     var changed = OptionMatrixPlan.ChangedPixels(off.PixelBytes!, on.PixelBytes!);
@@ -87,8 +101,14 @@ internal static class OptionPoseReview
                 }
             }
 
-            if (captures.Count != ExpectedCaptures)
-                throw new InvalidDataException($"The AR/pose slice wrote {captures.Count} captures; exactly {ExpectedCaptures} are required.");
+            // Each part is counted on its own: a missing pose, a family that lost its value or a part that
+            // quietly stopped running has to name itself instead of being hidden by the other part's captures.
+            var part1 = captures.Count(capture => capture.Part == 1);
+            var part2 = captures.Count(capture => capture.Part == 2);
+            if (part1 != ExpectedPart1 || part2 != ExpectedPart2 || captures.Count != ExpectedCaptures)
+                throw new InvalidDataException(
+                    $"The AR/pose slice wrote {part1} part-1 and {part2} part-2 captures; {ExpectedPart1} and " +
+                    $"{ExpectedPart2} are required.");
             WriteManifest(root, renderer.AdapterName, poses, cameras, captures);
             WriteHtmlIndex(root, captures);
             VerifyWrittenArtifacts(root, captures);
@@ -98,7 +118,7 @@ internal static class OptionPoseReview
     }
 
     private static Shot Capture(string root, GpuStageRenderer renderer, HeldParticleControlPlan.View pose, byte[] camera,
-        OptionMatrixPlan.Family family, string? value, string label, bool neutral)
+        int part, OptionMatrixPlan.Family family, string? value, string label, bool neutral)
     {
         var settings = OptionMatrixReview.Settings(family, value);
         var seconds = OptionMatrixPlan.Seconds(family);
@@ -106,7 +126,7 @@ internal static class OptionPoseReview
         var relative = Path.Combine("option-pose", pose.Id, family.Id, $"{label}.png");
         var sha = ReviewPng.Write(Path.Combine(root, relative), pixels, Width, Height,
             $"{family.Id}/{value ?? "off"} in {pose.Id}");
-        return new Shot(pose.Id, family.Id, family.Setting, value ?? family.Neutral, neutral,
+        return new Shot(part, pose.Id, family.Id, family.Setting, value ?? family.Neutral, neutral,
             relative.Replace('\\', '/'), sha, 0, seconds,
             new Counters(renderer.StageSpriteCount, renderer.ArParticleFxCount)) { PixelBytes = pixels };
     }
@@ -166,12 +186,17 @@ internal static class OptionPoseReview
         File.WriteAllText(Path.Combine(root, "manifest.json"), JsonSerializer.Serialize(new
         {
             schema = 1,
-            claim = "N12(d) part 1: five effect axes whose art is projected into the synthetic camera are drawn through the three calibrated AR poses, each against its own off state at the same pose, input and seed.",
-            notClaimed = "No art, hardware, real-camera, occlusion, ambient/note option or default change.",
+            claim = "N12(d): the option surface this fixture can see in AR is re-shot through the three calibrated AR poses against its own off state at the same pose, input and seed — part 1 the five effects drawn into the camera image, part 2 the four ambient layers emitted screen-space over the picture.",
+            notClaimed = "No art, hardware, real-camera, occlusion, hand-occlusion or default change; each axis is shot at one value on both sides, so this proves the option reaches the projection, not that every value does. The note material and the projected trail are not shot at all: a note in flight sits up to four key-depths behind its key, outside a frame calibrated around the keyboard itself.",
             renderer = "GPU-WARP", adapter,
             width = Width, height = Height, fps = OptionMatrixPlan.Fps, seed = OptionMatrixPlan.Seed,
             pitch = OptionMatrixPlan.Pitch, strength = OptionMatrixPlan.Strength,
-            sampleSeconds = OptionMatrixPlan.PoseSelections
+            parts = new[]
+            {
+                new { Part = 1, Captures = ExpectedPart1, Selections = OptionMatrixPlan.PoseSelections.Select(selection => $"{selection.Family}={selection.Value}") },
+                new { Part = 2, Captures = ExpectedPart2, Selections = OptionMatrixPlan.PoseSliceSelections.Select(selection => $"{selection.Family}={selection.Value}") }
+            },
+            sampleSeconds = OptionMatrixPlan.PoseSelections.Concat(OptionMatrixPlan.PoseSliceSelections)
                 .Select(selection => OptionMatrixPlan.PoseFamily(selection.Family))
                 .DistinctBy(family => family.Id)
                 .ToDictionary(family => family.Id, family => OptionMatrixPlan.Seconds(family)),
@@ -184,7 +209,7 @@ internal static class OptionPoseReview
             }),
             captures = captures.Select(capture => new
             {
-                capture.Pose, capture.Family, capture.Setting, capture.Value, capture.Neutral, capture.File,
+                capture.Part, capture.Pose, capture.Family, capture.Setting, capture.Value, capture.Neutral, capture.File,
                 capture.PixelSha256, capture.ChangedPixels,
                 SampleSeconds = Math.Round(capture.SampleSeconds, 6),
                 capture.Counters
@@ -198,24 +223,42 @@ internal static class OptionPoseReview
         var body = new System.Text.StringBuilder();
         body.Append("<!doctype html><html lang=\"vi\"><meta charset=\"utf-8\"><title>N12(d) — option × AR pose</title>")
             .Append("<style>body{font:15px system-ui;background:#10141b;color:#e1e9f3;max-width:1500px;margin:24px auto;padding:16px}")
-            .Append("h2{margin:28px 0 8px}p{line-height:1.55;color:#a9b6c7}figure{margin:0}figcaption{padding:4px 0;color:#8fa3ba}")
-            .Append("img{width:100%;height:auto;border:1px solid #263243}.row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}</style>")
-            .Append("<h1>Ma trận option × pose AR (N12(d), phần 1)</h1><p>Năm trục hiệu ứng được chiếu vào ảnh camera ")
-            .Append("tổng hợp, mỗi trục hai lần chụp (tắt / bật) ở cùng pose, cùng input, cùng seed, WARP. Ảnh native ")
-            .Append("1280×720, không cắt, không ghép. Đây là bằng chứng renderer có nhánh cho từng option ở cả ba pose — ")
-            .Append("không phải nghiệm thu mỹ thuật, hardware hay camera thật.</p>");
+            .Append("h2{margin:30px 0 4px}p{line-height:1.55;color:#a9b6c7}h3{margin:18px 0 8px;font-size:15px;color:#c9d6e6}")
+            .Append("figure{margin:0}figcaption{padding:4px 0;color:#8fa3ba;font-size:13px}")
+            .Append("img{width:100%;height:auto;border:1px solid #263243}")
+            .Append(".row{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}</style>")
+            .Append("<h1>Ma trận option × pose AR (N12(d))</h1><p>Mỗi option được chụp hai lần — <b>tắt</b> và <b>bật</b> — ")
+            .Append("ở cùng pose, cùng input, cùng seed trên WARP, ảnh native 1280×720, không cắt, không ghép. Phần 1 là năm ")
+            .Append("trục hiệu ứng được vẽ <em>vào</em> ảnh camera; phần 2 là bốn lớp ambient mà lớp phủ phát ở không gian màn ")
+            .Append("hình rồi đè lên ảnh. Đây là bằng chứng renderer có nhánh cho từng option ở cả ba pose — không phải nghiệm ")
+            .Append("thu mỹ thuật, hardware hay camera thật. Chất liệu nốt và trail <b>không</b> có ở đây: một nốt đang bay nằm ")
+            .Append("tới bốn độ sâu phím phía sau phím của nó, ngoài khung đã hiệu chỉnh quanh bàn phím.</p>");
+        var parts = new (int Part, string Title, string Note)[]
+        {
+            (1, "Phần 1 — hiệu ứng vẽ vào ảnh camera",
+                "wave, burst, hai kênh morph, vòng release: mỗi giá trị so với ảnh tắt ở cùng pose."),
+            (2, "Phần 2 — bốn lớp ambient screen-space",
+                "mỗi lớp được bật một mình và so với khung hình không có lớp nào; ambient nằm trong khung bằng cách xây dựng.")
+        };
         foreach (var pose in captures.Select(capture => capture.Pose).Distinct())
         {
-            body.Append($"<h2>{Encode(pose)}</h2><div class=\"row\">");
-            foreach (var family in captures.Where(capture => capture.Pose == pose).GroupBy(capture => capture.Family))
+            body.Append($"<h2>{Encode(pose)}</h2>");
+            foreach (var part in parts)
             {
-                var off = family.Single(capture => capture.Neutral);
-                foreach (var on in family.Where(capture => !capture.Neutral))
-                    body.Append($"<figure><figcaption>{Encode(family.Key)}: {Encode(on.Value)} — đổi {on.ChangedPixels:N0} px so với tắt</figcaption>")
-                        .Append($"<img loading=\"lazy\" src=\"{Encode(on.File)}\" alt=\"{Encode(family.Key)} {Encode(on.Value)}\">")
-                        .Append($"<figcaption><a href=\"{Encode(off.File)}\">ảnh tắt cùng pose</a></figcaption></figure>");
+                var shots = captures.Where(capture => capture.Pose == pose && capture.Part == part.Part).ToArray();
+                if (shots.Length == 0) continue;
+                body.Append($"<h3>{Encode(part.Title)}</h3><p>{Encode(part.Note)}</p><div class=\"row\">");
+                // One off state per family: group by family so each value links back to the same off picture.
+                foreach (var family in shots.GroupBy(capture => capture.Family))
+                {
+                    var off = family.Single(capture => capture.Neutral);
+                    foreach (var on in family.Where(capture => !capture.Neutral))
+                        body.Append($"<figure><figcaption>{Encode(family.Key)}: {Encode(on.Value)} — đổi {on.ChangedPixels:N0} px so với tắt</figcaption>")
+                            .Append($"<img loading=\"lazy\" src=\"{Encode(on.File)}\" alt=\"{Encode(family.Key)} {Encode(on.Value)}\">")
+                            .Append($"<figcaption><a href=\"{Encode(off.File)}\">ảnh tắt cùng pose</a></figcaption></figure>");
+                }
+                body.Append("</div>");
             }
-            body.Append("</div>");
         }
         body.Append("</html>");
         File.WriteAllText(Path.Combine(root, "index.html"), body.ToString());

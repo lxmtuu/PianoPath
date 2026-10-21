@@ -101,6 +101,29 @@ internal static class OptionMatrixPlan
         ("release", "Echo Rings")       // ring channel
     });
 
+    /// <summary>
+    /// N12(d), part 2 — the four ambient layers, which the overlay emits in screen space over the camera picture
+    /// and which part 1 does not touch. One row per family, so a family cannot appear in both parts.
+    ///
+    /// <para>
+    /// The two song-note axes are deliberately <b>not</b> here. A note in flight is not drawn where its key is: the
+    /// camera path places its centre <c>(head + tail) / 2</c> key-depths along the travel vector, and with
+    /// <see cref="ArNoteStyle.Default"/> (fall 1.5, reach 4) the sampled two-second note has its head 0.75 and its
+    /// tail 3.75 behind the keys — the centre sits 2.25 key-depths off the key plane, and a trail hangs at the tail
+    /// end of that. The calibrated fixture frames the keyboard and little else, so that volume is outside its
+    /// picture: shooting the note axes there would measure the fixture, not the option. Proving the note material
+    /// and the projected trail in AR needs a camera whose frame covers the space behind the keys, which is a new
+    /// fixture rather than a row here — see <c>docs/OPTION-MATRIX-N12B.md</c> §8.
+    /// </para>
+    /// </summary>
+    internal static IReadOnlyList<(string Family, string Value)> PoseSliceSelections { get; } = Array.AsReadOnly(new[]
+    {
+        ("ambient-energy", "Laser Beams"),
+        ("ambient-nature", "Aurora"),
+        ("ambient-light", "Color Splash"),
+        ("ambient-cosmic", "Galaxy")
+    });
+
     internal static Family FamilyById(string id) => Families.SingleOrDefault(family => family.Id == id)
         ?? throw new ArgumentException($"The option plan names unknown family '{id}'.", nameof(id));
 

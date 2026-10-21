@@ -131,6 +131,33 @@ public class OptionMatrixPlanTests
     }
 
     [Fact]
+    public void The_second_ar_slice_covers_the_ambient_layers_without_repeating_part_one()
+    {
+        Assert.Equal(4, OptionMatrixPlan.PoseSliceSelections.Count);
+        // One row per family: a family that appeared twice would be compared against an off state it cannot
+        // tell apart from its own sibling.
+        Assert.Equal(OptionMatrixPlan.PoseSliceSelections.Count,
+            OptionMatrixPlan.PoseSliceSelections.Select(selection => selection.Family).Distinct(StringComparer.Ordinal).Count());
+        foreach (var (id, value) in OptionMatrixPlan.PoseSliceSelections)
+        {
+            var family = OptionMatrixPlan.PoseFamily(id);
+            Assert.Contains(value, family.Values);
+            Assert.NotEqual(family.Neutral, value);
+            Assert.Contains(value, OptionMatrixPlan.CapturedValues(family));
+        }
+        // Part 2 is the four ambient layers and nothing else: the note material and the trail cannot be shot in
+        // this fixture (a note in flight sits key-depths behind its key, outside the calibrated frame), and part
+        // 1's five effect axes must not leak in.
+        var settings = OptionMatrixPlan.PoseSliceSelections.Select(selection => OptionMatrixPlan.PoseFamily(selection.Family).Setting).ToArray();
+        Assert.Equal(new[] { "AmbientEnergy", "AmbientNature", "AmbientLight", "AmbientCosmic" }, settings);
+        var partOne = OptionMatrixPlan.PoseSelections.Select(selection => selection.Family).ToHashSet(StringComparer.Ordinal);
+        Assert.All(OptionMatrixPlan.PoseSliceSelections, selection => Assert.DoesNotContain(selection.Family, partOne));
+        // The ambient axes need the empty scene: a scene with a note in it would compare the note, not the layer.
+        Assert.All(OptionMatrixPlan.PoseSliceSelections,
+            selection => Assert.Equal(OptionMatrixPlan.Scene.Ambient, OptionMatrixPlan.PoseFamily(selection.Family).Scene));
+    }
+
+    [Fact]
     public void Slugs_are_stable_file_names()
     {
         Assert.Equal("speed-lines", OptionMatrixPlan.Slug("Speed Lines"));
