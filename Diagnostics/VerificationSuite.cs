@@ -116,6 +116,19 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
+        if (args.Contains("--verify-preset-roundtrip-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Preset round-trip review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N12(f) preset round-trip review; this does not run or certify the full regression suite.");
+                VerifyPresetRoundTrip(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
         if (args.Contains("--verify-option-numeric-only"))
         {
             try
@@ -142,7 +155,7 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); } }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); } }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -6852,6 +6865,15 @@ internal static partial class VerificationSuite
         var captures = OptionMatrixReview.Render(outputDirectory);
         Assert(captures == 128, "The option matrix must capture 64 scenes (every value of eleven settings families, each with its own off baseline) through two renderers.");
         Results.Add($"PASS option matrix (N12(b)): {captures} WPF/GPU-WARP captures at 960×540 over 11 settings families — every value drawn, every value distinguishable from its own off state and from its siblings, every family's off state bit-identical inside its scene at one fixed seed. The morph and release families are captured with Embers, Impact rings, Impact flash and wisps off, so those captures also prove both channels draw on their own. Renderer-branching evidence, not art approval, AR projection or a default change; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyPresetRoundTrip(string outputDirectory)
+    {
+        var result = PresetRoundTripReview.Render(outputDirectory);
+        Assert(result.Presets == 20, "The preset round trip must cover the fourteen built-in looks and the six shelf files.");
+        Assert(result.Frames == result.Presets * 4 && result.Files == result.Presets * 2,
+            "Each preset is captured before and after the file on two renderers, with one stored picture per renderer.");
+        Results.Add($"PASS preset round trip (N12(f)): {result.Presets} shipped presets (14 built-in, 6 shelf) applied through the dock's own path, written with WritePresetFile, read back through ReadPresetFile and applied again — all {result.Properties} writable settings properties identical both in the settings the file returned and in the settings the dock applied, and the {OptionMatrixPlan.Frames(OptionMatrixPlan.Scene.Falling)}-frame scene byte-identical on both WPF and GPU-WARP ({result.Files} stored pictures, {result.Frames} frames compared). A property the preset file or a migration drops fails the run naming that property. Not art approval, not a migration-version claim; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
     }
 
     private static void VerifyOptionNumeric(string outputDirectory)

@@ -82,6 +82,9 @@ PianoPath.exe --verify --verify-option-pose-only --verify-review-out=<thư-mục
 
 # chỉ ma trận trục số N12(e) — §9
 PianoPath.exe --verify --verify-option-numeric-only --verify-review-out=<thư-mục> --verify-log=<tệp.log>
+
+# chỉ round-trip preset N12(f) — §10
+PianoPath.exe --verify --verify-preset-roundtrip-only --verify-review-out=<thư-mục> --verify-log=<tệp.log>
 ```
 
 Kết quả nằm trong `<thư-mục>/option-matrix/`:
@@ -169,6 +172,43 @@ giá trị morph lẫn **cả năm** kiểu release "được nhận nhưng khô
 
 Đổi lại: người dùng chọn Shatter với Sparks tắt giờ **thấy** shard (và bản ghi WPF khớp bản ghi GPU), còn ring
 morph/release sáng theo đúng slider của chúng thay vì theo slider wave.
+
+## 10. N12(f) — round-trip preset: look đã lưu phải là look mở lại
+
+Ba review trước đều dựng settings **trong bộ nhớ**. Một look mà người chơi lưu hôm nay và mở lại mai đi qua một
+con đường khác: `CopyFrom` vào settings đang sống → `WritePresetFile` ra tệp → `ReadPresetFile` đọc lại (kèm
+`ApplyMigrations` + `Clamp`) → `CopyFrom` lần nữa. Một thuộc tính mà tệp **không mang** (hoặc một migration viết
+lại) sẽ quay về mặc định, và look đổi hình sau khi mở lại — im lặng, không có ngoại lệ nào.
+
+`Diagnostics/PresetRoundTripReview.cs` (`--verify-preset-roundtrip-only`, artifact `preset-roundtrip-n12f`) đi
+đúng con đường đó cho **mọi preset đang ship** — 14 built-in + 6 tệp shelf, lấy từ `VisualPresets.BuiltIn` và
+`CommunityPresets.All` chứ không từ danh sách chép tay — và kiểm **ba** điều, đỏ ở cả ba:
+
+1. **Mọi thuộc tính ghi được** (255) của `PianoVisualSettings`, so bằng reflection và **không có danh sách bỏ
+   qua, cũng không có danh sách chỉ định**, phải giống nhau giữa settings đã ghi và settings **đọc lại từ tệp**;
+   lỗi **nêu đúng tên thuộc tính** và hai giá trị. Đây là phần phủ các trường mà cảnh được chụp không vẽ (burst,
+   wave, flash, morph, AR…): chỉ so ảnh sẽ không thấy chúng.
+2. Cùng phép so đó chạy lần nữa giữa settings đã ghi và settings **sau đường áp của dock**, nên một bước
+   `Clamp`/migration trên đường vào settings sống cũng bị bắt chứ không chỉ đường ra tệp.
+3. Khung hình **90 frame** của cảnh `Falling` phải **trùng từng byte** trên **cả WPF và D3D/WARP** trước và sau
+   vòng tệp — so byte thật, **không** dùng dung sai 2/255 của ma trận phẳng, vì ở đây hai bên phải dựng lại đúng
+   cùng một sân khấu chứ không phải "gần giống".
+
+⇒ **20 preset × 2 renderer = 40 ảnh lưu** (ảnh "trước"), **80 frame so sánh**; manifest ghi hash của **cả hai**
+khung, hash của ảnh đọc lại từ tệp, hash JSON settings trước **và** sau, `changed = 0`, `changedPixels = 0` và số
+thuộc tính đã so. Một cảnh là đủ vì lý do ở (1): trường bị rơi bị bắt bởi phép so thuộc tính dù cảnh có vẽ nó
+hay không.
+
+Phần áp preset trong review **chép đúng ba dòng** của `MainWindow.ApplyPreset` (copy với `keepBackgroundImage`,
+đặt `PresetName`/`PresetModified`, và luật "Image không có đường dẫn thì về Solid"); review ghi tệp **trực tiếp**
+bằng `WritePresetFile` chứ không qua `VisualPresetStore.Save`, vì `CopyFrom` không bao giờ chép trường riêng của
+máy (ngôn ngữ, GPU, camera, thiết bị âm thanh, hiệu chỉnh phím) — nên settings đang ghi đã ở đúng mặc định của
+máy này, và bước `ClearMachineLocal` của `Save` không đổi gì để mà kiểm. `scan_preset_roundtrip` đỏ nếu một
+trong ba dòng đó đổi ở dock mà review không đổi theo, nếu review bỏ `WritePresetFile`/`ReadPresetFile`, bỏ một
+trong hai phép so thuộc tính, nới dung sai khung hình khỏi 0, hoặc bỏ `ExpectedPresets = 20`.
+
+**Không chứng nhận:** không duyệt mỹ thuật; không phủ mọi phiên bản migration (chỉ cặp hiện tại) hay preset do
+người dùng tạo trên máy khác; không phải GPU thật, không đổi mặc định.
 
 ## 9. N12(e) — trục số: hai mức slider không được ra cùng một khung hình
 

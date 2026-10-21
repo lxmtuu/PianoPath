@@ -16,13 +16,16 @@ namespace PianoPath;
 /// </summary>
 internal static class ReviewPng
 {
-    /// <summary>Encodes BGRA pixels, writes them, and returns the SHA-256 of the pixels the file decodes back to.</summary>
-    internal static string Write(string path, byte[] pixels, int width, int height, string what)
+    /// <summary>Encodes BGRA pixels, writes them, and returns the SHA-256 of the pixels the file decodes back to.
+    /// The software stage hands out premultiplied BGRA and the Direct3D readback hands out straight BGRA, so a
+    /// review that stores both names the format it was given instead of pretending they are the same buffer.</summary>
+    internal static string Write(string path, byte[] pixels, int width, int height, string what,
+        PixelFormat? format = null)
     {
         if (pixels.Length != width * height * 4)
             throw new InvalidDataException($"{what} returned {pixels.Length} bytes; expected {width}×{height} BGRA.");
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var source = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
+        var source = BitmapSource.Create(width, height, 96, 96, format ?? PixelFormats.Bgra32, null, pixels, width * 4);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(source));
         using (var stream = File.Create(path)) encoder.Save(stream);

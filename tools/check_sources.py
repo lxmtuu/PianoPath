@@ -1225,6 +1225,94 @@ OPTION_MATRIX_FAMILIES = {
 }
 
 
+def scan_preset_roundtrip():
+    """A saved look has to be the look that is loaded again.
+
+    ``PresetRoundTripReview`` applies every shipped preset through the dock's own path, writes it with the
+    product's writer, reads it back with the product's reader and asks both renderers for the same frame before
+    and after. That is only a claim about the product while it keeps walking the product's list and the
+    product's file path: this check fails when the review hardcodes a preset list, stops using
+    ``WritePresetFile``/``ReadPresetFile``, drops the property comparison, or when the dock's apply path grows a
+    step the review does not copy.
+    """
+    errors = []
+    paths = {
+        "review": ROOT / "Diagnostics" / "PresetRoundTripReview.cs",
+        "suite": ROOT / "Diagnostics" / "VerificationSuite.cs",
+        "ui": ROOT / "Ui" / "MainWindow.Settings.cs",
+        "settings": ROOT / "Stage" / "PianoVisualSettings.cs",
+        "presets": ROOT / "Stage" / "VisualPresets.cs",
+    }
+    for name, path in paths.items():
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the preset round trip needs it"]
+    review = _code(paths["review"].read_text(encoding="utf-8"))
+    suite = _code(paths["suite"].read_text(encoding="utf-8"))
+    ui = _code(paths["ui"].read_text(encoding="utf-8"))
+    settings = _code(paths["settings"].read_text(encoding="utf-8"))
+    presets = _code(paths["presets"].read_text(encoding="utf-8"))
+
+    for required, why in (
+        ("VisualPresets.BuiltIn", "the review stopped walking the built-in looks"),
+        ("CommunityPresets.All", "the review stopped walking the community shelf"),
+        ("VisualPresets.WritePresetFile(", "the review no longer saves through the product's preset writer"),
+        ("VisualPresets.ReadPresetFile(", "the review no longer reads through the product's preset reader"),
+        ("CopyFrom(item.Settings, keepBackgroundImage: true)", "the review no longer applies a preset the way the dock does"),
+        ("typeof(PianoVisualSettings).GetProperties()", "the review compares a hand-written list instead of every property"),
+        ("ExpectedPresets = 20", "the review no longer pins the number of shipped presets"),
+    ):
+        if required not in review:
+            errors.append(f"Diagnostics/PresetRoundTripReview.cs: {why}")
+    # Both failure modes have to stay failures: a changed byte and a changed property. The frame half is an
+    # exact comparison (tolerance 0 plus a byte compare), so a loosened tolerance would quietly weaken the claim
+    # the suite prints while the docs still say "byte-identical".
+    if "OptionMatrixPlan.ChangedPixels(a, b, tolerance: 0)" not in review or "SequenceEqual(b)" not in review:
+        errors.append("Diagnostics/PresetRoundTripReview.cs no longer compares the two frames byte for byte; "
+                      "'the same picture' after a save/load has to mean the same bytes, not the option matrix's "
+                      "2/255 tolerance")
+    if "if (changed != 0" not in review:
+        errors.append("Diagnostics/PresetRoundTripReview.cs no longer fails on a single changed pixel after the round trip")
+    # The file half and the dock half are two different claims: what came back from the file, and what the
+    # player's settings looked like after the dock applied it.
+    for required, why in (
+        ('"after the preset file", before, stored.Settings', "the review stopped comparing the settings read back from the file"),
+        ("\"through the dock's apply path\", before, after", "the review stopped comparing the dock's applied settings"),
+    ):
+        if required not in review:
+            errors.append(f"Diagnostics/PresetRoundTripReview.cs: {why}")
+    if "came back as" not in review:
+        errors.append("Diagnostics/PresetRoundTripReview.cs no longer names the property that changed, so a failure "
+                      "would only say that something moved")
+    if "WritePresetFile(before, null, item.Description)" not in review:
+        errors.append("Diagnostics/PresetRoundTripReview.cs no longer writes the preset's own description, so the "
+                      "envelope would not be exercised")
+
+    # The dock's apply path: three lines the review copies. If the product grows a fourth, the review has to
+    # grow it too, or it would be testing a path the user never takes.
+    for line, what in (
+        ("_visualSettings.CopyFrom(preset.Settings, keepBackgroundImage: true);", "the preset copy"),
+        ("_visualSettings.PresetName = preset.Name; _visualSettings.PresetModified = false;", "the name/modified reset"),
+        ('if (_visualSettings.BackgroundMode == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) _visualSettings.BackgroundMode = "Solid";',
+         "the image-background guard"),
+    ):
+        if line not in ui:
+            errors.append(f"Ui/MainWindow.Settings.cs: {what} in ApplyPreset changed; mirror it in "
+                          "Diagnostics/PresetRoundTripReview.cs so the review keeps testing the path a click takes")
+    if "settings.ApplyMigrations();" not in settings or "settings.Clamp();" not in settings:
+        errors.append("Stage/PianoVisualSettings.cs: FromJson no longer migrates and clamps what it reads, so the "
+                      "round-trip review would no longer cover the load path")
+    if "internal static PresetFileContent ReadPresetFile(string json)" not in presets:
+        errors.append("Stage/VisualPresets.cs: ReadPresetFile is gone or renamed; the review reads through it")
+    if '"--verify-preset-roundtrip-only"' not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs lost the --verify-preset-roundtrip-only route")
+    if "PresetRoundTripReview.Render(" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs does not call PresetRoundTripReview.Render, so the preset "
+                      "round trip never runs")
+    if "result.Presets == 20" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs no longer asserts twenty shipped presets")
+    return errors
+
+
 def scan_option_numeric():
     """A slider has no list, so its plan has to come from the dock and the settings class.
 
@@ -2507,6 +2595,7 @@ def main():
     errors.extend(scan_note_width_parity())
     errors.extend(scan_option_matrix())
     errors.extend(scan_option_numeric())
+    errors.extend(scan_preset_roundtrip())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
@@ -2535,6 +2624,7 @@ def main():
     print("checked that the falling note and the held bar size themselves from one Note width slider, with no floor of their own")
     print("checked that every option the settings offer is captured by the N12(b) matrix on both renderers, off state included")
     print("checked that every numeric slider the plan shoots is the dock's own range, clamped by the settings class, sampled at both ends")
+    print("checked that every shipped preset is saved and reopened through the product's own preset file and applies the dock's own path")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")

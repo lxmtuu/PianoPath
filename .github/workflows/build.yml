@@ -1040,6 +1040,7 @@ jobs:
             !${{ runner.temp }}/phase1-visual-review/option-matrix/**
             !${{ runner.temp }}/phase1-visual-review/option-pose/**
             !${{ runner.temp }}/phase1-visual-review/option-numeric/**
+            !${{ runner.temp }}/phase1-visual-review/preset-roundtrip/**
           if-no-files-found: warn
           overwrite: true
           retention-days: 2
@@ -1076,6 +1077,18 @@ jobs:
         with:
           name: option-numeric-n12e
           path: ${{ runner.temp }}/phase1-visual-review/option-numeric
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 2
+
+      # N12(f): one picture per shipped preset per renderer (40), each with the before/after hashes that must
+      # match bit for bit, so a saved look that changes when it is reopened is visible without the full bundle.
+      - name: Publish the preset round trip (N12(f))
+        if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/main')
+        uses: actions/upload-artifact@v7
+        with:
+          name: preset-roundtrip-n12f
+          path: ${{ runner.temp }}/phase1-visual-review/preset-roundtrip
           if-no-files-found: warn
           overwrite: true
           retention-days: 2
