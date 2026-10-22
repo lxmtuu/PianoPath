@@ -389,6 +389,25 @@ jobs:
       - name: Build
         run: dotnet build PianoPath.csproj --configuration Release --no-restore
 
+      # N17 runs on its own before the long suite, for the same reason the key-light and AR-budget jobs do:
+      # a crash in the new review should name itself in ten minutes instead of taking the whole suite down
+      # forty minutes in and leaving the failure to be guessed from a truncated log. It writes the same
+      # folder the suite writes later, byte for byte, so the two runs do not disagree.
+      - name: AR hold-family review (N17)
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'keyflow-ar-effect.log'
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          New-Item -ItemType Directory -Force -Path $review | Out-Null
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList '--verify','--verify-ar-effect-only',"--verify-review-out=$review","--verify-log=$log" -PassThru -Wait
+          if (Test-Path $log) {
+            Get-Content $log | ForEach-Object {
+              Write-Output $_
+              if ($_ -like 'FAIL*') { "::error title=N17 AR hold families::$_" } elseif ($_ -like 'PASS AR hold-family review*') { "::notice title=N17 AR hold families::$_" }
+            }
+          } else { "::error title=N17 AR hold families::No verification log was written" }
+          exit $proc.ExitCode
+
       # Fail fast on functional/native/WPF regressions before expensive art-review recaptures.
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
@@ -473,7 +492,12 @@ jobs:
           ar=docs/evidence/ar-material-sheets
           mkdir -p "$ar"
           cp -- "$review/ar-material/sheet.png" "$ar/material.png"
-          ls -l "$out" "$refraction" "$ar"
+          # N17 is the overlay's effect side: one column per hold family, one row per setting, so a reviewer
+          # reads a family across a single line instead of hunting for it in a grid of materials.
+          effect=docs/evidence/ar-effect-sheets
+          mkdir -p "$effect"
+          cp -- "$review/ar-effect/sheet.png" "$effect/hold.png"
+          ls -l "$out" "$refraction" "$ar" "$effect"
 
       # Isolate deterministic P0 capture from realtime/device smoke tests. Both still block the build.
       - name: Prism Flow baseline and candidate verification
@@ -1620,7 +1644,7 @@ jobs:
         run: |
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/evidence/n12-sheets docs/evidence/refraction-sheets docs/evidence/ar-material-sheets
+          git add docs/evidence/n12-sheets docs/evidence/refraction-sheets docs/evidence/ar-material-sheets docs/evidence/ar-effect-sheets
           if git diff --cached --quiet; then
             echo "The branch already carries these sheets."
             exit 0

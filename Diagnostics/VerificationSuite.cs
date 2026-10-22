@@ -168,6 +168,19 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
+        if (args.Contains("--verify-ar-effect-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("AR effect review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N17 AR hold-family review; this does not run or certify the full regression suite.");
+                VerifyArEffect(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
         if (args.Contains("--verify-refraction-only"))
         {
             try
@@ -181,7 +194,7 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); } }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); } }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -6940,6 +6953,13 @@ internal static partial class VerificationSuite
         var cells = ArMaterialReview.Render(outputDirectory);
         Assert(cells == 18, "The AR material review must shoot the six note-material settings through the AR overlay on the three piloted materials.");
         Results.Add($"PASS AR note-material review (N16): {cells} setting frames through the calibrated AR overlay at the reference pose on GPU-WARP, each compared with its own material at rest at the same pose, camera, scene and seed, and drawn in the same two settings on the WPF and the Direct3D stage for comparison. The settings the material function reads inside the body move the AR picture; Crystal Outline's refraction and 3D switch — which its branch never reads — stay under the floor, which is why the contract omits or ignores them. The glow is measured without a claim because its halo lies outside the note's own rectangle. Renderer-branching and uniform-delivery evidence, not art approval, every-value coverage or a hardware frame; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyArEffect(string outputDirectory)
+    {
+        var cells = ArEffectFamilyReview.Render(outputDirectory);
+        Assert(cells == 15, "The AR effect review must shoot five hold families at three rows each: the family at the product's values, its switch flipped, and its percentage at the top of its range.");
+        Results.Add($"PASS AR hold-family review (N17, batch 1): {cells} setting frames through the calibrated AR overlay at the reference pose on GPU-WARP, with two keys held for the whole run — two held bars under the fingers and one arc between the two active pitches — and one family switched on per column so a difference cannot come from a family the column is not about. Each row is compared with the same family at the product's own values at the same pose, camera and seed. The layer's own quad counter has to be non-zero before a column is believed, so a scene that stopped carrying a family fails instead of recording it as ignored. Renderer-branching and uniform-delivery evidence for the five hold families, not art approval, not every value of every range, and no binding or default change; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
     }
 
     private static void VerifyRefraction(string outputDirectory)

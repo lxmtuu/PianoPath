@@ -1979,6 +1979,83 @@ def scan_ar_material_review():
     return errors
 
 
+def scan_ar_effect_family_review():
+    """The AR hold-family page may only shoot what the typed contract says those families are.
+
+    N17's first batch takes the five hold families the contract keeps at ``Unverified`` on the overlay and
+    measures them there. The page's value is that it walks the contract: the families come from
+    ``HoldFxPilot``, the two settings from each family's own parameters, and the range end from the
+    declared maximum. What the contract cannot say is which of the layer's counters proves a family drew
+    something, so that table is written by hand — and this check is what keeps it from drifting: it has to
+    name exactly the contract's families, every declared setting needs an ``Apply``/``Read`` case, and the
+    counters have to exist on the renderer. It also keeps the route, the call and the CI step, so a page
+    that stops running fails the fast lane instead of quietly leaving five families Unverified forever.
+    """
+    errors = []
+    review_path = ROOT / "Diagnostics" / "ArEffectFamilyReview.cs"
+    contract_path = ROOT / "Stage" / "Effects" / "EffectContracts.cs"
+    suite_path = ROOT / "Diagnostics" / "VerificationSuite.cs"
+    renderer_path = ROOT / "Gpu" / "GpuStageRenderer.cs"
+    workflow_path = ROOT / ".github" / "workflows" / "build.yml"
+    for path in (review_path, contract_path, suite_path, renderer_path, workflow_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the N17 AR hold-family page needs it"]
+    review = _code(review_path.read_text(encoding="utf-8"))
+    contracts = _code(contract_path.read_text(encoding="utf-8"))
+    suite = _code(suite_path.read_text(encoding="utf-8"))
+    renderer = _code(renderer_path.read_text(encoding="utf-8"))
+    workflow = workflow_path.read_text(encoding="utf-8")
+
+    if "EffectContractCatalog.HoldFxPilot" not in review:
+        errors.append("Diagnostics/ArEffectFamilyReview.cs no longer reads EffectContractCatalog.HoldFxPilot; "
+                      "a copied family list is how the page and the contract drift apart")
+
+    block = re.search(r"HoldFxPilot \{ get; \} = Array\.AsReadOnly\(new\[\]\s*\{(.*?)\n    \}\);", contracts, re.S)
+    if not block:
+        return errors + ["Stage/Effects/EffectContracts.cs no longer declares HoldFxPilot; the N17 page reads it"]
+    families = set(re.findall(r'new EffectFamilyContract\(\s*"([^"]+)"', block.group(1)))
+    settings = set(re.findall(r'ArProjected(?:Boolean|Percentage)\("([^"]+)"', block.group(1)))
+    if len(families) != 5:
+        errors.append(f"Stage/Effects/EffectContracts.cs declares {len(families)} hold families "
+                      f"({sorted(families)}); the N17 page pins five columns")
+
+    witnesses = set(re.findall(r'"([a-z][a-z-]*\.[a-z-]+)" => renderer\.', review))
+    if witnesses != families:
+        errors.append("Diagnostics/ArEffectFamilyReview.cs witnesses "
+                      f"{sorted(witnesses)} but the contract declares {sorted(families)}; a family without a "
+                      "witness counter is a column whose pictures nobody checked were drawn")
+
+    applied = set(re.findall(r'case "([^"]+)":', review))
+    missing = settings - applied
+    if missing:
+        errors.append(f"Diagnostics/ArEffectFamilyReview.cs has no Apply/Read case for {sorted(missing)}; the "
+                      "setting would be shot at whatever the settings class keeps")
+
+    for counter in set(re.findall(r"renderer\.(Ar[A-Za-z]+Count)", review)):
+        if f"internal int {counter} =>" not in renderer:
+            errors.append(f"Diagnostics/ArEffectFamilyReview.cs reads renderer.{counter}, which GpuStageRenderer "
+                          "no longer exposes; the witness would not compile")
+
+    if "Bindings" in review or "EffectBackendState" in review:
+        errors.append("Diagnostics/ArEffectFamilyReview.cs reads a binding state; the contract keeps these "
+                      "families Unverified, so the page records pixels and claims nothing")
+
+    for route in ("--verify-ar-effect-only", "VerifyArEffect(reviewOutput!);", "ArEffectFamilyReview.Render("):
+        if route not in suite:
+            errors.append(f"Diagnostics/VerificationSuite.cs lost '{route}', so the AR hold-family review never runs")
+    if "Assert(cells == 15" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs no longer pins the fifteen AR hold-family cells; the page "
+                      "would pass with columns silently missing")
+
+    if "AR hold-family review (N17)" not in workflow or "--verify-ar-effect-only" not in workflow:
+        errors.append(".github/workflows/build.yml no longer runs --verify-ar-effect-only, so a crash in the new "
+                      "review takes the whole suite down instead of naming itself")
+    if "docs/evidence/ar-effect-sheets" not in workflow:
+        errors.append(".github/workflows/build.yml no longer stages docs/evidence/ar-effect-sheets; the page's one "
+                      "committed picture would never reach the repository")
+    return errors
+
+
 def scan_effect_channel_ownership():
     """An option must draw on its own, not behind another layer's switch.
 
@@ -3084,6 +3161,7 @@ def main():
     errors.extend(scan_audit_matrix_claims())
     errors.extend(scan_refraction_contract())
     errors.extend(scan_ar_material_review())
+    errors.extend(scan_ar_effect_family_review())
     errors.extend(scan_preset_roundtrip())
     errors.extend(scan_review_sheets())
     errors.extend(scan_previews_folder())
@@ -3108,6 +3186,7 @@ def main():
     print("checked the release version of PianoPath.csproj against the installer, both READMEs, both changelogs and every source that prints it")
     print("checked every Markdown table's delimiter row, and the claim about what is still a WPF layer over a GPU frame against the engine that draws it")
     print("checked that the wisp sway lives in one curve and that the stage, the AR quads and the alignment review all draw it")
+    print("checked that the AR hold-family page drives the contract's five families, one switch and one range per family, and that CI runs and stages it")
     print("checked that slow motion scales the particles on both renderers and leaves the held bar, rings and flashes on the real clock")
     print("checked that the held-key flame keeps the engine's law on the software stage instead of a plume pinned to the key")
     print("checked that W1's flow stays one law called by both integrators, and that the slider gates it instead of replacing the shipped stream")
