@@ -32,6 +32,8 @@ internal static class ReviewSheet
     internal const int Border = 1;
     /// <summary>Height of the caption strip under one picture, in pixels.</summary>
     internal const int CaptionHeight = 20;
+    /// <summary>Space between a caption and the edge of its strip, in pixels.</summary>
+    private const int CaptionPadding = 4;
     /// <summary>Height of the title strip above the grid, in pixels.</summary>
     internal const int TitleHeight = 28;
 
@@ -45,8 +47,8 @@ internal static class ReviewSheet
     private static readonly (byte B, byte G, byte R) Heading = (0xF2, 0xE4, 0xD2);
 
     /// <summary>Cells of one glyph, left to right and top to bottom.</summary>
-    private const int GlyphWidth = 5;
-    private const int GlyphHeight = 7;
+    internal const int GlyphWidth = 5;
+    internal const int GlyphHeight = 7;
     /// <summary>Distance one character takes, including the column that separates it from the next.</summary>
     private const int GlyphAdvance = GlyphWidth + 1;
 
@@ -153,9 +155,6 @@ internal static class ReviewSheet
         return 2;
     }
 
-    /// <summary>Space between a caption and the edge of its strip, in pixels.</summary>
-    private const int CaptionPadding = 4;
-
     /// <summary>
     /// One sheet being drawn. Cells are filled by index, row by row and left to right, so a review can post each
     /// picture as it captures it and never has to hold a whole run of frames to make one grid.
@@ -166,12 +165,22 @@ internal static class ReviewSheet
         private readonly bool[] _filled;
         private readonly string _title;
         private readonly int _captionScale;
+        private readonly int _captionLines;
 
-        internal Canvas(int count, int tileWidth, int tileHeight, int columns, string title, int captionScale = 2)
+        internal Canvas(int count, int tileWidth, int tileHeight, int columns, string title, int captionScale = 2,
+            int captionLines = 1)
         {
             if (captionScale is not (1 or 2))
                 throw new ArgumentOutOfRangeException(nameof(captionScale), captionScale, "A caption is drawn at one or two.");
+            if (captionLines is not (1 or 2))
+                throw new ArgumentOutOfRangeException(nameof(captionLines), captionLines, "A caption is one line or two.");
+            // Two lines of double-size text are thirty pixels in a twenty-pixel strip, so a page may not ask for
+            // both; the review that wants a second line also wants the smaller size.
+            if (captionLines == 2 && captionScale == 2)
+                throw new ArgumentOutOfRangeException(nameof(captionLines), captionLines,
+                    "A second caption line only fits at the one-pixel scale.");
             _captionScale = captionScale;
+            _captionLines = captionLines;
             Sheet = Measure(count, tileWidth, tileHeight, columns);
             _pixels = new byte[Sheet.Width * Sheet.Height * 4];
             _filled = new bool[count];
@@ -206,6 +215,15 @@ internal static class ReviewSheet
             if (width < Sheet.TileWidth || height < Sheet.TileHeight)
                 throw new InvalidDataException(
                     $"A tile of the sheet '{_title}' is {width}×{height}, smaller than the {Sheet.TileWidth}×{Sheet.TileHeight} cell it fills.");
+            // A cell that is not the picture's own shape squashes it, and a squashed picture is exactly what a
+            // reviewer cannot judge: note widths, ring circles and key spacing all come out wrong.
+            var pictureAspect = (double)width / height;
+            var cellAspect = (double)Sheet.TileWidth / Sheet.TileHeight;
+            if (Math.Abs(pictureAspect - cellAspect) > 0.01 * cellAspect)
+                throw new InvalidDataException(
+                    $"A {width}×{height} picture is {pictureAspect:0.###} times as wide as it is tall, but cell {index} " +
+                    $"of the sheet '{_title}' is {cellAspect:0.###}; the picture would be squashed. Give the sheet the " +
+                    "cell shape the capture has.");
 
             var cellWidth = Sheet.TileWidth + 2 * Border;
             var cellHeight = Sheet.TileHeight + 2 * Border + CaptionHeight;
@@ -226,19 +244,40 @@ internal static class ReviewSheet
                 // Every caption on a sheet is drawn at the size the page chose, and one that does not fit is a
                 // refusal rather than a clip: a caption cut mid-word reads as a different value ("CONFETTI RA"),
                 // and the page is the only copy of these pictures that outlives the run.
+                var lines = SplitCaption(caption, index);
                 var available = Sheet.TileWidth - 2 * CaptionPadding;
-                if (TextWidth(caption, _captionScale) > available)
-                    throw new InvalidDataException(
-                        $"The caption '{caption}' needs {TextWidth(caption, _captionScale)} pixels but cell {index} of " +
-                        $"the sheet '{_title}' gives it {available} at scale {_captionScale}; widen the cell or shorten " +
-                        "the caption instead of cutting it.");
-                DrawText(_pixels, Sheet.Width, x + Border + CaptionPadding,
-                    captionY + (CaptionHeight - GlyphHeight * _captionScale) / 2,
-                    caption, _captionScale, x + Border + Sheet.TileWidth - CaptionPadding, Ink);
+                foreach (var line in lines)
+                    if (TextWidth(line, _captionScale) > available)
+                        throw new InvalidDataException(
+                            $"The caption '{caption}' needs {TextWidth(line, _captionScale)} pixels for '{line}' but " +
+                            $"cell {index} of the sheet '{_title}' gives it {available} at scale {_captionScale}; widen " +
+                            "the cell or shorten the caption instead of cutting it.");
+                var block = lines.Length * GlyphHeight * _captionScale + (lines.Length - 1) * _captionScale;
+                var top = captionY + (CaptionHeight - block) / 2;
+                for (var line = 0; line < lines.Length; line++)
+                    DrawText(_pixels, Sheet.Width, x + Border + CaptionPadding,
+                        top + line * (GlyphHeight + 1) * _captionScale,
+                        lines[line], _captionScale, x + Border + Sheet.TileWidth - CaptionPadding, Ink);
             }
             // Only now is the cell done: an empty caption draws nothing but the picture still landed, and a cell
             // that returned early here would look to Finish exactly like one that was never drawn.
             _filled[index] = true;
+        }
+
+        /// <summary>
+        /// The caption as the lines this page draws: one, or two split at the first space. A page of captions
+        /// shaped "family value" reads as a two-line table, which is how a thirty-character pair still fits a
+        /// cell that would have to be half again as wide to hold it on one line.
+        /// </summary>
+        private string[] SplitCaption(string caption, int index)
+        {
+            if (_captionLines == 1) return [caption];
+            var space = caption.IndexOf(' ');
+            if (space <= 0 || space == caption.Length - 1)
+                throw new InvalidDataException(
+                    $"Cell {index} of the sheet '{_title}' asks for a two-line caption but '{caption}' has no word " +
+                    "break to split at.");
+            return [caption[..space], caption[(space + 1)..]];
         }
 
         /// <summary>

@@ -231,6 +231,54 @@ public class ReviewSheetTests
     }
 
     [Fact]
+    public void A_two_line_caption_draws_both_words_inside_its_strip()
+    {
+        // What the matrix page uses: the family on one line, the value on the next, so a thirty-character pair
+        // fits a cell that would have to be half again as wide to hold it on one line.
+        var sheet = new ReviewSheet.Canvas(1, 176, TileHeight, 1, string.Empty, captionScale: 1, captionLines: 2);
+        sheet.Blit(0, "AMBIENT-ENERGY LIGHTNING STORM", Solid(176, TileHeight, 30, 30, 30), 176, TileHeight,
+            premultiplied: false);
+
+        var pixels = sheet.Finish();
+        var width = sheet.Sheet.Width;
+        var stripTop = CellY + TileHeight;
+        var stripBottom = stripTop + ReviewSheet.CaptionHeight;
+        var inkByRow = new SortedSet<int>();
+        for (var y = 0; y < sheet.Sheet.Height; y++)
+        for (var x = 0; x < width; x++)
+        {
+            if (At(pixels, width, x, y) != (0xE6, 0xD6, 0xC9, 255)) continue;
+            Assert.InRange(x, CellX, CellX + 176 - 1);
+            Assert.InRange(y, stripTop, stripBottom - 1);
+            inkByRow.Add(y);
+        }
+        Assert.Equal(14, inkByRow.Count);
+        // Two seven-row lines with a one-pixel gap: nothing drawn in it, so the lines cannot merge.
+        var gap = stripTop + (ReviewSheet.CaptionHeight - 2 * ReviewSheet.GlyphHeight - 1) / 2 + ReviewSheet.GlyphHeight;
+        Assert.DoesNotContain(gap, inkByRow);
+    }
+
+    [Fact]
+    public void A_picture_that_is_not_the_shape_of_its_cell_is_refused()
+    {
+        // A 176×90 cell on a 960×540 capture stretches the picture ten per cent sideways; every note width and
+        // every ring on the page would then be a lie nobody could see.
+        var sheet = new ReviewSheet.Canvas(1, TileWidth, TileHeight, 1, string.Empty);
+
+        var squashed = Assert.Throws<System.IO.InvalidDataException>(() =>
+            sheet.Blit(0, string.Empty, Solid(TileWidth * 2, TileHeight, 0, 0, 0), TileWidth * 2, TileHeight,
+                false));
+        Assert.Contains("squashed", squashed.Message);
+    }
+
+    [Fact]
+    public void A_second_caption_line_needs_the_small_scale()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            new ReviewSheet.Canvas(1, TileWidth, TileHeight, 1, string.Empty, captionScale: 2, captionLines: 2));
+    }
+
+    [Fact]
     public void A_cell_that_is_drawn_twice_is_an_error()
     {
         var sheet = new ReviewSheet.Canvas(2, TileWidth, TileHeight, 2, string.Empty);

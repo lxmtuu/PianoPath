@@ -343,11 +343,15 @@ trong `docs/`. Mục này đóng đúng khoảng đó, và chỉ đóng nó: **b
 
 | Tệp trong `docs/evidence/n12-sheets/` | Nội dung | Lưới | Kích thước |
 |---|---|---|---|
-| `matrix-wpf.png` | cả 64 khung của N12(b) trên sân khấu phần mềm | 8×8 ô 176×90 | 1518×1018 |
-| `matrix-gpu-warp.png` | chính 64 khung đó trên D3D/WARP | 8×8 ô 176×90 | 1518×1018 |
+| `matrix-wpf.png` | cả 64 khung của N12(b) trên sân khấu phần mềm | 8×8 ô 176×99 | 1518×1090 |
+| `matrix-gpu-warp.png` | chính 64 khung đó trên D3D/WARP | 8×8 ô 176×99 | 1518×1090 |
 | `numeric.png` | 54 khung của N12(e): chín trục, mỗi hàng một trục, cặp WPF ↔ GPU cạnh nhau | 6×9 ô 240×135 | 1526×1545 |
 | `preset.png` | 40 khung của N12(f): hai mươi preset, mỗi preset một cặp renderer | 4×10 ô 240×135 | 1022×1712 |
 | `pose-front.png`, `pose-left.png`, `pose-right.png` | 21 khung của một pose AR: phần 1 rồi phần 2, mỗi family một khung tắt rồi khung bật | 4×6 ô 320×180 | 1342×1314 |
+
+Ô 176×99 đúng tỉ lệ 16:9 của khung 960×540, và `Blit` **từ chối** một ô không cùng tỉ lệ với ảnh — một ô
+176×90 (bản đầu của đợt này) bóp ảnh ngang 10%, đúng thứ không thể đánh giá bằng mắt trên ảnh thu nhỏ. Nhãn của
+ma trận in hai dòng: tên family rồi tên giá trị, vì cặp dài nhất là ba mươi ký tự.
 
 **Vì sao tờ ảnh đáng tin.** `Diagnostics/ReviewSheet.cs` cắt ảnh bằng **trung bình khối** (không lấy mẫu), vẽ
 nhãn bằng một font bitmap 5×7 viết trong mã, và ghép theo phép tính thuần trên mảng byte — không WPF, không

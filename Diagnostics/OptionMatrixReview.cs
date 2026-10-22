@@ -45,13 +45,13 @@ internal static class OptionMatrixReview
     private const int MinimumChangedPixels = 12;
     /// <summary>Frames and captures the plan asks for: 62 values plus 11 scenes that keep their off baseline.</summary>
     private const int ExpectedScenes = 64, ExpectedCaptures = ExpectedScenes * 2;
-    /// <summary>One sheet per renderer, eight pictures to a row, a sixth of the capture height each.</summary>
-    private const int SheetColumns = 8, SheetTileHeight = Height / 6;
     /// <summary>
-    /// Wide enough for the longest caption the matrix writes — "ambient-light Gradient Wave", 27 characters at
-    /// six pixels each — because a caption is never cut: it is either drawn whole or the run stops.
+    /// One sheet per renderer, eight pictures to a row, a sixth of the capture height each: 176×99 is the same
+    /// 16:9 shape as the capture, so nothing on the page is squashed. Captions are drawn on two lines — the
+    /// family, then the value — because the longest pair is thirty characters, and a cell wide enough to hold
+    /// that on one line would stretch every picture it carries.
     /// </summary>
-    private const int SheetTileWidth = 176;
+    private const int SheetColumns = 8, SheetTileWidth = 176, SheetTileHeight = Height * 176 / Width;
 
     /// <summary>Every caption this review writes, in plan order, without the renderer suffix.</summary>
     private static IEnumerable<string> Captions() =>
@@ -109,7 +109,7 @@ internal static class OptionMatrixReview
             var captionScale = ReviewSheet.CaptionScaleFor(Captions(), SheetTileWidth);
             var sheets = RendererIds.ToDictionary(id => id,
                 id => new ReviewSheet.Canvas(ExpectedScenes, SheetTileWidth, SheetTileHeight, SheetColumns,
-                    $"N12(B) {id}", captionScale));
+                    $"N12(B) {id}", captionScale, captionLines: 2));
             var cells = RendererIds.ToDictionary(id => id, _ => 0);
 
             foreach (var family in OptionMatrixPlan.Families)
