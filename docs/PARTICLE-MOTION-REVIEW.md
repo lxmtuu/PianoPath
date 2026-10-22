@@ -237,7 +237,7 @@ px/s²). Cả `GpuStageSimulation` (wisp + lửa) và `PianoStage` (hai danh sá
 CPU nên đi theo miễn phí. Nó nằm sau slider **Coherent flow** (`ParticleFlow`, 0–100) **mặc định 0**: ở 0 hai
 integrator chạy đúng số học cũ, nên `wisps-v3`/`flames-v3` không đổi một byte và lượt CI vẫn xanh. Bật lên là look
 mới; lật **mặc định** mới là lần re-baseline — và đó là việc phải chạy trên máy có GPU/WPF thật, vì pipeline bằng
-chứng so hash với bản đã chấp nhận và không cho phép tự nhận bản mới (`review_flames_v3.retained`).
+chứng so hash với bản đã chấp nhận và không cho phép tự nhận bản mới (`review_flames_v3.retained`). Bản vào sản phẩm xanh ở [run 39799609388](https://github.com/lxmtuu/PianoPath/actions/runs/39799609388): `static`, `test`, `keyboard-light`, `build` đều qua, và bước `Validate and stage Flames v3` vẫn khớp đúng hash wisps/flames đã chấp nhận — mặc định 0 không đổi một pixel.
 
 **Về slider:** đề xuất *không* thêm control nào ở màn hình mặc định. Năm tham số mới (1, 4, 6, 8 và độ
 lạnh của họ) nên nằm sau **Nâng cao**, đúng nguyên tắc "control phổ biến trước" của
