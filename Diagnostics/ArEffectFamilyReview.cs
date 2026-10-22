@@ -144,9 +144,7 @@ internal static class ArEffectFamilyReview
                 cells.Add(new Cell(contract.Id, shape.Toggle, "toggle", shape.ToggleValue, off.File, off.PixelSha256,
                     OptionMatrixPlan.ChangedPixels(off.Pixels!, rest.Pixels!), off.Lit, off.Painted, off.Quads,
                     Read(OptionMatrixPlan.ChangedPixels(off.Pixels!, rest.Pixels!)),
-                    shape.ToggleValue >= .5
-                        ? "The switch turned on where the product keeps it off."
-                        : "The switch turned off where the product keeps it on."));
+                    "The switch turned off; every other frame of this column has the family on."));
 
                 // The percentage at the top of its declared range: the largest difference the setting can make
                 // without switching the family off, which the row above already covers.
@@ -198,10 +196,11 @@ internal static class ArEffectFamilyReview
             throw new InvalidDataException(
                 $"{contract.Id} declares {contract.Parameters.Count} settings; the AR effect review drives one switch " +
                 "and one percentage, so a third setting would fall off the page without anyone noticing.");
-        var current = Read(OptionMatrixReview.BaseSettings(), toggle.SettingName);
-        var flip = current >= .5 ? 0d : 1d;
+        // Every frame of a column has the family on, so the switch row is what turns it off. The product keeps all
+        // five switches off, which is why reading the flip out of the settings class would be wrong here: it would
+        // flip the family *on* and the row would be a second copy of the rest frame.
         var top = amount.Maximum ?? throw new InvalidDataException($"{contract.Id}: {amount.SettingName} has no maximum to shoot.");
-        return (toggle.SettingName, flip, amount.SettingName, top);
+        return (toggle.SettingName, 0d, amount.SettingName, top);
     }
 
     /// <summary>
@@ -217,7 +216,8 @@ internal static class ArEffectFamilyReview
         Apply(settings, shape.Toggle, 1);
         if (parameter is not null) Apply(settings, parameter, value);
         settings.Clamp();
-        if (Read(settings, shape.Toggle) < .5)
+        // The rest frame and the amount row have to carry the family; only the switch row is allowed to take it away.
+        if (parameter != shape.Toggle && Read(settings, shape.Toggle) < .5)
             throw new InvalidDataException($"The settings class turned {shape.Toggle} off; the scene would have no family in it.");
         if (parameter is not null && Math.Abs(Read(settings, parameter) - value) > 0.001)
             throw new InvalidDataException(
