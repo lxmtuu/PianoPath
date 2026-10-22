@@ -41,6 +41,8 @@ internal static class PresetRoundTripReview
     /// <summary>Fourteen built-in looks plus the six shelf files the repository ships. Adding a preset is a
     /// deliberate act, so this number being wrong turns the suite red instead of silently widening the review.</summary>
     private const int ExpectedPresets = 20;
+    /// <summary>The whole review on one page: four pictures to a row, a quarter of the capture size each.</summary>
+    private const int SheetTileWidth = Width / 4, SheetTileHeight = Height / 4, SheetColumns = 4;
     /// <summary>The note-and-ambient scene: the one moment nearly every look differs at (material, trail, keys,
     /// background, ambient), and the slowest is 90 frames — acceptable for 20 presets on two renderers.</summary>
     private const OptionMatrixPlan.Scene Scene = OptionMatrixPlan.Scene.Falling;
@@ -52,6 +54,10 @@ internal static class PresetRoundTripReview
     private sealed record Shot(string Preset, string Source, string Renderer, string File, string FrameSha256,
         string AfterSha256, string FileSha256, int ChangedPixels, string SettingsSha256, string SettingsAfterSha256,
         int Properties);
+
+    /// <summary>The contact sheet, as the manifest names it: twenty presets, both renderers, one page.</summary>
+    private sealed record Sheet(string File, int Width, int Height, int Columns, int Rows, int Tiles,
+        string PixelSha256);
 
     internal static Result Render(string output)
     {
@@ -73,6 +79,11 @@ internal static class PresetRoundTripReview
 
             var shots = new List<Shot>(cases.Count * 2);
             var properties = 0;
+            // One page for the whole review: the player's look, before and after the round trip, on both
+            // renderers. The 40 native captures stay in the artifact; this page is what gets committed.
+            var sheet = new ReviewSheet.Canvas(cases.Count * 2, SheetTileWidth, SheetTileHeight, SheetColumns,
+                "N12(F) PRESET ROUND TRIP");
+            var cell = 0;
             foreach (var item in cases)
             {
                 var before = Apply(item, new PianoVisualSettings());
@@ -126,12 +137,16 @@ internal static class PresetRoundTripReview
                     shots.Add(new Shot(item.Name, item.Source, rendererId, relative.Replace('\\', '/'),
                         Convert.ToHexString(SHA256.HashData(a)), Convert.ToHexString(SHA256.HashData(b)), fileSha,
                         changed, SettingsSha(beforeJson), SettingsSha(afterJson), properties));
+                    // "a" is the frame before the round trip and "b" the one after; the review has just proved
+                    // they are the same bytes, so the sheet shows the picture the player gets either way.
+                    sheet.Blit(cell++, $"{item.Name} {rendererId}", a, Width, Height, rendererId == "WPF");
                 }
             }
 
-            WriteManifest(root, renderer.AdapterName, shots, properties);
-            WriteHtmlIndex(root, shots, properties);
-            VerifyWrittenArtifacts(root, shots);
+            var sheetWritten = WriteSheet(root, sheet);
+            WriteManifest(root, renderer.AdapterName, shots, properties, sheetWritten);
+            WriteHtmlIndex(root, shots, properties, sheetWritten);
+            VerifyWrittenArtifacts(root, shots, sheetWritten);
             return new Result(cases.Count, shots.Count * 2, shots.Count, properties);
         }
         finally { KeyboardLayout.Use(previousLayout); }
@@ -205,7 +220,17 @@ internal static class PresetRoundTripReview
         return compared;
     }
 
-    private static void VerifyWrittenArtifacts(string root, IReadOnlyList<Shot> shots)
+    /// <summary>Writes the one contact sheet of this review: every preset, both renderers, in product order.</summary>
+    private static Sheet WriteSheet(string root, ReviewSheet.Canvas canvas)
+    {
+        var layout = canvas.Sheet;
+        const string file = "preset-roundtrip/sheet.png";
+        var sha = ReviewPng.Write(Path.Combine(root, file), canvas.Finish(), layout.Width, layout.Height,
+            $"N12(f): {canvas.Count} preset frames in {layout.Columns}×{layout.Rows} cells", PixelFormats.Pbgra32);
+        return new Sheet(file, layout.Width, layout.Height, layout.Columns, layout.Rows, canvas.Count, sha);
+    }
+
+    private static void VerifyWrittenArtifacts(string root, IReadOnlyList<Shot> shots, Sheet sheet)
     {
         foreach (var shot in shots)
         {
@@ -213,9 +238,16 @@ internal static class PresetRoundTripReview
             if (Convert.ToHexString(SHA256.HashData(pixels)) != shot.FileSha256)
                 throw new InvalidDataException($"{shot.File} no longer decodes to the pixels the manifest names.");
         }
+        var page = ReviewPng.Decode(Path.Combine(root, sheet.File), sheet.Width, sheet.Height);
+        if (Convert.ToHexString(SHA256.HashData(page)) != sheet.PixelSha256)
+            throw new InvalidDataException($"{sheet.File} no longer decodes to the pixels the manifest names.");
+        if (sheet.Tiles != shots.Count)
+            throw new InvalidDataException(
+                $"{sheet.File} carries {sheet.Tiles} pictures but the review wrote {shots.Count} captures; the " +
+                "sheet is the copy that outlives the artifact, so it has to carry all of them.");
     }
 
-    private static void WriteManifest(string root, string adapter, IReadOnlyList<Shot> shots, int properties)
+    private static void WriteManifest(string root, string adapter, IReadOnlyList<Shot> shots, int properties, Sheet sheet)
     {
         File.WriteAllText(Path.Combine(root, "preset-roundtrip", "manifest.json"), JsonSerializer.Serialize(new
         {
@@ -234,6 +266,9 @@ internal static class PresetRoundTripReview
             sampleSeconds = Math.Round(OptionMatrixPlan.Seconds(Scene), 4),
             propertiesCompared = properties,
             presets = shots.Select(shot => shot.Preset).Distinct().ToArray(),
+            // The one file of this review that is committed: the look before and after the round trip, both
+            // renderers, captioned. The 40 native captures stay in the artifact.
+            sheet = new { sheet.File, sheet.Width, sheet.Height, sheet.Columns, sheet.Rows, sheet.Tiles, sheet.PixelSha256 },
             captures = shots.Select(shot => new
             {
                 shot.Preset, shot.Source, shot.Renderer, shot.File, shot.FrameSha256, shot.AfterSha256, shot.FileSha256,
@@ -246,7 +281,7 @@ internal static class PresetRoundTripReview
     private static string SettingsSha(string json) =>
         Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(json)));
 
-    private static void WriteHtmlIndex(string root, IReadOnlyList<Shot> shots, int properties)
+    private static void WriteHtmlIndex(string root, IReadOnlyList<Shot> shots, int properties, Sheet sheet)
     {
         static string Encode(string value) => System.Net.WebUtility.HtmlEncode(value);
         var body = new System.Text.StringBuilder();
@@ -259,7 +294,11 @@ internal static class PresetRoundTripReview
             .Append("đọc lại, áp lần nữa — rồi so <b>")
             .Append(properties).Append("</b> thuộc tính ghi được (cả bản đọc từ tệp lẫn bản áp vào settings sống) và so khung hình trên <b>cả hai</b> renderer. Khung hình ")
             .Append("trước và sau phải <b>trùng từng byte</b>; ảnh dưới là khung trước khi lưu. Đây là bằng chứng tệp preset ")
-            .Append("không làm mất look, không phải nghiệm thu mỹ thuật.</p>");
+            .Append("không làm mất look, không phải nghiệm thu mỹ thuật.</p>")
+            .Append($"<p>Tờ ảnh tiếp xúc của cả hai mươi preset: <a href=\"{Encode(sheet.File)}\">{sheet.Tiles} khung</a> trong lưới ")
+            .Append($"{sheet.Columns}×{sheet.Rows}, {sheet.Width}×{sheet.Height} px, mỗi preset một cặp WPF ↔ GPU. ")
+            .Append("Đây là bản được commit vào repository; ảnh native bên dưới chỉ nằm trong artifact.</p>")
+            .Append($"<figure><img src=\"{Encode(sheet.File)}\" alt=\"tờ ảnh tiếp xúc N12(f)\"></figure>");
         foreach (var group in shots.GroupBy(shot => (shot.Preset, shot.Source)))
         {
             body.Append($"<h2>{Encode(group.Key.Preset)} <span class=\"ok\">· {Encode(group.Key.Source)} · ")

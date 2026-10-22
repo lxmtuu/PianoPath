@@ -44,6 +44,7 @@
     <Compile Include="..\..\Stage\FlameMotion.cs" Link="Product\Stage\FlameMotion.cs" />
     <Compile Include="..\..\Stage\HeldEmission.cs" Link="Product\Stage\HeldEmission.cs" />
     <Compile Include="..\..\Diagnostics\OptionMatrixPlan.cs" Link="Product\Diagnostics\OptionMatrixPlan.cs" />
+    <Compile Include="..\..\Diagnostics\ReviewSheet.cs" Link="Product\Diagnostics\ReviewSheet.cs" />
     <Compile Include="..\..\Diagnostics\OptionNumericPlan.cs" Link="Product\Diagnostics\OptionNumericPlan.cs" />
     <Compile Include="..\..\Camera\ArDriftMeter.cs" Link="Product\Camera\ArDriftMeter.cs" />
     <Compile Include="..\..\Gpu\ReleaseParticleAppearance.cs" Link="Product\Gpu\ReleaseParticleAppearance.cs" />

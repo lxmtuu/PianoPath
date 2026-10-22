@@ -45,8 +45,17 @@ internal static class OptionMatrixReview
     private const int MinimumChangedPixels = 12;
     /// <summary>Frames and captures the plan asks for: 62 values plus 11 scenes that keep their off baseline.</summary>
     private const int ExpectedScenes = 64, ExpectedCaptures = ExpectedScenes * 2;
+    /// <summary>One sheet per renderer, eight pictures to a row, a sixth of the capture size each.</summary>
+    private const int SheetTileWidth = Width / 6, SheetTileHeight = Height / 6, SheetColumns = 8;
 
     internal sealed record GpuCounters(int Sprites, int Ambient, int NoteTrails, int Notes, int Keys);
+
+    /// <summary>One renderer's contact sheet, held until it has been written and its file read back.</summary>
+    private sealed record Sheet(string Renderer, string File, ReviewSheet.Canvas Canvas);
+
+    /// <summary>A sheet as the manifest names it: where it is, how big it is, and the pixels it decodes to.</summary>
+    private sealed record WrittenSheet(string Renderer, string File, int Width, int Height, int Columns, int Rows,
+        int Tiles, string PixelSha256);
 
     private sealed class Pending
     {
@@ -84,6 +93,12 @@ internal static class OptionMatrixReview
             var captures = new List<Pending>(ExpectedCaptures);
             var comparisons = new List<(string Family, string Renderer, string Left, string Right, int Changed)>();
             var baselines = new Dictionary<(OptionMatrixPlan.Scene Scene, string Renderer, string Family), (string Hash, int Lit)>();
+            // Two pages for the whole review, one per renderer: a reviewer can see at a glance whether a value
+            // draws at all, without the 128 native captures that only live in the artifact.
+            var sheets = RendererIds.ToDictionary(id => id,
+                id => new ReviewSheet.Canvas(ExpectedScenes, SheetTileWidth, SheetTileHeight, SheetColumns,
+                    $"N12(B) {id}"));
+            var cells = RendererIds.ToDictionary(id => id, _ => 0);
 
             foreach (var family in OptionMatrixPlan.Families)
             {
@@ -133,6 +148,15 @@ internal static class OptionMatrixReview
 
                 captures.AddRange(baseline);
                 captures.AddRange(values);
+                // Every capture of this family goes on its renderer's page before the buffers are dropped.
+                foreach (var pending in baseline.Concat(values))
+                {
+                    var pixels = pending.Pixels;
+                    if (pixels is null) continue;
+                    var cell = cells[pending.Renderer]++;
+                    sheets[pending.Renderer].Blit(cell, $"{family.Id} {pending.Value}", pixels, Width, Height,
+                        pending.Renderer == "WPF");
+                }
                 // The comparison is done; the 2.1 MB frames of this family are not needed by the manifest.
                 foreach (var pending in baseline.Concat(values)) pending.Pixels = null;
             }
@@ -153,9 +177,12 @@ internal static class OptionMatrixReview
             if (captures.Count != ExpectedCaptures)
                 throw new InvalidDataException($"The option matrix wrote {captures.Count} captures; exactly {ExpectedCaptures} are required.");
 
-            WriteManifest(root, renderer.AdapterName, captures, comparisons, baselines);
-            WriteHtmlIndex(root, captures);
-            VerifyWrittenArtifacts(root, captures);
+            var sheetsWritten = WriteSheets(root, RendererIds
+                .Select(id => new Sheet(id, $"option-matrix/sheet-{(id == "WPF" ? "wpf" : "gpu-warp")}.png", sheets[id]))
+                .ToArray());
+            WriteManifest(root, renderer.AdapterName, captures, comparisons, baselines, sheetsWritten);
+            WriteHtmlIndex(root, captures, sheetsWritten);
+            VerifyWrittenArtifacts(root, captures, sheetsWritten);
             return captures.Count;
         }
         finally { KeyboardLayout.Use(previousLayout); }
@@ -380,7 +407,8 @@ internal static class OptionMatrixReview
 
     private static void WriteManifest(string root, string adapter, List<Pending> captures,
         List<(string Family, string Renderer, string Left, string Right, int Changed)> comparisons,
-        Dictionary<(OptionMatrixPlan.Scene Scene, string Renderer, string Family), (string Hash, int Lit)> baselines)
+        Dictionary<(OptionMatrixPlan.Scene Scene, string Renderer, string Family), (string Hash, int Lit)> baselines,
+        List<WrittenSheet> sheets)
     {
         var manifest = new
         {
@@ -405,6 +433,12 @@ internal static class OptionMatrixReview
             baselines = baselines.OrderBy(entry => entry.Key.Scene).ThenBy(entry => entry.Key.Renderer)
                 .Select(entry => new { Scene = entry.Key.Scene.ToString(), entry.Key.Renderer, entry.Key.Family, entry.Value.Hash, entry.Value.Lit }),
             comparisons = comparisons.Select(entry => new { entry.Family, entry.Renderer, entry.Left, entry.Right, entry.Changed }),
+            // The two files of this review that are committed: every scene on one page per renderer.
+            sheets = sheets.Select(sheet => new
+            {
+                sheet.Renderer, sheet.File, sheet.Width, sheet.Height, sheet.Columns, sheet.Rows, sheet.Tiles,
+                sheet.PixelSha256
+            }),
             captureCount = captures.Count,
             captures = captures.Select(capture => new
             {
@@ -418,7 +452,7 @@ internal static class OptionMatrixReview
             JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static void WriteHtmlIndex(string root, List<Pending> captures)
+    private static void WriteHtmlIndex(string root, List<Pending> captures, List<WrittenSheet> sheets)
     {
         var html = new StringBuilder("<!doctype html><meta charset=\"utf-8\"><title>Keyflow option matrix (N12(b))</title>");
         html.Append("<style>body{background:#111;color:#eee;font:15px/1.45 system-ui,sans-serif;margin:24px}");
@@ -430,6 +464,11 @@ internal static class OptionMatrixReview
         html.Append("WPF và Direct3D/WARP, 960×540. Morph và release không có công tắc riêng nên được chụp khi ");
         html.Append("Embers / Impact rings / Impact flash / wisps đều tắt: mỗi khung đó chứng minh option tự vẽ. ");
         html.Append("Đây là bằng chứng renderer rẽ nhánh, không phải duyệt mỹ thuật.</p>");
+        foreach (var sheet in sheets)
+            html.Append($"<p><b>{WebUtility.HtmlEncode(sheet.Renderer)}</b>: toàn bộ {sheet.Tiles} khung trên một tờ ")
+                .Append($"<a href=\"{WebUtility.HtmlEncode(sheet.File)}\">{sheet.Columns}×{sheet.Rows}</a> ")
+                .Append($"({sheet.Width}×{sheet.Height} px) — bản được commit vào repository.</p>")
+                .Append($"<figure class=\"card\"><img src=\"{WebUtility.HtmlEncode(sheet.File)}\" alt=\"{WebUtility.HtmlEncode(sheet.Renderer)} contact sheet\"></figure>");
         foreach (var family in OptionMatrixPlan.Families)
         {
             html.Append($"<h2>{WebUtility.HtmlEncode(family.Id)} · {WebUtility.HtmlEncode(family.Setting)}</h2><div class=\"row\">");
@@ -445,8 +484,39 @@ internal static class OptionMatrixReview
         File.WriteAllText(Path.Combine(root, "option-matrix", "index.html"), html.ToString());
     }
 
-    private static void VerifyWrittenArtifacts(string root, List<Pending> captures)
+    /// <summary>
+    /// Writes one contact sheet per renderer: every scene of the matrix, in plan order, on one page.
+    /// </summary>
+    private static List<WrittenSheet> WriteSheets(string root, IReadOnlyList<Sheet> sheets)
     {
+        var written = new List<WrittenSheet>(sheets.Count);
+        foreach (var sheet in sheets)
+        {
+            var layout = sheet.Canvas.Sheet;
+            var sha = ReviewPng.Write(Path.Combine(root, sheet.File), sheet.Canvas.Finish(), layout.Width,
+                layout.Height, $"{sheet.Renderer}: {sheet.Canvas.Count} scenes in {layout.Columns}×{layout.Rows} cells",
+                PixelFormats.Pbgra32);
+            written.Add(new WrittenSheet(sheet.Renderer, sheet.File, layout.Width, layout.Height, layout.Columns,
+                layout.Rows, sheet.Canvas.Count, sha));
+        }
+        return written;
+    }
+
+    private static void VerifyWrittenArtifacts(string root, List<Pending> captures, List<WrittenSheet> sheets)
+    {
+        // The sheets are the part of this review that leaves the artifact: each one has to carry every scene the
+        // manifest counts on its renderer, and its file has to decode to the pixels the manifest names.
+        foreach (var sheet in sheets)
+        {
+            var pixels = ReviewPng.Decode(Path.Combine(root, sheet.File), sheet.Width, sheet.Height);
+            if (Convert.ToHexString(SHA256.HashData(pixels)) != sheet.PixelSha256)
+                throw new InvalidDataException($"{sheet.File} no longer decodes to the pixels the manifest names.");
+            var scenes = captures.Count(capture => capture.Renderer == sheet.Renderer);
+            if (sheet.Tiles != scenes)
+                throw new InvalidDataException(
+                    $"{sheet.File} carries {sheet.Tiles} pictures but {sheet.Renderer} wrote {scenes} captures; " +
+                    "a sheet has to show the whole renderer, because it is the copy that outlives the artifact.");
+        }
         foreach (var capture in captures)
         {
             var path = Path.Combine(root, capture.File.Replace('/', Path.DirectorySeparatorChar));

@@ -126,6 +126,8 @@ Chạy trên nhánh push thì cả hai chỉ lên artifact, không vào Git.
 ## 6. Không chứng nhận gì
 
 - **Không** phải duyệt mỹ thuật: ảnh để người xem, không có điểm chất lượng tự động.
+- **Không** phải ảnh gốc: bảy tờ ảnh ở §11 là bản thu nhỏ còn 1/4 hoặc 1/6; chúng chứng minh có vẽ và vẽ ở
+  đâu, không chứng minh từng pixel. Ảnh native vẫn chỉ nằm trong artifact của lượt chạy.
 - **Không** phủ AR ngoài lát N12(d) ở §8: ba pose đã hiệu chỉnh × (năm trục hiệu ứng vẽ vào ảnh camera, chất
   liệu nốt, trail và bốn lớp ambient); ở AR mỗi trục của phần 2 chỉ có **một** giá trị, phần còn lại của ma trận
   (các giá trị khác của nốt/ambient) vẫn chỉ có bằng chứng ở sân khấu phẳng.
@@ -332,3 +334,36 @@ thuộc `VisualPresetStore`; run `39654504807` đỏ ở bước `Build` (kéo t
 gì. `f38574a` sửa đúng tên kiểu, và `scan_preset_roundtrip` bám theo cách gọi mới để vẫn đỏ khi review rời khỏi
 writer/reader của sản phẩm.
 
+## 11. Tờ ảnh tiếp xúc — phần của bốn review được commit
+
+Artifact của một lượt chạy chỉ tồn tại **hai ngày**, và trên nhánh đang làm việc thì bốn bước publish của N12
+còn không chạy: chúng có điều kiện `github.ref == 'refs/heads/main'`. Tức là cho tới trước mục này, bằng chứng
+hình ảnh của N12 chỉ là "job xanh cộng với assert trong mã" — trong khi 348 ảnh của các đợt khác thì đã nằm
+trong `docs/`. Mục này đóng đúng khoảng đó, và chỉ đóng nó: **bảy tệp**, không phải 285 ảnh native.
+
+| Tệp trong `docs/evidence/n12-sheets/` | Nội dung | Lưới | Kích thước |
+|---|---|---|---|
+| `matrix-wpf.png` | cả 64 khung của N12(b) trên sân khấu phần mềm | 8×8 ô 160×90 | 1390×1018 |
+| `matrix-gpu-warp.png` | chính 64 khung đó trên D3D/WARP | 8×8 ô 160×90 | 1390×1018 |
+| `numeric.png` | 54 khung của N12(e): chín trục, mỗi hàng một trục, cặp WPF ↔ GPU cạnh nhau | 6×9 ô 240×135 | 1526×1545 |
+| `preset.png` | 40 khung của N12(f): hai mươi preset, mỗi preset một cặp renderer | 4×10 ô 240×135 | 1022×1712 |
+| `pose-front.png`, `pose-left.png`, `pose-right.png` | 21 khung của một pose AR: phần 1 rồi phần 2, mỗi family một khung tắt rồi khung bật | 4×6 ô 320×180 | 1342×1314 |
+
+**Vì sao tờ ảnh đáng tin.** `Diagnostics/ReviewSheet.cs` cắt ảnh bằng **trung bình khối** (không lấy mẫu), vẽ
+nhãn bằng một font bitmap 5×7 viết trong mã, và ghép theo phép tính thuần trên mảng byte — không WPF, không
+font hệ thống, không thiết bị đồ hoạ. Vì vậy `tests/PianoPath.Tests/ReviewSheetTests.cs` chạy được trên Linux
+và ghim: kích thước lưới, phép thu nhỏ, hai định dạng alpha, tính tất định, và việc một ô chưa vẽ thì sheet
+**không** được trả ra. Hai chỗ dễ sai đã có test riêng: một ô trong suốt không được để lộ màu RGB chưa nhân
+alpha, và nhãn dài không được tràn sang ô bên cạnh.
+
+**Vì sao commit được.** Cùng một input cho ra đúng từng byte, nên CI commit tờ ảnh giống như commit preview:
+bước `Save the N12 contact sheets` chép bảy tệp từ thư mục review vào `docs/evidence/n12-sheets`, commit
+`[skip ci]`, và dùng đúng quy tắc push của các bước evidence khác — nhánh đã dịch chuyển trong lúc render thì
+giữ bản của tip mới hơn thay vì rebase đè. Mỗi review còn **từ chối** một tờ ảnh thiếu khung
+(`sheet.Tiles != <số capture>`), vì một ô trống trên tờ đọc ra đúng như "option này không vẽ gì" — kết luận mà
+review sinh ra để báo.
+
+**Không chứng nhận:** tờ ảnh là bản thu nhỏ còn 1/4 hoặc 1/6, nên nó chứng minh **có vẽ, vẽ ở đâu, và hình dạng
+tổng thể**; muốn soi từng pixel thì vẫn phải mở ảnh native trong artifact (hoặc chạy lại route). Nó không phải
+bản duyệt mỹ thuật, và việc bảy tệp này nằm trong Git không làm phát biểu của §2/§8/§9/§10 mạnh thêm — chỉ làm
+chúng **mở ra được**.

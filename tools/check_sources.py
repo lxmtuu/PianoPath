@@ -1423,6 +1423,52 @@ def scan_option_numeric():
     return errors
 
 
+def scan_review_sheets():
+    """The contact sheet is the part of a review that is committed, so it has to be the whole review.
+
+    ``Diagnostics/ReviewSheet.cs`` lays the capture buffers out in one grid and, because it is plain arithmetic
+    over a byte array, ``ReviewSheetTests`` pins it on Linux. This check keeps the pieces around it honest: the
+    composer stays linked into the test project (or those checks silently stop running), each of the four N12
+    reviews composes a canvas, refuses a page that is missing captures, and writes the file the workflow copies,
+    and the workflow still copies those files into ``docs/evidence``.
+    """
+    errors = []
+    composer = ROOT / "Diagnostics" / "ReviewSheet.cs"
+    project = ROOT / "tests" / "PianoPath.Tests" / "PianoPath.Tests.csproj"
+    workflow = ROOT / ".github" / "workflows" / "build.yml"
+    for path in (composer, project, workflow):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the N12 contact sheets need it"]
+    if "Diagnostics\\ReviewSheet.cs" not in project.read_text(encoding="utf-8"):
+        errors.append("tests/PianoPath.Tests/PianoPath.Tests.csproj no longer links Diagnostics/ReviewSheet.cs; "
+                      "the sheet's layout, downscale and alpha handling are only checked while it compiles there")
+    reviews = {
+        "OptionMatrixReview.cs": "option-matrix/sheet-",
+        "OptionNumericReview.cs": "option-numeric/sheet.png",
+        "OptionPoseReview.cs": "option-pose/sheet-",
+        "PresetRoundTripReview.cs": "preset-roundtrip/sheet.png",
+    }
+    for name, page in reviews.items():
+        path = ROOT / "Diagnostics" / name
+        if not path.exists():
+            errors.append(f"Diagnostics/{name} is missing; the N12 contact sheets need it")
+            continue
+        code = _code(path.read_text(encoding="utf-8"))
+        if "new ReviewSheet.Canvas(" not in code:
+            errors.append(f"Diagnostics/{name} no longer composes a contact sheet; its pictures would only exist "
+                          "inside the run's artifact again")
+        if "sheet.Tiles !=" not in code:
+            errors.append(f"Diagnostics/{name} no longer refuses a sheet that is missing captures")
+        if page not in code:
+            errors.append(f"Diagnostics/{name} no longer writes '{page}', which is what gets committed")
+    workflow_text = workflow.read_text(encoding="utf-8")
+    for needed in ("docs/evidence/n12-sheets", "option-matrix/sheet-wpf.png", "option-matrix/sheet-gpu-warp.png",
+                   "option-numeric/sheet.png", "preset-roundtrip/sheet.png", "option-pose/sheet-*.png"):
+        if needed not in workflow_text:
+            errors.append(f".github/workflows/build.yml no longer copies '{needed}' into docs/evidence/n12-sheets")
+    return errors
+
+
 def scan_option_pose():
     """The AR/pose slice has to keep shooting the option surface the overlay can draw.
 
@@ -2720,6 +2766,7 @@ def main():
     errors.extend(scan_option_numeric())
     errors.extend(scan_option_pose())
     errors.extend(scan_preset_roundtrip())
+    errors.extend(scan_review_sheets())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
@@ -2749,6 +2796,7 @@ def main():
     print("checked that every option the settings offer is captured by the N12(b) matrix on both renderers, off state included")
     print("checked that every numeric slider the plan shoots is the dock's own range, clamped by the settings class, sampled at both ends")
     print("checked that every shipped preset is saved and reopened through the product's own preset file and applies the dock's own path")
+    print("checked that the four N12 reviews still compose one contact sheet each, that a sheet refuses to be missing a capture, and that the workflow commits it")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")

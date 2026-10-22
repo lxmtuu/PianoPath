@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Windows.Media;
 
 namespace PianoPath;
 
@@ -36,6 +37,8 @@ internal static class OptionNumericReview
     /// <summary>The flat matrix's floor. Smaller than the smallest real difference this review asks about.</summary>
     private const int MinimumChangedPixels = 12;
     private static readonly string[] RendererIds = ["WPF", "GPU-WARP"];
+    /// <summary>The whole review on one page: six pictures to a row, a quarter of the capture size each.</summary>
+    private const int SheetTileWidth = Width / 4, SheetTileHeight = Height / 4, SheetColumns = 6;
 
     private sealed record Shot(string Axis, string Setting, double Value, string Renderer, string File,
         string PixelSha256, double SampleSeconds, int Frames, int Sprites, int Notes)
@@ -43,6 +46,10 @@ internal static class OptionNumericReview
         /// <summary>Held only while the axis is compared; dropped before the manifest is written.</summary>
         internal byte[]? Pixels { get; set; }
     }
+
+    /// <summary>The contact sheet, as the manifest names it. One page carries all nine axes and both renderers.</summary>
+    private sealed record Sheet(string File, int Width, int Height, int Columns, int Rows, int Tiles,
+        string PixelSha256);
 
     /// <summary>
     /// What the run measured: the capture count and, for every axis and renderer, the pair of values that
@@ -75,6 +82,11 @@ internal static class OptionNumericReview
 
             var shots = new List<Shot>(expected);
             var pairs = new List<(string Axis, string Renderer, string Left, string Right, int Changed)>();
+            // One page for the whole review: a reviewer sees every axis against every other at once, and the page
+            // is small enough to commit, which the 54 native captures are not.
+            var sheet = new ReviewSheet.Canvas(expected, SheetTileWidth, SheetTileHeight, SheetColumns,
+                "N12(E) NUMERIC AXES");
+            var cell = 0;
             foreach (var axis in OptionNumericPlan.Axes)
             {
                 var family = axis.Arrange;
@@ -97,9 +109,12 @@ internal static class OptionNumericReview
                     var (gpu, counters) = OptionMatrixReview.CaptureGpu(renderer, axis.Scene, settings);
                     var pair = new[]
                     {
-                        Store(root, axis, value, "WPF", wpf, counters.Sprites, counters.Notes),
-                        Store(root, axis, value, "GPU-WARP", gpu, counters.Sprites, counters.Notes)
+                        Store(root, axis, value, "WPF", wpf, counters.Sprites, counters.Notes, premultiplied: true),
+                        Store(root, axis, value, "GPU-WARP", gpu, counters.Sprites, counters.Notes, premultiplied: false)
                     };
+                    foreach (var shot in pair)
+                        sheet.Blit(cell++, $"{axis.Id} {OptionNumericPlan.Label(shot.Value)} {shot.Renderer}",
+                            shot.Pixels!, Width, Height, shot.Renderer == "WPF");
                     perValue.Add(pair);
                     shots.AddRange(pair);
                 }
@@ -130,26 +145,41 @@ internal static class OptionNumericReview
 
             if (shots.Count != expected)
                 throw new InvalidDataException($"The numeric review wrote {shots.Count} captures; exactly {expected} are required.");
-            WriteManifest(root, renderer.AdapterName, shots, pairs);
-            WriteHtmlIndex(root, shots, pairs);
-            VerifyWrittenArtifacts(root, shots);
+            var written = WriteSheet(root, sheet);
+            WriteManifest(root, renderer.AdapterName, shots, pairs, written);
+            WriteHtmlIndex(root, shots, pairs, written);
+            VerifyWrittenArtifacts(root, shots, written);
             return new Result(shots.Count, pairs);
         }
         finally { KeyboardLayout.Use(previousLayout); }
     }
 
     private static Shot Store(string root, OptionNumericPlan.Axis axis, double value, string rendererId,
-        byte[] pixels, int sprites, int notes)
+        byte[] pixels, int sprites, int notes, bool premultiplied)
     {
         var label = OptionNumericPlan.Label(value);
         var relative = Path.Combine("option-numeric", axis.Id, rendererId == "WPF" ? "wpf" : "gpu-warp", $"{label}.png");
+        // The software stage hands out premultiplied BGRA and the Direct3D readback straight BGRA; writing both
+        // through one format would darken every WPF capture that carries alpha.
         var sha = ReviewPng.Write(Path.Combine(root, relative), pixels, Width, Height,
-            $"{axis.Id}/{label} on {rendererId}");
+            $"{axis.Id}/{label} on {rendererId}", premultiplied ? PixelFormats.Pbgra32 : PixelFormats.Bgra32);
         return new Shot(axis.Id, axis.Setting, value, rendererId, relative.Replace('\\', '/'), sha,
             axis.Seconds, axis.Frames, sprites, notes) { Pixels = pixels };
     }
 
-    private static void VerifyWrittenArtifacts(string root, IReadOnlyList<Shot> shots)
+    /// <summary>
+    /// Writes the one contact sheet of this review: every axis, both renderers, in plan order.
+    /// </summary>
+    private static Sheet WriteSheet(string root, ReviewSheet.Canvas canvas)
+    {
+        var layout = canvas.Sheet;
+        const string file = "option-numeric/sheet.png";
+        var sha = ReviewPng.Write(Path.Combine(root, file), canvas.Finish(), layout.Width, layout.Height,
+            $"N12(e): {canvas.Count} numeric captures in {layout.Columns}×{layout.Rows} cells", PixelFormats.Pbgra32);
+        return new Sheet(file, layout.Width, layout.Height, layout.Columns, layout.Rows, canvas.Count, sha);
+    }
+
+    private static void VerifyWrittenArtifacts(string root, IReadOnlyList<Shot> shots, Sheet sheet)
     {
         foreach (var shot in shots)
         {
@@ -157,6 +187,13 @@ internal static class OptionNumericReview
             if (Convert.ToHexString(SHA256.HashData(pixels)) != shot.PixelSha256)
                 throw new InvalidDataException($"{shot.File} no longer decodes to the pixels the manifest names.");
         }
+        var page = ReviewPng.Decode(Path.Combine(root, sheet.File), sheet.Width, sheet.Height);
+        if (Convert.ToHexString(SHA256.HashData(page)) != sheet.PixelSha256)
+            throw new InvalidDataException($"{sheet.File} no longer decodes to the pixels the manifest names.");
+        if (sheet.Tiles != shots.Count)
+            throw new InvalidDataException(
+                $"{sheet.File} carries {sheet.Tiles} pictures but the review wrote {shots.Count} captures; the " +
+                "sheet is the copy that outlives the artifact, so it has to carry all of them.");
     }
 
     /// <summary>Sets one numeric property. The settings come from the discrete family, so everything else is fixed.</summary>
@@ -192,7 +229,7 @@ internal static class OptionNumericReview
     };
 
     private static void WriteManifest(string root, string adapter, IReadOnlyList<Shot> shots,
-        List<(string Axis, string Renderer, string Left, string Right, int Changed)> pairs)
+        List<(string Axis, string Renderer, string Left, string Right, int Changed)> pairs, Sheet sheet)
     {
         File.WriteAllText(Path.Combine(root, "option-numeric", "manifest.json"), JsonSerializer.Serialize(new
         {
@@ -213,6 +250,8 @@ internal static class OptionNumericReview
                 arrangedValues = OptionMatrixPlan.CapturedValues(OptionMatrixPlan.FamilyById(axis.Family))
             }),
             pairs = pairs.Select(pair => new { pair.Axis, pair.Renderer, pair.Left, pair.Right, pair.Changed }),
+            // The one file of this review that is committed: all nine axes, both renderers, captioned.
+            sheet = new { sheet.File, sheet.Width, sheet.Height, sheet.Columns, sheet.Rows, sheet.Tiles, sheet.PixelSha256 },
             captureCount = shots.Count,
             captures = shots.Select(shot => new
             {
@@ -223,7 +262,7 @@ internal static class OptionNumericReview
     }
 
     private static void WriteHtmlIndex(string root, IReadOnlyList<Shot> shots,
-        List<(string Axis, string Renderer, string Left, string Right, int Changed)> pairs)
+        List<(string Axis, string Renderer, string Left, string Right, int Changed)> pairs, Sheet sheet)
     {
         static string Encode(string value) => System.Net.WebUtility.HtmlEncode(value);
         var body = new System.Text.StringBuilder();
@@ -237,7 +276,11 @@ internal static class OptionNumericReview
             .Append("<p>Chín trục số, ba giá trị mỗi trục, mỗi giá trị chụp trên WPF và D3D/WARP ở cùng cảnh, cùng input, ")
             .Append("cùng seed. Ảnh native 960×540, không cắt, không ghép. Mỗi cặp trong một trục phải đổi ≥")
             .Append(MinimumChangedPixels).Append(" px trên <b>cả hai</b> renderer. Đây là bằng chứng renderer đọc đúng ")
-            .Append("giá trị slider, không phải nghiệm thu mỹ thuật hay tuyến tính của phản ứng.</p>");
+            .Append("giá trị slider, không phải nghiệm thu mỹ thuật hay tuyến tính của phản ứng.</p>")
+            .Append($"<p>Tờ ảnh tiếp xúc của cả chín trục: <a href=\"{Encode(sheet.File)}\">{sheet.Tiles} khung</a> trong lưới ")
+            .Append($"{sheet.Columns}×{sheet.Rows}, {sheet.Width}×{sheet.Height} px — mỗi hàng một trục, cặp WPF ↔ GPU cạnh nhau. ")
+            .Append("Đây là bản được commit vào repository.</p>")
+            .Append($"<figure><img src=\"{Encode(sheet.File)}\" alt=\"tờ ảnh tiếp xúc N12(e)\"></figure>");
         foreach (var axis in OptionNumericPlan.Axes)
         {
             var column = shots.Where(shot => shot.Axis == axis.Id).ToArray();

@@ -39,6 +39,8 @@ internal static class OptionPoseReview
     /// <summary>3 poses × 6 families × (one off state + one value): the note material, the trail, four ambient layers.</summary>
     private const int ExpectedPart2 = 36;
     private const int ExpectedCaptures = ExpectedPart1 + ExpectedPart2;
+    /// <summary>One pose fills one sheet: four pictures to a row, a quarter of the capture size each.</summary>
+    private const int SheetTileWidth = Width / 4, SheetTileHeight = Height / 4, SheetColumns = 4;
 
     private sealed record Counters(int Sprites, int ArParticles);
 
@@ -48,6 +50,13 @@ internal static class OptionPoseReview
         /// <summary>Held only while the pair is compared; dropped before the manifest is written.</summary>
         internal byte[]? PixelBytes { get; init; }
     }
+
+    /// <summary>One pose's contact sheet, held until it has been written and its file read back.</summary>
+    private sealed record Sheet(string Pose, string File, ReviewSheet.Canvas Canvas);
+
+    /// <summary>A sheet as the manifest names it: where it is, how big it is, and the pixels it decodes to.</summary>
+    private sealed record WrittenSheet(string Pose, string File, int Width, int Height, int Columns, int Rows,
+        int Tiles, string PixelSha256);
 
     internal static int Render(string output)
     {
@@ -67,6 +76,7 @@ internal static class OptionPoseReview
             if (!renderer.IsWarp) throw new InvalidOperationException($"The AR/pose slice requires WARP, but Direct3D created '{renderer.AdapterName}'.");
 
             var captures = new List<Shot>(ExpectedCaptures);
+            var sheets = new List<Sheet>(poses.Length);
             // The two parts walk the same loop: one off state per family, then one capture per value. Part 1 has a
             // family with two channels sharing that off state; part 2 has one row per family by construction.
             (int Part, IReadOnlyList<(string Family, string Value)> Selections)[] parts =
@@ -75,29 +85,39 @@ internal static class OptionPoseReview
                 (2, OptionMatrixPlan.PoseSliceSelections)
             ];
             foreach (var pose in poses)
-            foreach (var (part, selections) in parts)
-            // One off state per family: the morph axis is shot twice at the same pose (its particle channel and
-            // its flash), and both values are compared against the same off frame instead of re-rendering it.
-            foreach (var group in selections.GroupBy(selection => selection.Family))
             {
-                var family = OptionMatrixPlan.PoseFamily(group.Key);
-                var off = Capture(root, renderer, pose, cameras[pose.Id], part, family, null, "off", neutral: true);
-                captures.Add(off with { ChangedPixels = 0, PixelBytes = null });
-                foreach (var selection in group)
+                // One pose fills one sheet: every picture it writes, off and on, in plan order.
+                var sheet = new ReviewSheet.Canvas(ExpectedCaptures / poses.Length, SheetTileWidth, SheetTileHeight,
+                    SheetColumns, $"N12(D) {pose.Id}");
+                var cell = 0;
+                foreach (var (part, selections) in parts)
+                // One off state per family: the morph axis is shot twice at the same pose (its particle channel and
+                // its flash), and both values are compared against the same off frame instead of re-rendering it.
+                foreach (var group in selections.GroupBy(selection => selection.Family))
                 {
-                    if (!family.Values.Contains(selection.Value))
-                        throw new InvalidDataException($"The {family.Id} pose slice asks for '{selection.Value}', which the family does not offer.");
-                    var on = Capture(root, renderer, pose, cameras[pose.Id], part, family, selection.Value,
-                        OptionMatrixPlan.Slug(selection.Value), neutral: false);
-                    // The two shots differ in exactly one setting; anything else would make the comparison meaningless.
-                    var changed = OptionMatrixPlan.ChangedPixels(off.PixelBytes!, on.PixelBytes!);
-                    // The frames of this pair are no longer needed once they have been compared.
-                    captures.Add(on with { ChangedPixels = changed, PixelBytes = null });
-                    if (changed < MinimumChangedPixels)
-                        throw new InvalidDataException(
-                            $"{pose.Id}: {family.Id}/{selection.Value} moved {changed} pixels in AR (floor {MinimumChangedPixels}): " +
-                            "the option draws on the stage but not through the calibrated projection.");
+                    var family = OptionMatrixPlan.PoseFamily(group.Key);
+                    var off = Capture(root, renderer, pose, cameras[pose.Id], part, family, null, "off", neutral: true);
+                    captures.Add(off with { ChangedPixels = 0, PixelBytes = null });
+                    sheet.Blit(cell++, $"{family.Id} off", off.PixelBytes!, Width, Height, premultiplied: false);
+                    foreach (var selection in group)
+                    {
+                        if (!family.Values.Contains(selection.Value))
+                            throw new InvalidDataException($"The {family.Id} pose slice asks for '{selection.Value}', which the family does not offer.");
+                        var on = Capture(root, renderer, pose, cameras[pose.Id], part, family, selection.Value,
+                            OptionMatrixPlan.Slug(selection.Value), neutral: false);
+                        // The two shots differ in exactly one setting; anything else would make the comparison meaningless.
+                        var changed = OptionMatrixPlan.ChangedPixels(off.PixelBytes!, on.PixelBytes!);
+                        // The frames of this pair are no longer needed once they have been compared.
+                        captures.Add(on with { ChangedPixels = changed, PixelBytes = null });
+                        sheet.Blit(cell++, $"{family.Id} {selection.Value}", on.PixelBytes!, Width, Height,
+                            premultiplied: false);
+                        if (changed < MinimumChangedPixels)
+                            throw new InvalidDataException(
+                                $"{pose.Id}: {family.Id}/{selection.Value} moved {changed} pixels in AR (floor {MinimumChangedPixels}): " +
+                                "the option draws on the stage but not through the calibrated projection.");
+                    }
                 }
+                sheets.Add(new Sheet(pose.Id, $"option-pose/sheet-{pose.Id}.png", sheet));
             }
 
             // Each part is counted on its own: a missing pose, a family that lost its value or a part that
@@ -108,9 +128,10 @@ internal static class OptionPoseReview
                 throw new InvalidDataException(
                     $"The AR/pose slice wrote {part1} part-1 and {part2} part-2 captures; {ExpectedPart1} and " +
                     $"{ExpectedPart2} are required.");
-            WriteManifest(root, renderer.AdapterName, poses, cameras, captures);
-            WriteHtmlIndex(root, captures);
-            VerifyWrittenArtifacts(root, captures);
+            var sheetsWritten = WriteSheets(root, sheets);
+            WriteManifest(root, renderer.AdapterName, poses, cameras, captures, sheetsWritten);
+            WriteHtmlIndex(root, captures, sheetsWritten);
+            VerifyWrittenArtifacts(root, captures, sheetsWritten);
             return captures.Count;
         }
         finally { KeyboardLayout.Use(previousLayout); }
@@ -169,7 +190,26 @@ internal static class OptionPoseReview
             OptionMatrixPlan.Seed);
     }
 
-    private static void VerifyWrittenArtifacts(string root, IReadOnlyList<Shot> captures)
+    /// <summary>
+    /// Writes one contact sheet per pose and names it in the manifest, so the pictures a reviewer needs are three
+    /// files in the repository rather than 63 inside an artifact that expires in two days.
+    /// </summary>
+    private static List<WrittenSheet> WriteSheets(string root, IReadOnlyList<Sheet> sheets)
+    {
+        var written = new List<WrittenSheet>(sheets.Count);
+        foreach (var sheet in sheets)
+        {
+            var layout = sheet.Canvas.Sheet;
+            var sha = ReviewPng.Write(Path.Combine(root, sheet.File), sheet.Canvas.Finish(), layout.Width,
+                layout.Height, $"{sheet.Pose}: {sheet.Canvas.Count} captures in {layout.Columns}×{layout.Rows} cells",
+                PixelFormats.Pbgra32);
+            written.Add(new WrittenSheet(sheet.Pose, sheet.File, layout.Width, layout.Height, layout.Columns,
+                layout.Rows, sheet.Canvas.Count, sha));
+        }
+        return written;
+    }
+
+    private static void VerifyWrittenArtifacts(string root, IReadOnlyList<Shot> captures, IReadOnlyList<WrittenSheet> sheets)
     {
         foreach (var capture in captures)
         {
@@ -177,10 +217,23 @@ internal static class OptionPoseReview
             if (Convert.ToHexString(SHA256.HashData(pixels)) != capture.PixelSha256)
                 throw new InvalidDataException($"{capture.File} no longer decodes to the pixels the manifest names.");
         }
+        // The sheets are the part of the review that leaves the artifact, so each one has to be a whole pose:
+        // every capture of that pose, on one page, and nothing else.
+        foreach (var sheet in sheets)
+        {
+            var pixels = ReviewPng.Decode(Path.Combine(root, sheet.File), sheet.Width, sheet.Height);
+            if (Convert.ToHexString(SHA256.HashData(pixels)) != sheet.PixelSha256)
+                throw new InvalidDataException($"{sheet.File} no longer decodes to the pixels the manifest names.");
+            var shots = captures.Count(capture => capture.Pose == sheet.Pose);
+            if (sheet.Tiles != shots)
+                throw new InvalidDataException(
+                    $"{sheet.File} carries {sheet.Tiles} pictures but the {sheet.Pose} pose wrote {shots} captures; " +
+                    "a sheet has to show the whole pose, because it is the copy that outlives the artifact.");
+        }
     }
 
     private static void WriteManifest(string root, string adapter, IReadOnlyList<HeldParticleControlPlan.View> poses,
-        IReadOnlyDictionary<string, byte[]> cameras, IReadOnlyList<Shot> captures)
+        IReadOnlyDictionary<string, byte[]> cameras, IReadOnlyList<Shot> captures, IReadOnlyList<WrittenSheet> sheets)
     {
         File.WriteAllText(Path.Combine(root, "manifest.json"), JsonSerializer.Serialize(new
         {
@@ -200,6 +253,13 @@ internal static class OptionPoseReview
                 .DistinctBy(family => family.Id)
                 .ToDictionary(family => family.Id, family => OptionMatrixPlan.Seconds(family)),
             floorChangedPixels = MinimumChangedPixels,
+            // The contact sheets are the subset of this directory that leaves the artifact: one page per pose,
+            // every capture of that pose on it, captioned, so the evidence can be committed and reviewed later.
+            sheets = sheets.Select(sheet => new
+            {
+                sheet.Pose, sheet.File, sheet.Width, sheet.Height, sheet.Columns, sheet.Rows, sheet.Tiles,
+                sheet.PixelSha256
+            }),
             poses = poses.Select(pose => new
             {
                 pose.Id,
@@ -216,7 +276,7 @@ internal static class OptionPoseReview
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static void WriteHtmlIndex(string root, IReadOnlyList<Shot> captures)
+    private static void WriteHtmlIndex(string root, IReadOnlyList<Shot> captures, IReadOnlyList<WrittenSheet> sheets)
     {
         static string Encode(string value) => System.Net.WebUtility.HtmlEncode(value);
         var body = new System.Text.StringBuilder();
@@ -241,6 +301,11 @@ internal static class OptionPoseReview
         foreach (var pose in captures.Select(capture => capture.Pose).Distinct())
         {
             body.Append($"<h2>{Encode(pose)}</h2>");
+            if (sheets.FirstOrDefault(candidate => candidate.Pose == pose) is { } sheet)
+                body.Append($"<p>Tờ ảnh tiếp xúc của pose này: <a href=\"{Encode(sheet.File)}\">{sheet.Tiles} khung</a> trong lưới ")
+                    .Append($"{sheet.Columns}×{sheet.Rows}, {sheet.Width}×{sheet.Height} px. Đây là bản được commit vào repository; ")
+                    .Append("các ảnh native bên dưới chỉ nằm trong artifact của lượt chạy.</p>")
+                    .Append($"<figure><img src=\"{Encode(sheet.File)}\" alt=\"tờ ảnh tiếp xúc {Encode(pose)}\"></figure>");
             foreach (var part in parts)
             {
                 var shots = captures.Where(capture => capture.Pose == pose && capture.Part == part.Part).ToArray();

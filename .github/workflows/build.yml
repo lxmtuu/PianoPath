@@ -439,6 +439,49 @@ jobs:
           @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
 
+      # The contact sheets are the N12 pictures a person actually looks at, and the only part of that review small
+      # enough to belong in Git: the 285 native captures stay in the run's artifacts, which are published on main
+      # and not on a working branch. Copying the seven sheets into docs/evidence is what turns "the job was green"
+      # into "here is what it drew, on this commit, for anyone who opens the repository".
+      - name: Save the N12 contact sheets
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')
+        shell: bash
+        run: |
+          git config user.name 'keyflow previews'
+          git config user.email 'actions@users.noreply.github.com'
+          review="$RUNNER_TEMP/phase1-visual-review"
+          # Every copy is required: a sheet the suite did not write is a finding, not something to skip past.
+          out=docs/evidence/n12-sheets
+          mkdir -p "$out"
+          cp -- "$review/option-matrix/sheet-wpf.png" "$out/matrix-wpf.png"
+          cp -- "$review/option-matrix/sheet-gpu-warp.png" "$out/matrix-gpu-warp.png"
+          cp -- "$review/option-numeric/sheet.png" "$out/numeric.png"
+          cp -- "$review/preset-roundtrip/sheet.png" "$out/preset.png"
+          for file in "$review"/option-pose/sheet-*.png; do
+            name=$(basename "$file" .png | sed 's/^sheet-//')
+            cp -- "$file" "$out/pose-$name.png"
+          done
+          ls -l "$out"
+          git add "$out"
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Refresh the N12 contact sheets [skip ci]'
+          # Same rule as the native evidence steps above: a branch that moved while this job rendered keeps the
+          # sheets belonging to its newer tip, and this run's pictures stay in the run's own review directory.
+          log="$RUNNER_TEMP/n12-sheets-push.log"
+          git fetch --quiet origin "$GITHUB_REF_NAME"
+          tip=$(git rev-parse "origin/$GITHUB_REF_NAME" 2>/dev/null || true)
+          if [ -n "$tip" ] && [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "::warning title=N12 sheets not committed::The branch moved while this build rendered (now $tip, this run built $GITHUB_SHA), so the refreshed sheets were not pushed."
+            exit 0
+          fi
+          if git push >"$log" 2>&1; then cat "$log"; exit 0; fi
+          cat "$log"
+          if grep -Eqi 'GH013|repository rule violations|protected branch|non-fast-forward|fetch first|stale info|cannot lock ref' "$log"; then
+            echo "::warning title=N12 sheets not committed::The branch would not take the sheets push, so it keeps the set it already has."
+            exit 0
+          fi
+          exit 1
+
       # Isolate deterministic P0 capture from realtime/device smoke tests. Both still block the build.
       - name: Prism Flow baseline and candidate verification
         id: prism-review
