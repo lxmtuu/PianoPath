@@ -508,8 +508,15 @@ internal static partial class VerificationSuite
                     && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified
                     && contract.Capabilities.ArOverlay.FallbackId is null,
                 $"The {alias} contract must keep AR material support Unverified despite its shared-shader camera-quad route.");
-            Assert(contract.Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
-                $"The {alias} contract must not claim AR parameter parity before the per-setting matrix is verified.");
+            // N16 (docs/AR-MATERIAL-PARITY.md) is the per-setting matrix: a parameter the material's shader
+            // branch reads is Applied on the AR quad, the one Crystal Outline's branch skips is Ignored, and the
+            // glow stays Unverified because its halo lies outside the note rectangle the quad is cut to.
+            Assert(contract.Parameters.All(parameter => parameter.Bindings.ArOverlay
+                    == (parameter.SettingName == "NoteGlow" ? EffectParameterBindingState.Unverified
+                        : parameter.SettingName == "NoteRefraction" && alias == "CrystalOutline"
+                            ? EffectParameterBindingState.Ignored
+                            : EffectParameterBindingState.Applied)),
+                $"The {alias} contract must claim exactly the AR parameter bindings the per-setting N16 matrix measured.");
             Assert(contract.Accessibility.FlashRisk == EffectFlashRisk.None
                     && contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
                     && contract.Accessibility.NonColorCue != EffectShapeCue.None,
@@ -537,11 +544,17 @@ internal static partial class VerificationSuite
             {
                 var crystalRefraction = alias == "CrystalOutline" && parameter.SettingName == "NoteRefraction";
                 var expectedGpuBinding = crystalRefraction ? EffectParameterBindingState.Ignored : EffectParameterBindingState.Applied;
+                // N16 (docs/AR-MATERIAL-PARITY.md) is the dedicated camera-quad coverage: the branch reads the
+                // setting and the AR frame moves, or the branch skips it and the AR frame does not. The glow is
+                // measured but stays Unverified because its halo lies outside the rectangle the quad is cut to.
+                var expectedArBinding = parameter.SettingName == "NoteGlow" ? EffectParameterBindingState.Unverified
+                    : crystalRefraction ? EffectParameterBindingState.Ignored
+                    : EffectParameterBindingState.Applied;
                 Assert(parameter.Bindings.WpfStage == EffectParameterBindingState.Applied
                         && parameter.Bindings.GpuStage == expectedGpuBinding
                         && parameter.Bindings.Recording == EffectParameterBindingState.Unverified
-                        && parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified,
-                    $"The {alias} input {parameter.SettingName} should keep its AR binding Unverified until the material setting has dedicated camera-quad coverage.");
+                        && parameter.Bindings.ArOverlay == expectedArBinding,
+                    $"The {alias} input {parameter.SettingName} should carry exactly the AR binding the N16 camera-quad matrix measured.");
                 var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
                 Assert(property is not null, $"The {alias} parameter {parameter.SettingName} should refer to an existing setting.");
                 if (property is null) continue;

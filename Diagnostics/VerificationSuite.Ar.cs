@@ -71,10 +71,14 @@ internal static partial class VerificationSuite
             Assert(material.Capabilities.ArOverlay.State == EffectBackendState.Unverified
                     && material.Capabilities.ArOverlay.FallbackId is null,
                 $"{material.Id} uses the shared material shader on AR quads, but its AR support remains Unverified.");
-            Assert(material.Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
-                $"{material.Id} must keep per-setting AR bindings Unverified until their values are covered.");
+            Assert(material.Parameters.All(parameter => parameter.Bindings.ArOverlay
+                    == (parameter.SettingName == "NoteGlow" ? EffectParameterBindingState.Unverified
+                        : parameter.SettingName == "NoteRefraction" && material.Id == "note.material.crystal-outline"
+                            ? EffectParameterBindingState.Ignored
+                            : EffectParameterBindingState.Applied)),
+                $"{material.Id} must carry exactly the per-setting AR bindings the N16 camera-quad matrix measured.");
         }
-        Results.Add("PASS AR contract classification: six screen-space ambient families are Native; 17 projected families remain Unverified after sampled WARP checks because the full style/value/parameter matrix is incomplete, including the falling trail, pulse and shimmer that AR draws on its own note quads; the backdrop star field stays Unsupported because the background pass is skipped over a camera backdrop; note materials use the shared shader on camera-facing quads but their support and parameter bindings remain Unverified.");
+        Results.Add("PASS AR contract classification: six screen-space ambient families are Native; 17 projected families remain Unverified after sampled WARP checks because the full style/value/parameter matrix is incomplete, including the falling trail, pulse and shimmer that AR draws on its own note quads; the backdrop star field stays Unsupported because the background pass is skipped over a camera backdrop; note materials use the shared shader on camera-facing quads, and N16's per-setting camera-quad matrix now backs an Applied/Ignored binding for each of their parameters while the material capability itself stays Unverified.");
     }
 
     /// <summary>

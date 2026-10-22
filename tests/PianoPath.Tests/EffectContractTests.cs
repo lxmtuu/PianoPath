@@ -313,14 +313,10 @@ public sealed class EffectContractTests
             Assert.Equal(EffectBackendState.Unverified, material.Capabilities.ArOverlay.State);
             Assert.Null(material.Capabilities.ArOverlay.FallbackId);
             Assert.All(material.Parameters, parameter => Assert.Equal(
-                parameter.SettingName == "NoteGlow"
-                    ? EffectParameterBindingState.Unverified
-                    : EffectParameterBindingState.Applied, parameter.Bindings.ArOverlay));
-            var refraction = material.Parameters.SingleOrDefault(parameter => parameter.SettingName == "NoteRefraction");
-            if (refraction is not null)
-                Assert.Equal(material.Id == "note.material.crystal-outline"
+                parameter.SettingName == "NoteGlow" ? EffectParameterBindingState.Unverified
+                : parameter.SettingName == "NoteRefraction" && material.Id == "note.material.crystal-outline"
                     ? EffectParameterBindingState.Ignored
-                    : EffectParameterBindingState.Applied, refraction.Bindings.ArOverlay);
+                    : EffectParameterBindingState.Applied, parameter.Bindings.ArOverlay));
         });
     }
 
