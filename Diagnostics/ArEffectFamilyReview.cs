@@ -104,7 +104,7 @@ internal static class ArEffectFamilyReview
             var shapes = pilot.Select(contract => Shape(contract)).ToArray();
             var captions = pilot.SelectMany((contract, column) => new[]
                 {
-                    $"{contract.Id} on", $"{shapes[column].Toggle} off", $"{shapes[column].Amount} {shapes[column].Value:0}"
+                    $"{contract.Id} on", $"{shapes[column].Toggle} off", $"{shapes[column].Amount} {shapes[column].AmountValue:0}"
                 }).ToArray();
             var sheet = new ReviewSheet.Canvas(pilot.Count * Columns, TileWidth, TileHeight, Columns,
                 "N17 AR HOLD FAMILIES", ReviewSheet.CaptionScaleFor(captions, TileWidth));
