@@ -82,7 +82,7 @@ public class ReviewSheetTests
     [Fact]
     public void A_flat_tile_reaches_the_page_unchanged()
     {
-        var sheet = new ReviewSheet.Canvas(1, TileWidth, TileHeight, 1, string.Empty);
+        var sheet = new ReviewSheet.Canvas(1, TileWidth, TileHeight, 1, string.Empty, captionScale: 1);
         sheet.Blit(0, "GEM", Solid(TileWidth * 2, TileHeight * 2, 10, 20, 30), TileWidth * 2, TileHeight * 2,
             premultiplied: false);
 
@@ -289,7 +289,7 @@ public class ReviewSheetTests
         {
             var sheet = new ReviewSheet.Canvas(3, TileWidth, TileHeight, 2, "N12(D) FRONT", captionScale: 1);
             for (var index = 0; index < 3; index++)
-                sheet.Blit(index, $"CELL {index}", Solid(TileWidth * 2, TileHeight * 2, (byte)(index * 40), 12, 200),
+                sheet.Blit(index, $"C{index}", Solid(TileWidth * 2, TileHeight * 2, (byte)(index * 40), 12, 200),
                     TileWidth * 2, TileHeight * 2, premultiplied: false);
             return sheet.Finish();
         }
