@@ -93,6 +93,10 @@ chứng minh slider đi qua được ba vị trí, không chứng minh tuyến t
 
 | Hạng mục | Giá trị |
 |---|---|
-| Run | _(điền sau lượt xanh đầu tiên)_ |
-| Commit | _(điền sau lượt xanh đầu tiên)_ |
-| Evidence commit | _(điền sau lượt xanh đầu tiên)_ |
+| Run | [`39747268752`](https://github.com/lxmtuu/PianoPath/actions/runs/39747268752) trên `807b2e5` — `static`, `test`, `keyboard-light`, `build` đều xanh |
+| Evidence commit | `c3cb7e9` (`Refresh the review contact sheets [skip ci]`) |
+| Tờ ảnh | `docs/evidence/refraction-sheets/wpf.png` (1,07 MB) và `gpu-warp.png` (1,58 MB), mỗi tờ 2930×3474 |
+| Đo lại từ chính PNG đã commit | **WPF**: cả sáu chất liệu đổi 124–125 px giữa 0 và 100; cột viền x=431 đi 0 → 50 → 100 theo alpha, ví dụ Solid `(131,66,241)` → `(172,129,246)` → `(214,192,250)`. **GPU**: Solid 11 502 px, Glass 670, Gem 225, còn Neon / Fire / Crystal Outline **0 px** |
+
+Lượt trước đó, [`39739424817`](https://github.com/lxmtuu/PianoPath/actions/runs/39739424817) trên `1254f4a`, đã xanh với cùng
+hợp đồng nhưng tờ ảnh thu ô xuống 640×360; trang đó bị thay bằng bản 1:1 ở trên vì đường viền chỉ rộng 1 px.
