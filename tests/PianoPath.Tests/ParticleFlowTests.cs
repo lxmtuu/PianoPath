@@ -63,8 +63,9 @@ public class ParticleFlowTests
         var sum = 0.0;
         for (var i = 0; i < 1000; i++) sum += ParticleFlow.Diffusion(i / 999.0, 55);
         Assert.Equal(0, sum, 6);
-        Assert.Equal(ParticleFlow.DiffusionRate, ParticleFlow.Diffusion(1, 55), 9);
-        Assert.Equal(-ParticleFlow.DiffusionRate, ParticleFlow.Diffusion(0, 55), 9);
+        // A seed at either end of its turn is half the rate away from the mean, so the full span is the rate.
+        Assert.Equal(ParticleFlow.DiffusionRate / 2, ParticleFlow.Diffusion(1, 55), 9);
+        Assert.Equal(-ParticleFlow.DiffusionRate / 2, ParticleFlow.Diffusion(0, 55), 9);
         Assert.True(Math.Abs(ParticleFlow.Diffusion(.8, 100) - 2 * ParticleFlow.Diffusion(.8, 50)) < 1e-12,
             "twice the slider must be twice the kick");
     }
