@@ -262,8 +262,10 @@ internal sealed record EffectContract(
     /// material-specific read-back checks in <c>VerifyPngSequenceRecorder</c>, <c>VerifyGpuNotePassQueries</c>
     /// and <c>VerifyGpuNoteMaterials</c> (WPF PNG files and GPU <c>GpuRecordingTap</c> frames). Individual
     /// parameter-to-recording bindings remain Unverified. AR passes known style IDs to the shared material
-    /// shader on camera-facing quads, but AR material capability and parameter bindings remain Unverified
-    /// until an AR-specific style/value matrix is reviewed.
+    /// shader on camera-facing quads; N16's per-setting AR matrix (docs/AR-MATERIAL-PARITY.md) read those
+    /// bindings back, so the parameter profiles below say Applied or Ignored. The AR capability itself stays
+    /// Unverified: one pose, one value per setting and WARP frames are not the value/lifecycle coverage a
+    /// Native claim asks for.
     /// </summary>
 internal static class EffectContractCatalog
 {
@@ -273,10 +275,18 @@ internal static class EffectContractCatalog
     private static readonly EffectParameterBindingProfile NativeParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
-    // AR uses the shared shader path, but no per-setting AR evidence currently supports Applied/Ignored claims.
+    // AR uses the shared shader path. N16 (docs/AR-MATERIAL-PARITY.md) held pose, camera, scene and seed, moved
+    // one setting at a time, and counted the pixels that changed in the AR frame of each piloted material: every
+    // setting a material's shader branch reads moved the picture past the twelve-pixel floor, and the one it does
+    // not read - Crystal Outline's refraction - moved nothing. The binding is therefore Applied per setting.
     private static readonly EffectParameterBindingProfile ArMaterialParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
-        EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Applied);
+    // The AR quad is cut to the note body, and the glow's halo lies outside it: N16 measured 3999-9841 changed
+    // pixels on the quad's rounded corners but read that as a record of what the shader does, not as a binding a
+    // reviewer can see. Claiming Applied here would say the overlay draws the halo, which it does not.
+    private static readonly EffectParameterBindingProfile ArGlowParameterBindings =
+        ArMaterialParameterBindings with { ArOverlay = EffectParameterBindingState.Unverified };
     private static readonly EffectParameterBindingProfile ArAmbientParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Applied);
@@ -295,9 +305,11 @@ internal static class EffectContractCatalog
     // note quads on both the flat and the projected path (Gpu/GpuArLayer.cs AddNoteShimmer call).
     private static readonly EffectParameterBindingProfile GpuOnlyArNoteParameterBindings =
         GpuOnlyParameterBindings with { ArOverlay = EffectParameterBindingState.Unverified };
+    // AR shades with the same branch the GPU stage does, so a setting the GPU ignores is ignored on the quad
+    // too: N16 shot Crystal Outline's refraction in AR and it moved exactly 0 pixels, as on the GPU stage.
     private static readonly EffectParameterBindingProfile WpfOnlyRefractionBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Ignored,
-        EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
     private static readonly EffectCostAssessment UnmeasuredCost = new(EffectCostState.Unmeasured);
 
     // Manual-review record of the physical-adapter probe (2026-10-07, AMD Radeon(TM) Graphics, iGPU):
@@ -323,7 +335,7 @@ internal static class EffectContractCatalog
     private static readonly IReadOnlyList<EffectParameterContract> SolidParameters = Array.AsReadOnly(new[]
     {
         Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
-        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArGlowParameterBindings),
         Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
         Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
         Percentage("NoteRefraction", 0, 100, ArMaterialParameterBindings),
@@ -333,7 +345,7 @@ internal static class EffectContractCatalog
     private static readonly IReadOnlyList<EffectParameterContract> GemParameters = Array.AsReadOnly(new[]
     {
         Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
-        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArGlowParameterBindings),
         Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
         Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
         Percentage("NoteRefraction", 0, 100, ArMaterialParameterBindings),
@@ -343,13 +355,16 @@ internal static class EffectContractCatalog
     private static readonly IReadOnlyList<EffectParameterContract> CrystalOutlineParameters = Array.AsReadOnly(new[]
     {
         Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
-        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArGlowParameterBindings),
         Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
         Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
         // Crystal Outline is the one family where the GPU ignores NoteRefraction: that branch reads NoteB.y for
         // its rim and NoteB.x for its tint, while WPF draws both a fringe and a sheen from the same setting.
         // Gem, Solid, Satin and Glass do read NoteB.w, so this profile belongs to the family, not to the parameter.
         Percentage("NoteRefraction", 0, 100, WpfOnlyRefractionBindings),
+        // Notes3D is deliberately not declared: this branch never reads NoteC.y, the channel the 3D switch
+        // travels on, and N16 measured 0 changed pixels for it on the Crystal Outline AR quad. The review still
+        // shoots the setting for this material so the omission is shown to be real, not a row the page forgot.
     });
 
     /// <summary>The intentionally narrow pilot. Add other families only after their own evidence review.</summary>

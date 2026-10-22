@@ -120,25 +120,32 @@ public sealed class EffectContractTests
 
         // Solid and Gem consume every look setting on both stage renderers. Captured WPF PNG/GPU tap frames
         // verify the material family is preserved in Recording, not every parameter's individual binding.
+        // N16 (docs/AR-MATERIAL-PARITY.md) then shot each setting through the AR overlay of each material: a
+        // setting the branch reads moved the frame past the twelve-pixel floor and is Applied in AR, while the
+        // glow stays Unverified because its halo lies outside the rectangle the quad is cut to.
+        static EffectParameterBindingState ArBinding(EffectParameterContract parameter) =>
+            parameter.SettingName == "NoteGlow"
+                ? EffectParameterBindingState.Unverified
+                : EffectParameterBindingState.Applied;
         Assert.All(solid.Parameters.Concat(gem.Parameters), parameter =>
         {
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.WpfStage);
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.GpuStage);
             Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.Recording);
-            Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.ArOverlay);
+            Assert.Equal(ArBinding(parameter), parameter.Bindings.ArOverlay);
         });
         Assert.All(crystal.Parameters.Where(parameter => parameter.SettingName != "NoteRefraction"), parameter =>
         {
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.WpfStage);
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.GpuStage);
             Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.Recording);
-            Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.ArOverlay);
+            Assert.Equal(ArBinding(parameter), parameter.Bindings.ArOverlay);
         });
         var crystalRefraction = crystal.Parameters.Single(parameter => parameter.SettingName == "NoteRefraction");
         Assert.Equal(EffectParameterBindingState.Applied, crystalRefraction.Bindings.WpfStage);
         Assert.Equal(EffectParameterBindingState.Ignored, crystalRefraction.Bindings.GpuStage);
         Assert.Equal(EffectParameterBindingState.Unverified, crystalRefraction.Bindings.Recording);
-        Assert.Equal(EffectParameterBindingState.Unverified, crystalRefraction.Bindings.ArOverlay);
+        Assert.Equal(EffectParameterBindingState.Ignored, crystalRefraction.Bindings.ArOverlay);
     }
 
     [Fact]
@@ -301,9 +308,19 @@ public sealed class EffectContractTests
             .Parameters.Single(parameter => parameter.SettingName == "PetalAmount").Maximum!.Value);
         Assert.All(EffectContractCatalog.NoteMaterialPilot, material =>
         {
+            // The capability stays Unverified on purpose: N16 covers one pose, one value per setting and WARP,
+            // which is parameter-delivery evidence, not the value/lifecycle coverage a Native claim needs.
             Assert.Equal(EffectBackendState.Unverified, material.Capabilities.ArOverlay.State);
             Assert.Null(material.Capabilities.ArOverlay.FallbackId);
-            Assert.All(material.Parameters, parameter => Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.ArOverlay));
+            Assert.All(material.Parameters, parameter => Assert.Equal(
+                parameter.SettingName == "NoteGlow"
+                    ? EffectParameterBindingState.Unverified
+                    : EffectParameterBindingState.Applied, parameter.Bindings.ArOverlay));
+            var refraction = material.Parameters.SingleOrDefault(parameter => parameter.SettingName == "NoteRefraction");
+            if (refraction is not null)
+                Assert.Equal(material.Id == "note.material.crystal-outline"
+                    ? EffectParameterBindingState.Ignored
+                    : EffectParameterBindingState.Applied, refraction.Bindings.ArOverlay);
         });
     }
 
