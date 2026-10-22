@@ -43,7 +43,9 @@ internal static class ArMaterialReview
     private const int MinimumChangedPixels = 12;
     /// <summary>One column per piloted material, one row per setting; the first row is each material at rest.</summary>
     private const int Columns = 3;
-    private const int TileWidth = Width / 2, TileHeight = Height / 2;
+    /// <summary>A cell is the capture's own size: a downscaled tile averages away the twelve-pixel differences this
+    /// page is made of, which is exactly what N8 had to undo when its first sheet could not show its own numbers.</summary>
+    private const int TileWidth = Width, TileHeight = Height;
     /// <summary>The pose every capture uses: the reference pose the other AR reviews are calibrated against.</summary>
     private const string PoseId = "ar-reference";
 
@@ -95,7 +97,7 @@ internal static class ArMaterialReview
             var sheet = new ReviewSheet.Canvas(styles.Length * rows, TileWidth, TileHeight, Columns,
                 "N16 AR MATERIAL", ReviewSheet.CaptionScaleFor(captions, TileWidth));
 
-            var arMeasurements = new List<(string Style, string Parameter, double Value, string File, string Sha, int Changed, int Lit, PianoVisualSettings Settings, PianoVisualSettings Rest)>();
+            var arMeasurements = new List<(string Style, string Parameter, double Value, string File, string Sha, int Changed, int Lit, PianoVisualSettings Settings, PianoVisualSettings Resting)>();
             var shots = new List<Shot>(styles.Length * rows);
             for (var column = 0; column < styles.Length; column++)
             {
@@ -352,8 +354,10 @@ internal static class ArMaterialReview
             claim = "every note-material setting is shot through the calibrated AR overlay on the three piloted materials, one setting at a time against each material at rest, and drawn in the same two settings on the WPF stage and the Direct3D stage for comparison",
             notClaimed = "art approval, every value of every range, a real camera, hand occlusion, hardware frames, other quality tiers or a default change",
             renderer = "GPU-WARP for AR and for the Direct3D stage; WPF for the software stage",
+            sizes = "the AR column is the 1280x720 camera fixture the pose is calibrated against; the WPF and GPU columns are the 960x540 stage frames the other matrices shoot",
             adapter,
             width = Width, height = Height, fps = OptionMatrixPlan.Fps, seed = OptionMatrixPlan.Seed,
+            stageWidth = OptionMatrixPlan.Width, stageHeight = OptionMatrixPlan.Height,
             pose = PoseId,
             scene = "one held song note falling for 1.5 s, the scene N12(d) shoots the note material in",
             styles,

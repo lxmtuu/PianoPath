@@ -25,9 +25,9 @@ bị ghi đè ở `PsArQuad`, bị bỏ ở `GpuLook.From`, hoặc bị một l�
 | Giá trị mỗi dòng | đầu mút **xa giá trị mặc định nhất** trong khoảng của contract (boolean thì lật) |
 | Pose | `ar-reference` (pose chuẩn của các review AR khác) |
 | Cảnh | một nốt đang rơi, 1,5 s, seed `20261021`, 1280×720, 60 fps |
-| Renderer | AR trên **D3D/WARP**; cùng hai thiết lập đó vẽ thêm trên WPF và GPU/WARP (sân khấu phẳng) để so |
+| Renderer | AR trên **D3D/WARP**; cùng hai thiết lập đó vẽ thêm trên WPF và GPU/WARP (sân khấu phẳng, 960×540 — khung AR là ảnh camera 1280×720 nên số pixel của hai cột không cùng thang đo, chỉ cùng ngưỡng 12 px) để so |
 | Số khung AR | 3 chất liệu × (1 khung "default" + 6 khung) = **21** |
-| Số ô trên tờ | 21 = 3 cột (chất liệu) × 7 hàng (default + 6 thiết lập) |
+| Số ô trên tờ | 21 = 3 cột (chất liệu) × 7 hàng (default + 6 thiết lập), mỗi ô là **ảnh gốc 1280×720** — không hạ mẫu |
 | Ngưỡng "có đổi" | ≥ 12 px khác quá dung sai 2/255 trên một kênh |
 
 ## 2. Kỳ vọng đến từ contract, không đến từ tên chất liệu
