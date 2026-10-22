@@ -51,10 +51,11 @@ internal static class RefractionReview
     private const int ExpectedCaptures = 36;
     /// <summary>
     /// Three columns — the three levels — and six rows, one per material, so a row reads left to right as the
-    /// slider's own travel. 640×360 is two-thirds of the capture, big enough that a one-pixel fringe survives the
-    /// box filter into the committed page.
+    /// slider's own travel. A tile is the capture at its own size: the subject of this page is a one-pixel fringe,
+    /// and any downscale would mix it into its neighbours before a reviewer ever sees it. The page is therefore
+    /// large (roughly 2900×3300); the captured pixels are not resampled at all.
     /// </summary>
-    private const int TileWidth = 640, TileHeight = 360, Columns = 3;
+    private const int TileWidth = Width, TileHeight = Height, Columns = 3;
 
     private sealed class Shot
     {

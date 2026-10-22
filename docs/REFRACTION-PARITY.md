@@ -19,7 +19,7 @@ sản phẩm nào đổi** — chỉ thêm đường đo, chốt chặn và tài
 | Cảnh | một nốt đang rơi (`Scene.Falling`), 1,5 s, seed `20261021`, 960×540, 60 fps |
 | Khác biệt giữa hai ảnh trong một hàng | **chỉ** `NoteStyle` (hằng số của hàng) và `NoteRefraction` (cột) |
 | Số ảnh | 36 = 6 chất liệu × 3 mức × 2 renderer |
-| Tờ ảnh | 2 tờ, mỗi tờ 3 cột (mức) × 6 hàng (chất liệu), ô 640×360 |
+| Tờ ảnh | 2 tờ, mỗi tờ 3 cột (mức) × 6 hàng (chất liệu), ô **960×540** — ảnh chụp ở đúng cỡ native, không lấy mẫu lại, vì chủ thể của trang là một đường viền 1 px |
 | Ngưỡng "có đổi" | ≥ 12 px khác quá dung sai 2/255 trên một kênh |
 | Baseline | `OptionMatrixReview.BaseSettings()` — cùng cảnh nền với ma trận N12(b), nên hai tài liệu không thể mô tả hai khung hình khác nhau |
 
