@@ -199,10 +199,15 @@ internal static class ReviewSheet
 
             var captionY = y + Border + Sheet.TileHeight;
             Fill(_pixels, Sheet.Width, x + Border, captionY, Sheet.TileWidth, CaptionHeight, Cell);
-            if (caption.Length == 0) return;
-            var scale = ScaleFor(caption, Sheet.TileWidth - 8);
-            DrawText(_pixels, Sheet.Width, x + Border + 4, captionY + (CaptionHeight - GlyphHeight * scale) / 2,
-                caption, scale, Ink);
+            if (caption.Length > 0)
+            {
+                var scale = ScaleFor(caption, Sheet.TileWidth - 8);
+                DrawText(_pixels, Sheet.Width, x + Border + 4, captionY + (CaptionHeight - GlyphHeight * scale) / 2,
+                    caption, scale, Ink);
+            }
+            // Only now is the cell done: an empty caption draws nothing but the picture still landed, and a cell
+            // that returned early here would look to Finish exactly like one that was never drawn.
+            _filled[index] = true;
         }
 
         /// <summary>
