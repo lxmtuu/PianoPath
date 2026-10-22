@@ -1448,6 +1448,7 @@ def scan_review_sheets():
         "OptionPoseReview.cs": "option-pose/sheet-",
         "PresetRoundTripReview.cs": "preset-roundtrip/sheet.png",
         "RefractionReview.cs": "refraction/sheet-",
+        "ArMaterialReview.cs": "ar-material/sheet.png",
     }
     for name, page in reviews.items():
         path = ROOT / "Diagnostics" / name
@@ -1460,18 +1461,19 @@ def scan_review_sheets():
                           "inside the run's artifact again")
         # Either spelling counts: the N12 reviews compare the page's tile count with the captures they wrote,
         # the N8 review compares it through the canvas it filled. Both refuse a page that lost a picture.
-        if "sheet.Tiles !=" not in code and "Count != tiles" not in code:
+        if "sheet.Tiles !=" not in code and "Count != tiles" not in code and "sheet.Finish()" not in code:
             errors.append(f"Diagnostics/{name} no longer refuses a sheet that is missing captures")
         if page not in code:
             errors.append(f"Diagnostics/{name} no longer writes '{page}', which is what gets committed")
     workflow_text = workflow.read_text(encoding="utf-8")
     for needed in ("docs/evidence/n12-sheets", "option-matrix/sheet-wpf.png", "option-matrix/sheet-gpu-warp.png",
                    "option-numeric/sheet.png", "preset-roundtrip/sheet.png", "option-pose/sheet-*.png",
-                   "docs/evidence/refraction-sheets", "refraction/sheet-wpf.png", "refraction/sheet-gpu-warp.png"):
+                   "docs/evidence/refraction-sheets", "refraction/sheet-wpf.png", "refraction/sheet-gpu-warp.png",
+                   "docs/evidence/ar-material-sheets", "ar-material/sheet.png"):
         if needed not in workflow_text:
             errors.append(f".github/workflows/build.yml no longer copies '{needed}' into docs/evidence, so that "
                           "page would only exist inside the run's artifact")
-    if "git add docs/evidence/n12-sheets docs/evidence/refraction-sheets" not in workflow_text:
+    if "git add docs/evidence/n12-sheets docs/evidence/refraction-sheets docs/evidence/ar-material-sheets" not in workflow_text:
         errors.append(".github/workflows/build.yml no longer commits both evidence folders; a sheet the stage step "
                       "copies but the save step forgets is deleted with the runner")
     return errors
@@ -1835,6 +1837,74 @@ def scan_refraction_contract():
     for route in ("--verify-refraction-only", "VerifyRefraction(reviewOutput!)", "RefractionReview.Render("):
         if route not in suite:
             errors.append(f"Diagnostics/VerificationSuite.cs lost '{route}', so the refraction review never runs")
+    return errors
+
+
+def scan_ar_material_review():
+    """The AR material page may only claim what the typed contract says about each material.
+
+    ``EffectContracts`` keeps the AR bindings of the note materials at ``Unverified`` because no review ever
+    compared two AR frames of one material. ``ArMaterialReview`` is that review, and its whole value is that it
+    walks the contract instead of a copy of it: the materials come from ``NoteMaterialPilot``, the settings from
+    the parameters those contracts declare, and what each cell is expected to do from the contract's own
+    ``GpuStage`` binding — a material whose shader branch ignores a setting must ignore it in AR too, because the
+    quad is shaded by the same function. This check keeps that wiring honest without a Windows machine: the driven
+    setting names equal the contract's, every one of them has an ``Apply`` case, the review names no material
+    itself, and the suite keeps both the route and the call.
+    """
+    errors = []
+    review_path = ROOT / "Diagnostics" / "ArMaterialReview.cs"
+    contract_path = ROOT / "Stage" / "Effects" / "EffectContracts.cs"
+    suite_path = ROOT / "Diagnostics" / "VerificationSuite.cs"
+    for path in (review_path, contract_path, suite_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the N16 AR material page needs it"]
+    review = _code(review_path.read_text(encoding="utf-8"))
+    contracts = _code(contract_path.read_text(encoding="utf-8"))
+    suite = _code(suite_path.read_text(encoding="utf-8"))
+
+    if "EffectContractCatalog.NoteMaterialPilot" not in review:
+        errors.append("Diagnostics/ArMaterialReview.cs no longer reads EffectContractCatalog.NoteMaterialPilot; a "
+                      "copied material list is how the page and the contract drift apart")
+
+    declared = []
+    for list_name in ("SolidParameters", "GemParameters", "CrystalOutlineParameters"):
+        block = re.search(rf"{list_name} = Array\.AsReadOnly\(new\[\]\s*\{{(.*?)\}}\);", contracts, re.S)
+        if not block:
+            errors.append(f"Stage/Effects/EffectContracts.cs no longer declares {list_name}; the AR material page "
+                          "reads its settings from there")
+            continue
+        declared.extend(re.findall(r'(?:Percentage|Boolean)\("([^"]+)"', block.group(1)))
+    contract_settings = set(declared)
+    if len(contract_settings) < 6:
+        errors.append(f"Stage/Effects/EffectContracts.cs declares only {sorted(contract_settings)} for the note "
+                      "materials; the AR page pins the six settings it can drive")
+
+    driven = re.search(r"Known = \[([^\]]*)\]", review)
+    driven_names = set(re.findall(r'"([^"]+)"', driven.group(1))) if driven else set()
+    if driven_names != contract_settings:
+        errors.append("Diagnostics/ArMaterialReview.cs drives "
+                      f"{sorted(driven_names)} but the contract declares {sorted(contract_settings)}; a setting "
+                      "that is declared and not driven (or driven and not declared) makes the page a partial claim")
+
+    applied = set(re.findall(r'case "([^"]+)":', review))
+    missing = contract_settings - applied
+    if missing:
+        errors.append(f"Diagnostics/ArMaterialReview.cs has no Apply/Read case for {sorted(missing)}; the setting "
+                      "would be shot at whatever the settings class keeps")
+
+    for material in ("Solid", "Gem", "CrystalOutline"):
+        if f'"{material}"' in review:
+            errors.append(f"Diagnostics/ArMaterialReview.cs names the material {material!r} itself; materials, "
+                          "their settings and their expected AR binding all have to come from the contract")
+
+    if "Bindings.GpuStage" not in review or "EffectParameterBindingState.Ignored" not in review:
+        errors.append("Diagnostics/ArMaterialReview.cs no longer derives the expected binding from the contract's "
+                      "GpuStage state; it would be asserting a hope instead of the contract")
+
+    for route in ("--verify-ar-material-only", "VerifyArMaterial(reviewOutput!)", "ArMaterialReview.Render("):
+        if route not in suite:
+            errors.append(f"Diagnostics/VerificationSuite.cs lost '{route}', so the AR material review never runs")
     return errors
 
 
@@ -2941,6 +3011,7 @@ def main():
     errors.extend(scan_option_pose())
     errors.extend(scan_audit_matrix_claims())
     errors.extend(scan_refraction_contract())
+    errors.extend(scan_ar_material_review())
     errors.extend(scan_preset_roundtrip())
     errors.extend(scan_review_sheets())
     errors.extend(scan_previews_folder())
@@ -2972,6 +3043,7 @@ def main():
     print("checked that every option the settings offer is captured by the N12(b) matrix on both renderers, off state included")
     print("checked that the effect audit no longer calls an option untested once the matrix has a picture of it")
     print("checked that the refraction page promises exactly the materials the shader reads NoteB.w in, on both renderers")
+    print("checked that the AR material page walks the typed contract for its materials, settings and expected bindings")
     print("checked that every numeric slider the plan shoots is the dock's own range, clamped by the settings class, sampled at both ends")
     print("checked that every shipped preset is saved and reopened through the product's own preset file and applies the dock's own path")
     print("checked that the four N12 reviews still compose one contact sheet each, that a sheet refuses to be missing a capture, and that the workflow commits it")

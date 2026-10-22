@@ -524,9 +524,24 @@ mức khúc xạ × 2 renderer, `docs/REFRACTION-PARITY.md`); N13/N14 vẫn ch�
 - **Còn lại:** cập nhật audit sau mỗi lần CI đổi kết quả; bảng đếm theo ngày vẫn cần một lượt rà.
 - **Cỡ:** S.
 
+#### N16. Binding tham số của chất liệu nốt trong AR vẫn `Unverified`
+
+- **Hiện tượng:** `EffectContracts` giữ `ArOverlay = Unverified` cho cả ba chất liệu nốt và cho **mọi** tham số của
+  chúng, kèm câu "until an AR-specific style/value matrix is reviewed". Quad AR tô bằng chính `ShadeNoteMaterial`,
+  nên về lý thuyết uniform phải tới nơi — nhưng chưa có ảnh nào so hai khung AR của cùng một chất liệu.
+- **Đã làm 2026-10-22:** `ArMaterialReview` (N16) chụp **6 thiết lập × 3 chất liệu** qua lớp phủ AR ở pose
+  `ar-reference`, mỗi khung chỉ đổi một thiết lập so với khung "default" của chất liệu đó, cùng camera/cảnh/seed;
+  cùng hai thiết lập được vẽ thêm trên WPF và GPU/WARP để đặt cạnh nhau (21 khung AR, 63 ảnh tổng). Kỳ vọng của
+  từng ô đọc từ **contract** (`GpuStage = Ignored` ⇒ AR phải 0 px; có khai báo ⇒ phải ≥ 12 px), không đọc từ tên
+  chất liệu. `NoteGlow` đo nhưng không tuyên bố, vì quầng sáng nằm ngoài hình chữ nhật của nốt.
+- **Đọc:** `docs/AR-MATERIAL-PARITY.md`; ảnh commit trong `docs/evidence/ar-material-sheets/`.
+- **Còn lại:** đổi `ArOverlay` sang `Applied`/`Ignored` theo số đo là **bước 2**, một commit riêng; và `ArOverlay`
+  ở mức **năng lực** (Native) vẫn cần phủ theo giá trị/lifecycle, chưa phải việc của mục này.
+- **Cỡ:** S · **Phụ thuộc:** N12(d) (cùng pose/cảnh).
+
 ## 5. Danh sách hợp nhất
 
-Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài liệu khác — gộp vào cùng một thứ tự để không làm chồng.
+Ngoài 16 việc trên, đây là các việc đã có kế hoạch ở tài liệu khác — gộp vào cùng một thứ tự để không làm chồng.
 
 | ID | Việc | Kết quả cần đạt | Cỡ | Nguồn |
 |---|---|---|---|---|
@@ -545,6 +560,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N13 | Lookahead stage ↔ AR | **đã chốt (b)**: AR có slider riêng 1–6 s; công thức stage ở §3.6 | S | tài liệu này |
 | N14 | Nhãn nốt AR phẳng | **đã chốt**: phẳng bỏ nhãn có chủ ý + tooltip; còn ảnh 3 nền | S | tài liệu này |
 | N15 | Nợ tài liệu/trạng thái | **đã xong**: tool + 3 checker trong làn tĩnh; audit đối chiếu CI 2026-10-20, hết câu "chờ chạy" | S | tài liệu này |
+| N16 | Binding tham số chất liệu nốt trong AR | **đang đo**: ma trận 6 thiết lập × 3 chất liệu × lớp phủ AR (`--verify-ar-material-only`), kỳ vọng đọc từ contract; đổi `ArOverlay` là bước 2 | S | tài liệu này |
 | D0 | CC64 liên tục vào hình | **đã xong**: 34 mức từ 128 giá trị CC64 (51 mẫu trên thang 0..1), dead zone 25%, đầy ở 50%, mượt 55/75 ms | S | DAMPER §7 |
 | D1 | Lõi sáng chạy theo lift | **đã xong**: 8,2 px @45°, 6,6 px @90°; vạch WPF 6 px, halo GPU 5 px | S | DAMPER §7 |
 | D2 | 88 ô LED + tick theo phím | **đã xong**: ô `0,70/0,46` phím, thân `0,05+0,42v`, mép `0,16+0,54v`; pin co theo phép chiếu (`≤15 px`, `≤2,4 px` ở 1080p) + crossbar, τ 30/40 ms; tối đa 265 quad, tắt ở Lite | M | DAMPER §7 |

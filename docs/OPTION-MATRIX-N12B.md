@@ -365,8 +365,9 @@ trị khác; và nhãn không tràn sang ô bên cạnh.
 
 **Vì sao commit được.** Cùng một input cho ra đúng từng byte, nên CI commit tờ ảnh giống như commit preview.
 Bước `Stage the review contact sheets` (ngay sau suite, lúc ảnh còn trong thư mục review) chép bảy tệp N12 vào
-`docs/evidence/n12-sheets` và hai tờ N8 vào `docs/evidence/refraction-sheets`; bước
-`Save the review contact sheets` ở cuối job `git add` cả hai thư mục rồi commit và đẩy. Tờ N8 nằm trong thư mục
+`docs/evidence/n12-sheets`, hai tờ N8 vào `docs/evidence/refraction-sheets` và tờ N16 vào
+`docs/evidence/ar-material-sheets`; bước
+`Save the review contact sheets` ở cuối job `git add` cả ba thư mục rồi commit và đẩy. Tờ N8 nằm trong thư mục
 riêng vì nó là trang về khúc xạ trên sáu chất liệu nốt, không phải một ô của ma trận option — xem
 [`REFRACTION-PARITY.md`](REFRACTION-PARITY.md).
 
