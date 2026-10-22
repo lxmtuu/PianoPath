@@ -188,7 +188,7 @@ internal static class ArEffectFamilyReview
     /// The two settings a hold family declares: one switch and one amount. Read from the contract, never typed here,
     /// so a family whose shape changes fails at the top of the run instead of being shot at the wrong value.
     /// </summary>
-    private static (string Toggle, double ToggleValue, string Amount, double AmountValue) Shape(EffectFamilyContract contract)
+    private static (string Toggle, double ToggleValue, string Amount, double AmountValue) Shape(EffectContractCatalog.EffectFamilyContract contract)
     {
         var toggle = contract.Parameters.SingleOrDefault(parameter => parameter.Kind == EffectParameterKind.Boolean)
             ?? throw new InvalidDataException($"{contract.Id} declares no boolean switch for the AR effect review to flip.");
@@ -209,7 +209,7 @@ internal static class ArEffectFamilyReview
     /// ambient layers, no impact art — is the neutral look the option matrix starts from, so a difference between two
     /// captures of a column is the setting and nothing else.
     /// </summary>
-    private static PianoVisualSettings Settings(EffectFamilyContract contract, string? parameter, double value)
+    private static PianoVisualSettings Settings(EffectContractCatalog.EffectFamilyContract contract, string? parameter, double value)
     {
         var settings = OptionMatrixReview.BaseSettings();
         var shape = Shape(contract);
@@ -350,7 +350,7 @@ internal static class ArEffectFamilyReview
                 $"The AR effect review wrote {shots.Count} captures into fewer files; two settings overwrote one picture.");
     }
 
-    private static void WriteManifest(string root, string adapter, IReadOnlyList<EffectFamilyContract> pilot,
+    private static void WriteManifest(string root, string adapter, IReadOnlyList<EffectContractCatalog.EffectFamilyContract> pilot,
         IReadOnlyList<(string Toggle, double ToggleValue, string Amount, double AmountValue)> shapes,
         IReadOnlyList<Cell> cells, string sheetFile, string sheetSha, int columns, int rows)
     {
