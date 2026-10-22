@@ -347,7 +347,7 @@ trong `docs/`. Mục này đóng đúng khoảng đó, và chỉ đóng nó: **b
 | `matrix-gpu-warp.png` | chính 64 khung đó trên D3D/WARP | 8×8 ô 176×99 | 1518×1090 |
 | `numeric.png` | 54 khung của N12(e): chín trục, mỗi hàng một trục, cặp WPF ↔ GPU cạnh nhau | 6×9 ô 240×135 | 1526×1545 |
 | `preset.png` | 40 khung của N12(f): hai mươi preset, mỗi preset một cặp renderer | 4×10 ô 240×135 | 1022×1712 |
-| `pose-front.png`, `pose-left.png`, `pose-right.png` | 21 khung của một pose AR: phần 1 rồi phần 2, mỗi family một khung tắt rồi khung bật | 4×6 ô 320×180 | 1342×1314 |
+| `pose-ar-reference.png`, `pose-ar-oblique.png`, `pose-ar-near-overhead.png` | 21 khung của một pose AR: phần 1 rồi phần 2, mỗi family một khung tắt rồi khung bật | 4×6 ô 320×180 | 1342×1314 |
 
 Ô 176×99 đúng tỉ lệ 16:9 của khung 960×540, và `Blit` **từ chối** một ô không cùng tỉ lệ với ảnh — một ô
 176×90 (bản đầu của đợt này) bóp ảnh ngang 10%, đúng thứ không thể đánh giá bằng mắt trên ảnh thu nhỏ. Nhãn của
@@ -376,6 +376,10 @@ nó `git rebase --abort`, cảnh báo và để nhánh giữ bản của mình; 
 chuyện đó. Push bị chặn (GH013, protected branch) cũng chỉ là cảnh báo, như các bước evidence khác. Mỗi review còn **từ chối** một tờ ảnh thiếu khung
 (`sheet.Tiles != <số capture>`), vì một ô trống trên tờ đọc ra đúng như "option này không vẽ gì" — kết luận mà
 review sinh ra để báo.
+
+**Lượt chạy:** bảy tờ ảnh đang nằm trên nhánh là của run `39713639185` (commit `a932e1d`), commit evidence
+`071ecca` — `static`, `test`, `keyboard-light`, `build` đều xanh. Ba lần sửa trước đó là do chính ảnh chụp lại
+bắt được, không phải do test: cỡ chữ lẫn lộn, nhãn bị cắt giữa từ, và ô 176×90 bóp ảnh ngang 10%.
 
 **Không chứng nhận:** tờ ảnh là bản thu nhỏ còn 1/4 hoặc 1/6, nên nó chứng minh **có vẽ, vẽ ở đâu, và hình dạng
 tổng thể**; muốn soi từng pixel thì vẫn phải mở ảnh native trong artifact (hoặc chạy lại route). Nó không phải
