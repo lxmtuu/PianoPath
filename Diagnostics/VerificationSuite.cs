@@ -155,7 +155,20 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); } }
+        if (args.Contains("--verify-refraction-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Refraction review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N8 refraction review; this does not run or certify the full regression suite.");
+                VerifyRefraction(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); } }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -6894,6 +6907,14 @@ internal static partial class VerificationSuite
         var captures = OptionPoseReview.Render(outputDirectory);
         Assert(captures == 63, "The AR/pose slice must capture part 1 (four off states plus five values) and part 2 (the note material, the trail and four ambient layers, off and on) at each of the three calibrated poses.");
         Results.Add($"PASS AR/pose option slice (N12(d)): {captures} WARP captures at 1280×720 across the three calibrated poses — part 1 (27) the impact wave, the impact burst, both morph channels and the release ring, whose art is drawn into the camera image; part 2 (36) the note material and the falling trail, built as projected patches for a note still sounding above the keys (body 0 to 0.735 key-depths behind the key plane, trail to about 1.22), plus the four ambient layers, emitted screen-space over the picture. Every capture is compared with its own off state at the same pose and one fixed seed. Proof that the option reaches the projected layer, not an art, real-camera, hand-occlusion or every-value claim; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyRefraction(string outputDirectory)
+    {
+        var captures = RefractionReview.Render(outputDirectory);
+        Assert(captures == 36, "The refraction review must shoot six note materials at three slider levels through two renderers.");
+        var gpuQuiet = string.Join(", ", RefractionReview.Styles.Where(style => !RefractionReview.GpuConsumers.Contains(style)));
+        Results.Add($"PASS refraction review (N8): {captures} WPF/GPU-WARP captures at {OptionMatrixPlan.Width}×{OptionMatrixPlan.Height} — the six note materials at NoteRefraction 0/50/100 with the slider as the only difference between two captures of a row. WPF moves pixels for all six (the fringe, or the satin sheen when that material is on); the Direct3D shader moves pixels only for Solid, Glass and Gem, the branches that read NoteB.w, and is bit-identical across the three levels for {gpuQuiet}. That is the intentional difference in docs/NOTE-EFFECTS-ACTION-PLAN.md §3.6 held to pixels: the WPF-only fringe stays WPF-only, and a pass that starts consuming the slider on the GPU fails here instead of quietly changing a reviewed preset. Renderer-branching evidence, not art approval or a hardware frame; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
     }
 
     private static void VerifyPrismFlowReview(string outputDirectory)

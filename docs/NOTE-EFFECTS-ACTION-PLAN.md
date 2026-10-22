@@ -211,15 +211,15 @@ shader thủ tục. Bảng này chốt phần **cố ý khác**, để lần sau
 
 | Lớp | WPF | GPU | Khác biệt |
 |---|---|---|---|
-| Khúc xạ `NoteRefraction` | viền fringe vẽ thật (`PianoStage.cs:1496–1499`) + sheen (`:1668`) | `NoteB.w` nhân sheen/spec ở 4 nhánh Solid/Satin/Glass/Gem (`StageShaders.hlsl:1128/1145/1169/1215`); **Crystal Outline bỏ hẳn** (chỉ đọc `NoteB.y`/`NoteB.x`) | **cả tham số**: Crystal Outline chỉ WPF dùng; bốn vật liệu kia đổi cả hai, chỉ *hình viền* là WPF-only |
+| Khúc xạ `NoteRefraction` | viền fringe vẽ thật cho **mọi** chất liệu không-satin (`PianoStage.cs:1666–1669`: Neon 90, Gem 130, Crystal Outline 72, còn lại 170) + sheen satin (`:1838`) | `NoteB.w` chỉ được đọc ở sheen satin và **ba** nhánh Solid/Glass/Gem (`StageShaders.hlsl:1128/1145/1169/1215`); **Neon, Fire và Crystal Outline không đọc** | **cả tham số**: ở cả sáu chất liệu WPF đổi ảnh; GPU chỉ đổi ở Solid/Glass/Gem, ba chất liệu kia giống hệt từng byte — N8 ghim đúng bảng này bằng pixel |
 | Satin `NoteSatin` | `DrawSatinNote` — "xấp xỉ GPU" (`:1641`) | dựng thủ tục trong `ShadeNoteMaterial` | cố ý: brush không làm được grain của shader |
 | Texture lửa/giấy | gradient + grain (`:1396–1399`) | thủ tục | cố ý |
 | Nhãn nốt trên stage | chữ WPF | sprite atlas (`GpuStageSimulation.Effects.cs:36`), cùng ngưỡng 11×15 px | cùng ngưỡng |
 | Nhãn nốt AR | — | chỉ AR 3D (`GpuArLayer.Effects.cs:149`); phẳng bỏ qua | đã ghi trong tooltip Perspective |
 | Lookahead | `hitY/speed + 1` giây (`GpuStageSimulation.cs:655`) — 1080p, 258 px/s ≈ 4,3 s | `ArLookahead`, mặc định 3 s, slider 1–6 s (`ArOptions.cs:46`) | cố ý: AR là cửa sổ chiếu có slider riêng |
 
-Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; việc còn lại chỉ là ảnh nghiệm thu trên máy có GPU
-(6 style × 3 mức khúc xạ; 3 nền sáng/tối cho nhãn AR).
+Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**. N8 đã có ảnh nghiệm thu tự động (6 chất liệu × 3
+mức khúc xạ × 2 renderer, `docs/REFRACTION-PARITY.md`); N13/N14 vẫn chờ ảnh 3 nền sáng/tối cho nhãn AR trên máy có GPU.
 
 ## 4. Phát hiện và việc cần làm
 
@@ -360,8 +360,17 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
   chỉ đọc `NoteB.y` cho viền và `NoteB.x` cho tint — còn WPF vẫn vẽ cả fringe lẫn sheen; `VerificationSuite.Gpu`
   ghim đúng điều này (`crystalWithRefraction == crystal2D`). Không thêm fringe vào shader: nó sẽ đổi hình của preset
   đã duyệt để đổi lấy một chi tiết chỉ thấy khi phóng to.
-- **Nghiệm thu:** bảng §3.6 đã có; còn ảnh 6 style × 3 mức `NoteRefraction` trên máy GPU (thủ công).
-- **Cỡ:** S (đã thu về tài liệu) · **Phụ thuộc:** không.
+- **Nghiệm thu — xong 2026-10-22:** `RefractionReview` (N8) chụp **6 chất liệu × 3 mức `NoteRefraction` 0/50/100 ×
+  WPF + D3D/WARP** ở 960×540, cùng cảnh nốt rơi, cùng seed và cùng mốc (36 ảnh, hai tờ 3×6 trong
+  `docs/evidence/refraction-sheets/`). Mỗi hàng chỉ đổi slider, nên khác biệt giữa hai ảnh là slider và không gì khác;
+  lượt chạy đỏ nếu WPF không đổi ảnh ở bất kỳ chất liệu nào, hoặc nếu GPU đổi **một** pixel ở Neon/Fire/Crystal
+  Outline. Đọc bảng và cách chạy: `docs/REFRACTION-PARITY.md`.
+- **Phát hiện khi làm:** câu "bốn vật liệu kia đổi cả hai" ở bảng §3.6 dễ đọc thành "mọi chất liệu còn lại". Thực tế
+  **Neon và Fire cũng không đọc `NoteB.w`** — chỉ Solid, Glass, Gem (và sheen satin dùng chung cho Solid/Glass) đổi
+  trên GPU. Bảng đã sửa cho đúng, và `tools/check_sources.py` (`scan_refraction_contract`) đọc chính các nhánh
+  `else if (style < …)` của shader để so với danh sách mà review khẳng định, nên lần sau ai thêm/bớt một chỗ đọc
+  `NoteB.w` là làn tĩnh đỏ ngay.
+- **Cỡ:** S (đã xong) · **Phụ thuộc:** không.
 
 #### N9. Chưa có benchmark khung hình cho nốt/hiệu ứng
 
@@ -528,7 +537,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N5 | Bảng ngân sách hiệu ứng WPF/GPU | **đã xong**: hợp đồng thời gian sống, bảng §3.4, tool + `--verify` ghim | S/M | tài liệu này |
 | N6 | GPU-only effects khi ghi/ở WPF | **đã xong (b)**: cảnh báo ở dòng recording + log; 3 Fact + một assert `--verify` | M | tài liệu này |
 | N7 | Fade mép trên/motion blur | **đã xong phần fade**: 6% roll, WPF mask + GPU shader, trail/nhãn/shimmer cùng hệ số; test + tool ghim; motion blur để sau | S | tài liệu này |
-| N8 | Refraction/texture parity | **đã chốt: khác có chủ ý** (§3.6); còn ảnh nghiệm thu | S | tài liệu này |
+| N8 | Refraction/texture parity | **đã xong 2026-10-22**: khác có chủ ý (§3.6) + ảnh 6×3×2 trong `docs/evidence/refraction-sheets/`, hợp đồng ghim bằng assert + `check_sources` | S | tài liệu này |
 | N9 | Benchmark khung hình nốt/hiệu ứng | **đã có kịch bản**: `--bench-detail` (GPU, 18 ô) + `VerifyWpfNoteDensity` (WPF, cùng 18 ô, tự chạy); còn số p95 trên máy GPU | M | tài liệu này |
 | N10 | Occlusion bàn tay AR | không vẽ xuyên tay | L | AR roadmap |
 | N11 | Reduced Motion/giảm flash toàn cục | **đã xong**: hệ thống có sẵn từ Phase 2; P1 chốt tần số pulse 1,67 Hz + test toàn bộ preset | S | master roadmap |

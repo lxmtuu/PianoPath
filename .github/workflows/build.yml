@@ -448,7 +448,7 @@ jobs:
       # down, together with the previews, on purpose: a second commit step in this job would race the first one
       # for the branch tip, and the tip rule those steps share ("a branch that moved keeps its own evidence")
       # would then skip one of the two every time. One push, one rule, both sets of pictures.
-      - name: Stage the N12 contact sheets
+      - name: Stage the review contact sheets
         shell: bash
         run: |
           review="$RUNNER_TEMP/phase1-visual-review"
@@ -463,7 +463,13 @@ jobs:
             name=$(basename "$file" .png | sed 's/^sheet-//')
             cp -- "$file" "$out/pose-$name.png"
           done
-          ls -l "$out"
+          # N8 keeps its own folder: the page is about refraction on six note materials, not about the option
+          # matrix, and a reviewer should not have to know which of the two grids a file belongs to.
+          refraction=docs/evidence/refraction-sheets
+          mkdir -p "$refraction"
+          cp -- "$review/refraction/sheet-wpf.png" "$refraction/wpf.png"
+          cp -- "$review/refraction/sheet-gpu-warp.png" "$refraction/gpu-warp.png"
+          ls -l "$out" "$refraction"
 
       # Isolate deterministic P0 capture from realtime/device smoke tests. Both still block the build.
       - name: Prism Flow baseline and candidate verification
@@ -1604,34 +1610,34 @@ jobs:
       # would skip every single time. These seven files are new and nothing else writes them, so replaying one
       # commit onto the moved tip is safe; when the replay actually conflicts (another run wrote different
       # sheets) the step aborts it, says so, and leaves the branch alone.
-      - name: Save the N12 contact sheets
+      - name: Save the review contact sheets
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')
         shell: bash
         run: |
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/evidence/n12-sheets
+          git add docs/evidence/n12-sheets docs/evidence/refraction-sheets
           if git diff --cached --quiet; then
             echo "The branch already carries these sheets."
             exit 0
           fi
-          git commit -m 'Refresh the N12 contact sheets [skip ci]'
+          git commit -m 'Refresh the review contact sheets [skip ci]'
           base=$(git rev-parse HEAD~1)
-          log="$RUNNER_TEMP/n12-sheets-push.log"
+          log="$RUNNER_TEMP/review-sheets-push.log"
           git fetch --quiet origin "$GITHUB_REF_NAME"
           tip=$(git rev-parse "origin/$GITHUB_REF_NAME" 2>/dev/null || true)
           if [ -n "$tip" ] && [ "$tip" != "$base" ]; then
             if ! git -c rebase.autoStash=true rebase "$tip" >"$log" 2>&1; then
               git rebase --abort >/dev/null 2>&1 || true
               cat "$log"
-              echo "::warning title=N12 sheets not committed::The branch moved and replaying the sheet commit onto it conflicted, so the branch keeps the sheets it already has. The next run writes them again from its own review."
+              echo "::warning title=Review sheets not committed::The branch moved and replaying the sheet commit onto it conflicted, so the branch keeps the sheets it already has. The next run writes them again from its own review."
               exit 0
             fi
           fi
           if git push >"$log" 2>&1; then cat "$log"; exit 0; fi
           cat "$log"
           if grep -Eqi 'GH013|repository rule violations|protected branch|non-fast-forward|fetch first|stale info|cannot lock ref' "$log"; then
-            echo "::warning title=N12 sheets not committed::The branch would not take the sheets push, so it keeps the set it already has."
+            echo "::warning title=Review sheets not committed::The branch would not take the sheets push, so it keeps the set it already has."
             exit 0
           fi
           exit 1

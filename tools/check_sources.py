@@ -1447,6 +1447,7 @@ def scan_review_sheets():
         "OptionNumericReview.cs": "option-numeric/sheet.png",
         "OptionPoseReview.cs": "option-pose/sheet-",
         "PresetRoundTripReview.cs": "preset-roundtrip/sheet.png",
+        "RefractionReview.cs": "refraction/sheet-",
     }
     for name, page in reviews.items():
         path = ROOT / "Diagnostics" / name
@@ -1457,15 +1458,22 @@ def scan_review_sheets():
         if "new ReviewSheet.Canvas(" not in code:
             errors.append(f"Diagnostics/{name} no longer composes a contact sheet; its pictures would only exist "
                           "inside the run's artifact again")
-        if "sheet.Tiles !=" not in code:
+        # Either spelling counts: the N12 reviews compare the page's tile count with the captures they wrote,
+        # the N8 review compares it through the canvas it filled. Both refuse a page that lost a picture.
+        if "sheet.Tiles !=" not in code and "Count != tiles" not in code:
             errors.append(f"Diagnostics/{name} no longer refuses a sheet that is missing captures")
         if page not in code:
             errors.append(f"Diagnostics/{name} no longer writes '{page}', which is what gets committed")
     workflow_text = workflow.read_text(encoding="utf-8")
     for needed in ("docs/evidence/n12-sheets", "option-matrix/sheet-wpf.png", "option-matrix/sheet-gpu-warp.png",
-                   "option-numeric/sheet.png", "preset-roundtrip/sheet.png", "option-pose/sheet-*.png"):
+                   "option-numeric/sheet.png", "preset-roundtrip/sheet.png", "option-pose/sheet-*.png",
+                   "docs/evidence/refraction-sheets", "refraction/sheet-wpf.png", "refraction/sheet-gpu-warp.png"):
         if needed not in workflow_text:
-            errors.append(f".github/workflows/build.yml no longer copies '{needed}' into docs/evidence/n12-sheets")
+            errors.append(f".github/workflows/build.yml no longer copies '{needed}' into docs/evidence, so that "
+                          "page would only exist inside the run's artifact")
+    if "git add docs/evidence/n12-sheets docs/evidence/refraction-sheets" not in workflow_text:
+        errors.append(".github/workflows/build.yml no longer commits both evidence folders; a sheet the stage step "
+                      "copies but the save step forgets is deleted with the runner")
     return errors
 
 
@@ -1725,6 +1733,108 @@ def scan_audit_matrix_claims():
     if isolated < 50:
         errors.append(f"only {isolated} audit rows cite a value the N12(b) matrix captures; the audit and the plan "
                       "have drifted apart")
+    return errors
+
+
+def scan_refraction_contract():
+    """The N8 review may only promise what the shader and the software stage actually do.
+
+    ``NoteRefraction`` is deliberately two behaviours: the software stage paints a fringe for every material and
+    weights it per style, while the Direct3D shader reads ``NoteB.w`` in the satin sheen and in three material
+    branches only. ``docs/NOTE-EFFECTS-ACTION-PLAN.md`` §3.6 calls that difference intentional, so the evidence
+    has to say *which* materials move on *which* renderer — and that list is a fact about the shader, not a
+    choice. This check derives it from ``StageShaders.hlsl`` by reading the material branches the way the shader
+    reads them, and compares it with the list ``RefractionReview`` asserts against at runtime. Change a branch
+    and the review fails on the first capture; forget the list and this fails without Windows.
+
+    It also keeps the review reading the product's own material list (a copy would drift), keeps the three
+    levels and the 36-capture count pinned, and keeps the suite on the route that CI actually runs.
+    """
+    errors = []
+    paths = {
+        "review": ROOT / "Diagnostics" / "RefractionReview.cs",
+        "settings": ROOT / "Stage" / "PianoVisualSettings.cs",
+        "shader": ROOT / "Gpu" / "StageShaders.hlsl",
+        "stage": ROOT / "Stage" / "PianoStage.cs",
+        "suite": ROOT / "Diagnostics" / "VerificationSuite.cs",
+        "matrix": ROOT / "Diagnostics" / "OptionMatrixReview.cs",
+    }
+    for name, path in paths.items():
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the N8 refraction evidence needs it"]
+    review = _code(paths["review"].read_text(encoding="utf-8"))
+    settings = _code(paths["settings"].read_text(encoding="utf-8"))
+    stage = _code(paths["stage"].read_text(encoding="utf-8"))
+    suite = _code(paths["suite"].read_text(encoding="utf-8"))
+    matrix = _code(paths["matrix"].read_text(encoding="utf-8"))
+    shader = paths["shader"].read_text(encoding="utf-8")
+
+    if "PianoVisualSettings.NoteStyles" not in review:
+        errors.append("Diagnostics/RefractionReview.cs no longer reads PianoVisualSettings.NoteStyles; a copied "
+                      "list of materials is how the page and the product drift apart")
+    if '"CrystalOutline"' in review:
+        errors.append("Diagnostics/RefractionReview.cs names a material itself; the six materials come from the "
+                      "settings class, so a rename or a new style cannot leave a stale row on the page")
+    levels = re.search(r"Levels \{ get; \} = \[([^\]]*)\]", review)
+    if not levels or [int(value) for value in re.findall(r"\d+", levels.group(1))] != [0, 50, 100]:
+        errors.append("Diagnostics/RefractionReview.cs no longer shoots NoteRefraction at 0/50/100; the page is "
+                      "the acceptance evidence for that slider's travel")
+    if "ExpectedCaptures = 36" not in review:
+        errors.append("Diagnostics/RefractionReview.cs no longer pins 36 captures (six materials × three levels "
+                      "× two renderers), so a material could drop off the page unnoticed")
+
+    declared = re.search(r"GpuConsumers \{ get; \} = new HashSet<string>\(StringComparer\.Ordinal\)\s*\{(.*?)\};",
+                         review, re.S)
+    if not declared:
+        errors.append("Diagnostics/RefractionReview.cs no longer declares which materials consume NoteB.w on the "
+                      "GPU; that set is the other half of the claim")
+        consumers = set()
+    else:
+        consumers = set(re.findall(r'"([^"]+)"', declared.group(1)))
+
+    styles = re.findall(r'"([^"]+)"', re.search(r"string\[\] NoteStyles = \[(.*?)\];", settings, re.S).group(1)) \
+        if re.search(r"string\[\] NoteStyles = \[(.*?)\];", settings, re.S) else []
+    if len(styles) != 6:
+        errors.append(f"Stage/PianoVisualSettings.cs lists {len(styles)} note materials; the refraction page pins six")
+
+    # Read the material function the shader actually shades with, then ask each branch whether it reads NoteB.w.
+    # The file declares the function before it defines it, so take the last match that is followed by a brace
+    # before a semicolon — the definition — and read to the first closing brace back at column zero.
+    start = None
+    for match in re.finditer(r"float4 ShadeNoteMaterial\(NoteMaterialInput v\)", shader):
+        brace, semi = shader.find("{", match.end()), shader.find(";", match.end())
+        if brace >= 0 and (semi < 0 or brace < semi):
+            start = match.start()
+    if start is None:
+        errors.append("Gpu/StageShaders.hlsl no longer has ShadeNoteMaterial; the refraction contract points at it")
+        shader_styles = set()
+    else:
+        body = shader[start:shader.find("\n}\n", start)]
+        thresholds = {"0.5": "Solid", "1.5": "Neon", "2.5": "Glass", "3.5": "Fire", "4.5": "Gem",
+                      "5.5": "CrystalOutline"}
+        markers = [(match.start(), match.group(1)) for match in re.finditer(r"else if \(style < ([0-9.]+)\)", body)]
+        shader_styles = set()
+        for index, (position, threshold) in enumerate(markers):
+            block = body[position:markers[index + 1][0] if index + 1 < len(markers) else len(body)]
+            if "NoteB.w" in block and threshold in thresholds:
+                shader_styles.add(thresholds[threshold])
+        if "if (satin)" in body and "NoteB.w" in body[:markers[0][0]]:
+            # The satin sheen is shared by Solid and Glass, and only by them.
+            shader_styles.update({"Solid", "Glass"})
+    if consumers != shader_styles:
+        errors.append("Diagnostics/RefractionReview.cs expects NoteB.w to be consumed by "
+                      f"{sorted(consumers) or 'nothing'}, but Gpu/StageShaders.hlsl consumes it in "
+                      f"{sorted(shader_styles) or 'no material branch'}; the N8 page would promise the wrong pixels")
+
+    if "!satin && _visual.NoteRefraction > 0" not in stage:
+        errors.append("Stage/PianoStage.cs no longer draws the soft fringe under `!satin && _visual.NoteRefraction > 0`; "
+                      "the review asserts that every material moves on WPF because of that line")
+    if "BaseSettings" not in review or "internal static PianoVisualSettings BaseSettings" not in matrix:
+        errors.append("Diagnostics/RefractionReview.cs no longer starts from OptionMatrixReview.BaseSettings(); a "
+                      "second copy of the pinned scene is how two reviews end up describing different frames")
+    for route in ("--verify-refraction-only", "VerifyRefraction(reviewOutput!)", "RefractionReview.Render("):
+        if route not in suite:
+            errors.append(f"Diagnostics/VerificationSuite.cs lost '{route}', so the refraction review never runs")
     return errors
 
 
@@ -2830,6 +2940,7 @@ def main():
     errors.extend(scan_option_numeric())
     errors.extend(scan_option_pose())
     errors.extend(scan_audit_matrix_claims())
+    errors.extend(scan_refraction_contract())
     errors.extend(scan_preset_roundtrip())
     errors.extend(scan_review_sheets())
     errors.extend(scan_previews_folder())
@@ -2860,6 +2971,7 @@ def main():
     print("checked that the falling note and the held bar size themselves from one Note width slider, with no floor of their own")
     print("checked that every option the settings offer is captured by the N12(b) matrix on both renderers, off state included")
     print("checked that the effect audit no longer calls an option untested once the matrix has a picture of it")
+    print("checked that the refraction page promises exactly the materials the shader reads NoteB.w in, on both renderers")
     print("checked that every numeric slider the plan shoots is the dock's own range, clamped by the settings class, sampled at both ends")
     print("checked that every shipped preset is saved and reopened through the product's own preset file and applies the dock's own path")
     print("checked that the four N12 reviews still compose one contact sheet each, that a sheet refuses to be missing a capture, and that the workflow commits it")

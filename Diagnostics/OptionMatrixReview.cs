@@ -236,25 +236,30 @@ internal static class OptionMatrixReview
     }
 
     /// <summary>
-    /// Every family is off in the baseline and exactly one is on per value; the layers that would add a second
-    /// channel are pinned rather than inherited from a preset, so a preset edit cannot change the matrix.
+    /// The scene every review starts from: every family is off and exactly one is on per capture, and the
+    /// layers that would add a second channel are pinned rather than inherited from a preset, so a preset edit
+    /// cannot change the matrix. Shared with the N8 refraction review, which changes only
+    /// <see cref="PianoVisualSettings.NoteStyle"/> and <see cref="PianoVisualSettings.NoteRefraction"/> — a second
+    /// copy of this baseline is exactly how two reviews end up describing two different frames.
     /// </summary>
+    internal static PianoVisualSettings BaseSettings() => new()
+    {
+        ShowBackground = true, ShowNotes = true, ShowSheet = false,
+        ShowHalo = false, ShowKeys = true, ShowKeyFelt = false, KeyLabels = "None",
+        ShowEmbers = false, ShowFlame = false, ShowWisps = false, ShowLightBeams = false,
+        ShowPetals = false, ShowStars = false, NoteLandingGlow = false, NoteShimmer = false, ShootingStars = false,
+        ShowImpactRings = false, ShowImpactFlash = false,
+        BackgroundMotion = "None", ShowWatermark = false, ShowCounter = false, ShowFps = false,
+        NoteStyle = "Solid", FallingTrail = "None", ImpactWave = "None", ImpactMorph = "None",
+        ReleaseEffect = "Fade", ReleaseIntensity = 70,
+        AmbientEnergy = "None", AmbientNature = "None", AmbientLight = "None", AmbientCosmic = "None",
+        FallingTrailIntensity = 100, ImpactMorphIntensity = 70, ImpactFlashIntensity = 80,
+        ParticleAmount = 34, ParticleResponse = 55, NoteWidth = 80, NoteFallSpeed = 550
+    };
+
     internal static PianoVisualSettings Settings(OptionMatrixPlan.Family family, string? value)
     {
-        var settings = new PianoVisualSettings
-        {
-            ShowBackground = true, ShowNotes = true, ShowSheet = false,
-            ShowHalo = false, ShowKeys = true, ShowKeyFelt = false, KeyLabels = "None",
-            ShowEmbers = false, ShowFlame = false, ShowWisps = false, ShowLightBeams = false,
-            ShowPetals = false, ShowStars = false, NoteLandingGlow = false, NoteShimmer = false, ShootingStars = false,
-            ShowImpactRings = false, ShowImpactFlash = false,
-            BackgroundMotion = "None", ShowWatermark = false, ShowCounter = false, ShowFps = false,
-            NoteStyle = "Solid", FallingTrail = "None", ImpactWave = "None", ImpactMorph = "None",
-            ReleaseEffect = "Fade", ReleaseIntensity = 70,
-            AmbientEnergy = "None", AmbientNature = "None", AmbientLight = "None", AmbientCosmic = "None",
-            FallingTrailIntensity = 100, ImpactMorphIntensity = 70, ImpactFlashIntensity = 80,
-            ParticleAmount = 34, ParticleResponse = 55, NoteWidth = 80, NoteFallSpeed = 550
-        };
+        var settings = BaseSettings();
         if (value is not null) Apply(settings, family, value);
         settings.Clamp();
         // The morph and the release effect are the two families with no visibility switch of their own, so
