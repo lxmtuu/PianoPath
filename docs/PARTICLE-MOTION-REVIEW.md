@@ -239,6 +239,13 @@ integrator chạy đúng số học cũ, nên `wisps-v3`/`flames-v3` không đ�
 mới; lật **mặc định** mới là lần re-baseline — và đó là việc phải chạy trên máy có GPU/WPF thật, vì pipeline bằng
 chứng so hash với bản đã chấp nhận và không cho phép tự nhận bản mới (`review_flames_v3.retained`). Bản vào sản phẩm xanh ở [run 39799609388](https://github.com/lxmtuu/PianoPath/actions/runs/39799609388): `static`, `test`, `keyboard-light`, `build` đều qua, và bước `Validate and stage Flames v3` vẫn khớp đúng hash wisps/flames đã chấp nhận — mặc định 0 không đổi một pixel.
 
+**Offset lúc vẽ phải đứng xuống khi flow bật.** W1 chuyển cái lượn vào **vận tốc**, nên nếu renderer vẫn cộng
+`WispMotion.Offset` khi vẽ thì dòng vừa được làm liền lại bị tán ra lần thứ hai — và tệ hơn, AR (vốn đọc vị trí
+CPU rồi tự cộng offset) sẽ lệch khỏi sprite tới ~3 px. Vì vậy cả bốn điểm vẽ (hai nhánh trong
+`GpuStageSimulation`, `GpuArLayer.Effects`, `PianoStage`, và `ArParticleAlignmentReview` — bản đo phải đo đúng
+thứ được vẽ) đều bọc trong `ParticleFlow <= 0`, và `scan_wisp_motion_contract` chặn từng dòng gọi nào quên cổng.
+Ở 0 thì cổng luôn mở nên số học y như cũ; ở >0 thì sprite và AR dùng cùng một vị trí, không còn khoảng lệch 3 px.
+
 **Về slider:** đề xuất *không* thêm control nào ở màn hình mặc định. Năm tham số mới (1, 4, 6, 8 và độ
 lạnh của họ) nên nằm sau **Nâng cao**, đúng nguyên tắc "control phổ biến trước" của
 [PRISM-FLOW-DESIGN-ROADMAP](PRISM-FLOW-DESIGN-ROADMAP.md) §5 (Quy tắc thiết kế UI). Bốn control cũ (`Velocity`, `Spread`, `Drag`,

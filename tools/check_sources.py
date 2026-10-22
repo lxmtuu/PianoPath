@@ -971,10 +971,13 @@ def scan_wisp_motion_contract():
     sine to the particle's velocity, so the same mote was drawn 10.6 px apart at 0.8 s and nothing compared
     them. Unit tests pin the curve's shape; this check pins the wiring, which is the half that drifted.
 
-    Two things are enforced:
+    Three things are enforced:
       * the constants live only in ``Stage/WispMotion.cs``;
       * each consumer calls ``WispMotion.Offset``, including the software stage's draw — a renderer that
-        quietly reintroduces its own sine fails the fast lane instead of drifting in a video.
+        quietly reintroduces its own sine fails the fast lane instead of drifting in a video;
+      * that call is gated on ``ParticleFlow <= 0``, because W1's flow already carries the wander in the
+        velocity and drawing the old curve on top would scatter the stream twice — and would put AR, which
+        adds the same offset at draw time, up to 3 px away from the sprites it is measuring.
     """
     errors = []
     curve_path = ROOT / "Stage" / "WispMotion.cs"
@@ -1008,6 +1011,22 @@ def scan_wisp_motion_contract():
             if sway.search(line):
                 errors.append(f"{rel}:{number}: multiplies a wisp turbulence value by a literal, which is a "
                               f"second copy of the sway; WispMotion owns that curve now")
+    # W1 draws a coherent stream by *moving* the motes; the draw-time wander is exactly what made them
+    # wave on their own phases, so it has to stand down while the flow runs. Gating it in one renderer and
+    # forgetting another would put the scatter back on half the frame, which is worse than either look.
+    for name in consumers:
+        path = ROOT / name
+        if not path.exists():
+            continue
+        lines = _code(path.read_text(encoding="utf-8")).split("\n")
+        for number, line in enumerate(lines):
+            if "WispMotion.Offset" not in line:
+                continue
+            context = ((lines[number - 1] if number else "") + line).replace(" ", "").replace("\t", "")
+            if "ParticleFlow<=0" not in context:
+                errors.append(f"{name}:{number + 1}: draws the wisp's draw-time sway without checking "
+                              f"`ParticleFlow <= 0`; while the flow runs the wander is already in the "
+                              f"velocity, so adding it here scatters the stream twice")
     # The software stage must not integrate the sway into velocity again: the same sine inside the wisp
     # update moves the mote faster in slow motion and re-opens the 10.6 px disagreement.
     stage = ROOT / "Stage" / "PianoStage.cs"
