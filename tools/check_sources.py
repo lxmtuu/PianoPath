@@ -1664,6 +1664,70 @@ def scan_option_matrix():
     return errors
 
 
+def scan_audit_matrix_claims():
+    """The audit may not still call an option untested once it has a picture.
+
+    §4.1–§4.8 of ``docs/EFFECT-COVERAGE-AUDIT.md`` was written before N12(b) existed, so fifty-odd rows said
+    "chưa test riêng option X" for choices the matrix had since captured. The fix is prose, and prose rots:
+    add a style, capture it, and the row can drift back. This check reads the plan the renderer actually walks
+    (never a second hand-written list) and holds both directions of the claim:
+
+    * a row naming a ``Setting="Value"`` the matrix captures must say ``N12(b)``;
+    * a row saying ``N12(b)`` must name a value on a matrix axis at all, so the claim points at something a
+      reader can check — a bare "đã cô lập" with no value in it is exactly the sentence that goes stale.
+
+    The value has to be spelled the way the product spells it, so a rename shows up here as a stale citation; a
+    row that explicitly rules a value out (``không có `Setting="Value"` ``) is read as a denial, not a claim.
+    """
+    audit_path = ROOT / "docs" / "EFFECT-COVERAGE-AUDIT.md"
+    plan_path = ROOT / "Diagnostics" / "OptionMatrixPlan.cs"
+    for path in (audit_path, plan_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the audit's evidence claims need it"]
+
+    plan = _code(plan_path.read_text(encoding="utf-8"))
+    axes = {}
+    for family_id, setting, _, values, neutral, gate in re.findall(
+            r'new Family\("([^\"]+)",\s*"([^\"]+)",\s*Scene\.(\w+),\s*\[(.*?)\],\s*"([^\"]+)"(?:,\s*"([^\"]+)")?\)',
+            plan, re.S):
+        declared = re.findall(r'"([^"]*)"', values)
+        axes[setting] = (declared, declared if gate else [v for v in declared if v != neutral], neutral)
+
+    audit = audit_path.read_text(encoding="utf-8")
+    rows = [line for line in audit.splitlines() if re.match(r"^\| `[a-z0-9.-]+` \|", line)]
+    if len(rows) < 80:
+        return [f"docs/EFFECT-COVERAGE-AUDIT.md shows {len(rows)} catalog rows; the audit lost its table"]
+
+    errors = []
+    isolated = 0
+    for row in rows:
+        entry = re.match(r"^\| `([^`]+)`", row).group(1)
+        cited = []
+        for setting, value in re.findall(r'`([A-Za-z]+)="([^"]*)"`', row):
+            if setting not in axes or f'không có `{setting}="{value}"`' in row:
+                continue
+            offered, captured, neutral = axes[setting]
+            if value not in offered:
+                errors.append(f"docs/EFFECT-COVERAGE-AUDIT.md row {entry!r} cites {setting}=\"{value}\", which "
+                              f"Diagnostics/OptionMatrixPlan.cs does not capture; the value was renamed or the row "
+                              "is quoting a setting the product does not have")
+                continue
+            cited.append((setting, value, value in captured))
+        if any(is_captured for _, _, is_captured in cited):
+            isolated += 1
+            if "N12(b)" not in row:
+                pairs = ", ".join(f"{setting}=\"{value}\"" for setting, value, ok in cited if ok)
+                errors.append(f"docs/EFFECT-COVERAGE-AUDIT.md row {entry!r} names {pairs}, which the N12(b) matrix "
+                              "captures, but the row never says so; it still reads like an untested option")
+        elif "N12(b)" in row and not cited:
+            errors.append(f"docs/EFFECT-COVERAGE-AUDIT.md row {entry!r} claims N12(b) without naming a "
+                          "Setting=\"Value\" on any axis the matrix captures; the claim cannot be checked")
+    if isolated < 50:
+        errors.append(f"only {isolated} audit rows cite a value the N12(b) matrix captures; the audit and the plan "
+                      "have drifted apart")
+    return errors
+
+
 def scan_effect_channel_ownership():
     """An option must draw on its own, not behind another layer's switch.
 
@@ -2765,6 +2829,7 @@ def main():
     errors.extend(scan_option_matrix())
     errors.extend(scan_option_numeric())
     errors.extend(scan_option_pose())
+    errors.extend(scan_audit_matrix_claims())
     errors.extend(scan_preset_roundtrip())
     errors.extend(scan_review_sheets())
     errors.extend(scan_previews_folder())
@@ -2794,6 +2859,7 @@ def main():
     print("checked that a held key lets off the engine's amount of embers and wisps on both renderers, ceilings aside")
     print("checked that the falling note and the held bar size themselves from one Note width slider, with no floor of their own")
     print("checked that every option the settings offer is captured by the N12(b) matrix on both renderers, off state included")
+    print("checked that the effect audit no longer calls an option untested once the matrix has a picture of it")
     print("checked that every numeric slider the plan shoots is the dock's own range, clamped by the settings class, sampled at both ends")
     print("checked that every shipped preset is saved and reopened through the product's own preset file and applies the dock's own path")
     print("checked that the four N12 reviews still compose one contact sheet each, that a sheet refuses to be missing a capture, and that the workflow commits it")

@@ -6,6 +6,14 @@
 > **Delta local 2026-10-10 — ✅ đã merge và đã được CI chạy (đối chiếu 2026-10-16):** setting `ArRisingMidiNotes`/“MIDI notes rise in Perform” (mỗi Note On là note object 3D riêng, Note Off đóng băng độ dài, object tiếp tục tới reach; live press bars vẫn độc lập và tắt mặc định) **không còn nằm ở working tree**. Đo tại chỗ trên HEAD `18b10d8`: setting ở `Stage/PianoVisualSettings.cs` (4 chỗ), toggle + mô tả ở `Ui/MainWindow.Settings.cs:647`, nhãn đã dịch ở `Localization/Strings.English.cs:798`, đường vẽ ở `Gpu/GpuArLayer.cs` + `Gpu/GpuStageSimulation.cs`, `Camera/ArElementCatalog.cs` đã được **link vào project test** (`PianoPath.Tests.csproj:74`), và `Diagnostics/VerificationSuite.cs` (12 lần) + `.Ar.cs` (2 lần) assert nó. Lần CI xanh trên `main` run [38900310173](https://github.com/lxmtuu/PianoPath/actions/runs/38900310173) ⇒ **nay là bằng chứng test/WARP**, không còn là delta chưa chạy. Điều **không** đổi: grep `RisingMidi` trong `Stage/Effects/*.cs` cho **0 kết quả**, tức không có trạng thái mới nào trong `EffectContractCatalog` — 14 family S5 và binding AR vẫn `Unverified` đúng như bảng dưới.
 
 > **Delta 2026-10-20 — H3, dọn nợ "chờ chạy":** Windows CI run [39294579913](https://github.com/lxmtuu/PianoPath/actions/runs/39294579913) trên commit `40157bd` xanh **cả 4 job** (`static`, `test`, `keyboard-light`, `build`); bước `Verification suite` báo **8027 assertion**, 1 nhóm skip, và `Build` có 48 bước ✔ / 2 skip có chủ ý / 0 lỗi biên dịch. Mọi assertion từng được ghi là "thêm ở local branch, chưa chạy" trong tài liệu này — note-colour/material/shimmer, trail/ghost/landing glow, atlas label, parity Lite/Standard/Ultra, tuổi 0 của nốt Perform, hướng Learn, held-bar default/release, sáu style branch và Gem/Crystal trên AR quad — **đã chạy và PASS** trên WARP trong run đó (và đã PASS từ run [39197798138](https://github.com/lxmtuu/PianoPath/actions/runs/39197798138) trước khi N9 được thêm). **Đính chính:** các bản trước trích `39173459709` như bằng chứng PASS; run đó thực ra **bị huỷ** bởi lượt push sau, nên nay thay bằng `39294579913`. Điều **không** đổi: 14 family S5 và mọi binding tham số AR vẫn `Unverified`, và phần còn thiếu là **coverage** (ma trận style/value/lifecycle, webcam thật, GPU thật, performance) — không còn là "chưa chạy ở đâu cả".
+
+> **Delta 2026-10-22 — đối chiếu lại §4.1–§4.8 với ma trận N12:** bảng §4.1–§4.8 được viết **trước** khi N12(b)/(d) tồn tại, nên 53 dòng còn ghi "chưa test riêng option X", "not isolated" hay "remains `Unverified`" cho những **lựa chọn** mà ma trận đã có ảnh riêng — trong khi chính §4.11 lại nói ma trận bịt đúng khoảng đó. Đó là mâu thuẫn nội tại của tài liệu, không phải hai quan điểm. Nay mỗi dòng như vậy tách đôi câu trả lời:
+>
+> - **`lựa chọn đã cô lập (N12(b))`** — giá trị đó có ảnh riêng: khác baseline của chính trục **và** khác từng giá trị anh em, trên **cả** WPF lẫn GPU‑WARP, cổng ≥12 px cho mỗi ảnh và mỗi cặp (`--verify` chạy cả bốn review N12 ở mọi lượt; lượt xanh gần nhất `39713639185`). Ảnh đã commit: `docs/evidence/n12-sheets/matrix-*.png`; cách đọc: `docs/OPTION-MATRIX-N12B.md`.
+> - **`… và qua cả ba pose AR (N12(d))`** — thêm một bậc: cùng giá trị đó được chụp qua ba pose AR đã hiệu chỉnh, so với ảnh tắt ở cùng pose. Ảnh: `docs/evidence/n12-sheets/pose-ar-*.png`.
+> - **Tham số vẫn `Unverified`** ở mọi dòng, đúng như cũ: vật lý, thời gian sống, amount/size/speed của từng giá trị, parity **pixel** WPF↔GPU (N12 chứng minh hai bên **cùng vẽ**, không chứng minh vẽ **giống nhau**), GPU thật và camera thật.
+>
+> `tools/check_sources.py` (`scan_audit_matrix_claims`) ghim cả hai chiều: một dòng ánh xạ tới `Setting="Value"` mà ma trận chụp thì **buộc** phải nhắc N12(b), và một dòng nhắc N12(b) cho giá trị mà ma trận **không** chụp thì là lỗi. Nhờ vậy lần sau thêm một style vào settings mà quên ma trận, tài liệu này đỏ ngay chứ không lặng lẽ cũ đi.
 >
 > **Lộ trình tổng:** [`VISUAL-EFFECTS-MASTER-ROADMAP.md`](VISUAL-EFFECTS-MASTER-ROADMAP.md) · **Inventory thiết kế cũ:** [`EFFECTS-REDESIGN.md`](EFFECTS-REDESIGN.md).
 
@@ -60,6 +68,11 @@
 - **Implicit** — do dữ liệu âm nhạc/setting chung điều khiển, không có toggle riêng.
 - **Preset** — tổ hợp cài đặt trong `VisualPresets`; không có code renderer riêng.
 - **Sampled test** — `--verify` có kiểm tra nhóm, nhưng chưa kiểm từng giá trị trong dòng.
+- **`lựa chọn đã cô lập (N12(b))`** — giá trị này có ảnh riêng trong ma trận N12(b): khác baseline của chính
+  trục và khác từng giá trị anh em, trên **cả** WPF lẫn GPU‑WARP, cổng ≥12 px mỗi ảnh và mỗi cặp. Nó **không**
+  nói gì về tham số (vật lý, thời gian sống, amount/size/speed), về parity **pixel** WPF↔GPU, hay về AR.
+- **`… và qua cả ba pose AR (N12(d))`** — thêm một bậc: cùng giá trị đó được chụp qua ba pose AR đã hiệu chỉnh,
+  so với ảnh tắt ở cùng pose (cổng 12 px), tức nó cũng đi qua đường chiếu 3D chứ không chỉ sân khấu.
 - **AR typed pilot** — 24 effect families đã có support state riêng: 6 screen-space composite `Native`, 17 family `Unverified` (14 S5 3D-projection có sample WARP PASS trong run [38014563330](https://github.com/lxmtuu/PianoPath/actions/runs/38014563330) nhưng chưa đủ ma trận; cộng trail/pulse/shimmer vốn vẽ trên quad nốt AR — xem đính chính 2026-10-20), chỉ `atmosphere.stars` `Unsupported`; note materials route qua shared shader trên camera-facing quads nhưng capability/bindings vẫn `Unverified` pending AR-specific matrix. Điều này chưa phủ 87 descriptive IDs. Ambient petals/meteors vẫn flat screen-space. Xem §6.
 
 Đường stage thông thường dùng `PianoStage` cho software/WPF và `GpuLook` + `GpuStageSimulation*` cho GPU. Có chung settings/ý nghĩa không có nghĩa hai ảnh pixel giống nhau; parity cần test riêng. Các mục `Verify*Fx` bên dưới hiện nằm trong `Diagnostics/VerificationSuite.cs` và chỉ chạy khi có môi trường Windows/.NET tương ứng.
@@ -68,9 +81,10 @@
 
 > **Cập nhật 2026-10-21 — N12(b):** cột "Độ phủ / lưu ý" bên dưới ghi trạng thái **lúc audit Phase 0**. Từ đợt
 > N12(b), từng giá trị của **11 trục option** đã có ảnh riêng trên WPF **và** D3D/WARP ở cùng cảnh, cùng seed và
-> cùng thời điểm (`--verify-option-matrix-only`, 128 ảnh, `phase1-visual-review/option-matrix/`). Các dòng còn ghi
-> "chưa test riêng option X" vẫn đúng ở mức **mỹ thuật** và ở phần **AR/pose còn lại**, nhưng không còn đúng ở mức
-> "renderer có rẽ nhánh theo option hay không" — xem §4.11 và `docs/NOTE-EFFECTS-ACTION-PLAN.md` N12. Từ
+> cùng thời điểm (`--verify-option-matrix-only`, 128 ảnh, `phase1-visual-review/option-matrix/`). Vì vậy, từ
+> 2026-10-22, mọi ô ở §4.1–4.8 có giá trị mà ma trận chụp đều đã được viết lại thành "lựa chọn đã cô lập (N12(b))"
+> — danh sách và giới hạn của cách nói đó ở delta đầu tài liệu; phần **mỹ thuật** và **AR/pose ngoài các giá trị đã
+> chụp** thì vẫn giữ nguyên là chưa. Xem §4.11 và `docs/NOTE-EFFECTS-ACTION-PLAN.md` N12. Từ
 > 2026-10-21, N12(d) chụp thêm qua **ba pose AR đã hiệu chỉnh** (63 ảnh WARP, cổng ≥12 px so với ảnh tắt cùng
 > pose): phần 1 là năm trục hiệu ứng vẽ vào ảnh camera, phần 2 là chất liệu nốt, trail và bốn lớp ambient, nên câu
 > "option đi qua đường chiếu AR" đã có bằng chứng cho cả mười một trục đó.
@@ -79,37 +93,37 @@
 
 | ID | Mapping runtime hiện tại | Độ phủ / lưu ý |
 |---|---|---|
-| `falling.glow-trail` | `FallingTrail="Glow"`; `DrawFallingTrail` / `AddNoteTrail`. | Choice; test nhóm falling có chọn `Sparkles`, chưa test riêng Glow. AR: chỉ vẽ trên đường projected (cần pose đã calibration); đường flat không có trail, nên family vẫn `Unverified`. |
-| `falling.motion-blur` | `FallingTrail="Blur"`. | Choice; cùng control/renderer trail; chưa test riêng option Blur. AR: như `Glow`, chỉ trên đường projected; `Unverified`. |
-| `falling.sparkle-tail` | `FallingTrail="Sparkles"`. | Choice; được chọn trong `VerifyFallingFx`, nhưng test kết hợp pulse/ghost và không chứng minh parity GPU/WPF. |
+| `falling.glow-trail` | `FallingTrail="Glow"`; `DrawFallingTrail` / `AddNoteTrail`. | Choice; **lựa chọn đã cô lập (N12(b))**: Glow có ảnh riêng, khác baseline `None` và khác bảy style anh em trên cả WPF lẫn GPU‑WARP. Còn chưa: dải mờ thật của trail (không có tham số riêng), và **AR** — trail chỉ vẽ trên đường projected, mà N12(d) chỉ chụp `Ribbon`. |
+| `falling.motion-blur` | `FallingTrail="Blur"`. | Choice; **lựa chọn đã cô lập (N12(b))**: Blur khác baseline `None` và khác sáu style còn lại trên cả hai renderer. Còn chưa: độ dài mờ theo `NoteFallSpeed` (một trục riêng, N12(e) chỉ chụp nó ở style mặc định) và AR như `Glow`. |
+| `falling.sparkle-tail` | `FallingTrail="Sparkles"`. | Choice; **lựa chọn đã cô lập (N12(b))**: Sparkles khác baseline và khác từng style khác trên cả hai renderer. `VerifyFallingFx` vẫn chỉ là test nhóm — nó không chứng minh sprite Sparkles giống nhau giữa WPF và GPU, và N12 chứng minh **có** khác biệt, không chứng minh khác biệt **giống nhau**. |
 | `falling.color-gradient` | Không có control/render pass head-to-tail; `ColorMode="Gradient"`/`Palette` → `NoteColorCore` chỉ trải màu theo pitch. | Catalog entry đã được đổi sang `Planned`; giữ nghĩa head-to-tail, không đánh đồng với gradient low-to-high của bàn phím. Cần setting/màu/renderer/test riêng ở Phase 4. |
 | `falling.pulsing` | `FallingPulse` + `FallingPulseRate`. | Toggle/value; `VerifyFallingFx` vẽ chung với trail/ghost, chưa cô lập phép đo pulse. |
-| `falling.ribbon-twist` | `FallingTrail="Ribbon"`. | Choice; cùng renderer trail với Glow/Blur; “twist” là tên style, không có điều khiển riêng. AR: như `Glow`, chỉ trên đường projected; `Unverified`. |
-| `falling.particle-stream` | `FallingTrail="Stream"`. | Choice; chưa test riêng option Stream. |
+| `falling.ribbon-twist` | `FallingTrail="Ribbon"`. | Choice; **lựa chọn đã cô lập (N12(b)) và qua cả ba pose AR (N12(d))** — Ribbon là style trail duy nhất được chụp trong AR. “twist” là tên style, không có điều khiển riêng. |
+| `falling.particle-stream` | `FallingTrail="Stream"`. | Choice; **lựa chọn đã cô lập (N12(b))**: Stream khác baseline và khác từng style khác trên cả hai renderer. Còn chưa: hình dạng hạt/mật độ của Stream theo tham số. |
 | `falling.ghost-notes` | `FallingGhost` + `FallingGhostAmount`. | Toggle/value; được vẽ cùng falling sample, chưa assert riêng số/alpha ghost. |
-| `falling.speed-lines` | `FallingTrail="Speed Lines"`. | Choice; chưa test riêng option Speed Lines. |
-| `falling.rainbow-shift` | `FallingTrail="Rainbow"` đồng thời tô hue thân nốt; tốc độ hue dẫn xuất từ trail intensity. | Shared/alias: trail và body shift ghép vào một lựa chọn; không có speed control riêng. Chưa test riêng. |
+| `falling.speed-lines` | `FallingTrail="Speed Lines"`. | Choice; **lựa chọn đã cô lập (N12(b))**: Speed Lines khác baseline và khác từng style khác trên cả hai renderer. |
+| `falling.rainbow-shift` | `FallingTrail="Rainbow"` đồng thời tô hue thân nốt; tốc độ hue dẫn xuất từ trail intensity. | Shared/alias: trail và body shift ghép vào một lựa chọn, không có speed control riêng. **Lựa chọn đã cô lập (N12(b))**; tốc độ hue theo trail intensity vẫn chưa đo riêng. |
 
 ### 4.2 Impact — 16 mục
 
 | ID | Mapping runtime hiện tại | Độ phủ / lưu ý |
 |---|---|---|
 | `impact.burst` | `ImpactBurst` + `ShowEmbers` + particle physics/response; `Impact()` phát burst. | Shared family; không phải lựa chọn thứ sáu ngoài 5 `ImpactBurst` styles. Test sample Confetti, không phải từng style. AR S5 Ultra có projected WARP sample trong `VerifyArNoteProjection`; chưa cô lập đủ năm burst styles/physics values nên family/binding vẫn `Unverified`. |
-| `impact.ember-burst` | `ImpactBurst="Embers"` trong cùng burst engine. | Shared/alias với `impact.burst`; style Embers là default. AR S5 Ultra có sample burst/particle counters trên WARP, nhưng Embers chưa được cô lập khỏi cấu hình burst khác; family/binding vẫn `Unverified`. |
-| `impact.ripple-ring` | `ShowImpactRings` + `ImpactWave="Ring"` + `RingSize`/intensity. | Choice; `VerifyImpactFx` kiểm geometry với Shockwave, không kiểm riêng Ring. WARP sample pixel checks cover Ripple baseline plus Shockwave/Absorb comparisons at representative settings; Ring and the full size/intensity matrix remain untested, so `impact.wave` stays `Unverified`. |
-| `impact.shockwave` | `ImpactWave="Shockwave"`. | Choice; geometry/decay được `VerifyImpactFx` kiểm. AR S5 Ultra có projected shockwave; `VerifyArNoteProjection` now has a WARP pixel comparison for a Shockwave configuration; other choices/ranges and all per-parameter bindings remain `Unverified`. |
-| `impact.flash` | `ShowImpactFlash` + `ImpactFlashStyle="Flash"` + intensity. | Choice/toggle; `VerifyImpactFx` kiểm flash geometry/decay, chưa kiểm từng style. The S5 WARP fixture uses Lightning and compares Plasma plus Flash/Morph variants; it does not cover every style/intensity, so family/bindings remain `Unverified`. |
+| `impact.ember-burst` | `ImpactBurst="Embers"` trong cùng burst engine. | Shared/alias với `impact.burst`; Embers là giá trị neutral của trục. **Lựa chọn đã cô lập (N12(b))**: năm burst style được chụp với `ShowEmbers` bật, baseline là chính công tắc đó tắt, và Embers khác Splash/Fireworks/Confetti/Dust trên cả hai renderer. AR S5 Ultra vẫn chỉ là sample burst/particle counter. |
+| `impact.ripple-ring` | `ShowImpactRings` + `ImpactWave="Ring"` + `RingSize`/intensity. | Choice; **lựa chọn đã cô lập (N12(b))**: Ring khác baseline `None` và khác Shockwave/Ripple trên cả hai renderer. Còn chưa: geometry/decay của riêng Ring (`VerifyImpactFx` chỉ kiểm Shockwave) và ma trận `RingSize`/intensity theo từng wave. |
+| `impact.shockwave` | `ImpactWave="Shockwave"`. | Choice; **lựa chọn đã cô lập (N12(b)) và qua cả ba pose AR (N12(d))** — Shockwave là wave duy nhất được chụp trong AR. Geometry/decay đã có `VerifyImpactFx`; các giá trị `RingSize`/intensity khác vẫn `Unverified`. |
+| `impact.flash` | `ShowImpactFlash` + `ImpactFlashStyle="Flash"` + intensity. | Choice/toggle; **lựa chọn đã cô lập (N12(b))**: ba style Flash/Lightning/Plasma mỗi style một ảnh, baseline là `ShowImpactFlash` tắt. Còn chưa: cường độ/thời gian sống theo từng style (N12(e) chụp `flash-intensity` ở style mặc định). |
 | `impact.key-glow` | `KeyLighting`, `KeyGlowRadius`, `PressedKeyColorMode` và key state. | Shared/alias: không có “impact key glow” selector riêng. S5 WARP checks Standard impact/note-light counters and neighboring-key spill; key tint is a separate pass. Full family/parameter support remains `Unverified`. |
-| `impact.splash` | `ImpactBurst="Splash"`; kind droplet/physics riêng. | Choice; chưa có test riêng cho kiểu Splash. S5 projects particle state by pitch/pose in Ultra, but the Splash choice is not isolated by the WARP fixture and remains `Unverified`. |
-| `impact.firework` | `ImpactBurst="Fireworks"`; `AmbientEnergy="Fireworks"` là đường khác. | Shared giữa burst theo nốt và layer ambient; chưa test riêng cả hai đường. Burst theo nốt có AR S5 Ultra projection code; ambient fireworks vẫn là screen-space. |
-| `impact.confetti-pop` | `ImpactBurst="Confetti"`. | Choice; được chọn trong `VerifyFallingFx` cùng Shatter/Lightning, chưa có ảnh/test riêng. Confetti is enabled in the mixed Ultra WARP fixture and aggregate particle/pixel assertions pass; the burst choice is not isolated from the other hit channels. |
-| `impact.dust-cloud` | `ImpactBurst="Dust"`. | Choice; chưa test riêng option Dust. AR S5 projects particles by pose, but Dust has no isolated WARP style assertion and remains `Unverified`. |
-| `impact.shatter` | `ImpactMorph="Shatter"` → shard particles. | Choice; sample test gọi cùng Confetti burst; chưa kiểm riêng morphology/lifetime. Shatter is configured in the mixed Ultra WARP fixture; its morphology/lifetime is not isolated, so its style/binding remains `Unverified`. |
-| `impact.bounce` | `ImpactMorph="Bounce"` → streak particles + ring. | Choice; chưa test riêng option Bounce. Bounce has 3D particle/ring code, but no isolated WARP style comparison; it remains `Unverified`. |
-| `impact.absorb` | `ImpactMorph="Absorb"` → ring co vào điểm hit. | Choice; A WARP pixel comparison exercises the Absorb ring configuration; full morphology/intensity and family bindings remain `Unverified`. |
-| `impact.melt` | `ImpactMorph="Melt"` → droplet particles. | Choice; Melt has 3D particle projection code, but no isolated WARP style assertion; it remains `Unverified`. |
-| `impact.lightning-strike` | `ImpactFlashStyle="Lightning"`. | Choice; WPF verify sample kiểm một geometry tia sét; The mixed Ultra WARP fixture configures Lightning, while Plasma/Flash comparisons cover other branches; Lightning style/parameter binding is not independently verified. |
-| `impact.note-morph` | `ImpactMorph="Morph"`; UI gọi là “Star morph”. | Shared/alias: catalog mô tả nhiều shape (“star, heart…”) nhưng hiện setting chỉ có một style Morph/Star, không có shape picker. A WARP pixel comparison exercises the Morph branch (combined with a Flash variant); the full morphology/intensity matrix remains `Unverified` in `impact.morph`. |
+| `impact.splash` | `ImpactBurst="Splash"`; kind droplet/physics riêng. | Choice; **lựa chọn đã cô lập (N12(b))**: Splash khác baseline và khác bốn burst style khác trên cả hai renderer. Còn chưa: vật lý giọt và thời gian sống, và AR — N12(d) chụp Fireworks chứ không phải Splash. |
+| `impact.firework` | `ImpactBurst="Fireworks"`; `AmbientEnergy="Fireworks"` là đường khác. | Shared giữa burst theo nốt và layer ambient. Cả hai đường đều có ảnh giá trị: burst trong **N12(b)** (`ImpactBurst="Fireworks"`, khác baseline và khác bốn style), ambient trong **N12(b) + N12(d)** (`AmbientEnergy="Fireworks"` qua ba pose AR). Còn chưa: catalog chưa tách layer/trigger (§5.5). |
+| `impact.confetti-pop` | `ImpactBurst="Confetti"`. | Choice; **lựa chọn đã cô lập (N12(b))**: Confetti khác baseline và khác bốn burst style khác trên cả hai renderer; ambient `Confetti Rain` cũng có ảnh riêng trong cùng ma trận. |
+| `impact.dust-cloud` | `ImpactBurst="Dust"`. | Choice; **lựa chọn đã cô lập (N12(b))** ở cả hai đường: burst (`ImpactBurst="Dust"`) và ambient (`AmbientNature="Dust"`). |
+| `impact.shatter` | `ImpactMorph="Shatter"` → shard particles. | Choice; **lựa chọn đã cô lập (N12(b)) và qua cả ba pose AR (N12(d))**. Còn chưa: morphology và thời gian sống của từng mảnh. |
+| `impact.bounce` | `ImpactMorph="Bounce"` → streak particles + ring. | Choice; **lựa chọn đã cô lập (N12(b))**: Bounce khác baseline và khác bốn morph style khác trên cả hai renderer. Còn chưa: hình dạng streak và ring đi kèm. |
+| `impact.absorb` | `ImpactMorph="Absorb"` → ring co vào điểm hit. | Choice; **lựa chọn đã cô lập (N12(b))**: Absorb khác baseline và khác bốn morph style khác trên cả hai renderer. Còn chưa: biên độ co của ring theo intensity. |
+| `impact.melt` | `ImpactMorph="Melt"` → droplet particles. | Choice; **lựa chọn đã cô lập (N12(b))**: Melt khác baseline và khác bốn morph style khác trên cả hai renderer. Còn chưa: vật lý giọt chảy. |
+| `impact.lightning-strike` | `ImpactFlashStyle="Lightning"`. | Choice; **lựa chọn đã cô lập (N12(b))**: tia sét khác baseline `ShowImpactFlash` tắt và khác Flash/Plasma trên cả hai renderer. Còn chưa: hình học tia (nhánh, tần số nhấp nháy) theo tham số. |
+| `impact.note-morph` | `ImpactMorph="Morph"`; UI gọi là “Star morph”. | Shared/alias: catalog mô tả nhiều shape (“star, heart…”) nhưng setting chỉ có một style Morph/Star, không có shape picker. **Lựa chọn đã cô lập (N12(b)) và qua cả ba pose AR (N12(d), kênh flash)**. |
 
 ### 4.3 Hold — 8 mục
 
@@ -128,63 +142,63 @@
 
 | ID | Mapping runtime hiện tại | Độ phủ / lưu ý |
 |---|---|---|
-| `release.fade-out` | `ReleaseEffect="Fade"`; không spawn thêm hình, dùng fade của note. | Mặc định; không có hiệu ứng phụ riêng để test. S5 chiếu transient release tường minh cho các style khác; Fade không phát hình học riêng. |
-| `release.float-up` | `ReleaseEffect="Float Up"` → mote bay lên. | Choice; `VerifyReleaseFx` hiện chỉ chạy Echo Rings. A Dissolve release is read back on WARP with active-release/particle counters and visible pixels; Float Up and its settings remain unverified. |
-| `release.dissolve` | `ReleaseEffect="Dissolve"` → hạt tan. | Choice; The Dissolve release WARP assertion passes; other release styles/intensity/lifecycle values are not covered, so family/binding remains `Unverified`. |
-| `release.smoke-puff` | `ReleaseEffect="Smoke"` → dust/smoke particles. | Choice; Smoke release has projection code but no isolated WARP style assertion; it remains `Unverified`. |
-| `release.snap-back` | `ReleaseEffect="Snap Back"` → ring/co rút. | Choice; Snap Back has release-ring projection code but no isolated WARP style assertion; it remains `Unverified`. |
-| `release.echo-rings` | `ReleaseEffect="Echo Rings"` → rings. | Choice; verify song note-end + live release + seek ngược + decay. Echo Rings is present in the 3D code, but the current S5 WARP fixture selects Dissolve rather than Echo Rings; AR style coverage remains `Unverified`. |
+| `release.fade-out` | `ReleaseEffect="Fade"`; không spawn thêm hình, dùng fade của note. | Mặc định; không spawn thêm hình, dùng fade của note. **Lựa chọn đã cô lập (N12(b))**: Fade là baseline của trục, và năm style còn lại đều khác nó trên cả hai renderer. |
+| `release.float-up` | `ReleaseEffect="Float Up"` → mote bay lên. | Choice; **lựa chọn đã cô lập (N12(b))**: Float Up khác baseline `Fade` và khác bốn style khác trên cả hai renderer. Còn chưa: quãng bay và thời gian sống theo intensity. |
+| `release.dissolve` | `ReleaseEffect="Dissolve"` → hạt tan. | Choice; **lựa chọn đã cô lập (N12(b))**: Dissolve khác baseline và khác bốn style khác trên cả hai renderer. Còn chưa: mật độ hạt tan theo intensity/lifecycle. |
+| `release.smoke-puff` | `ReleaseEffect="Smoke"` → dust/smoke particles. | Choice; **lựa chọn đã cô lập (N12(b))**: Smoke khác baseline và khác bốn style khác trên cả hai renderer. Còn chưa: hình dạng khói và tốc độ tan. |
+| `release.snap-back` | `ReleaseEffect="Snap Back"` → ring/co rút. | Choice; **lựa chọn đã cô lập (N12(b))**: Snap Back khác baseline và khác bốn style khác trên cả hai renderer. Còn chưa: hình học ring co và tốc độ. |
+| `release.echo-rings` | `ReleaseEffect="Echo Rings"` → rings. | Choice; **lựa chọn đã cô lập (N12(b)) và qua cả ba pose AR (N12(d))** — Echo Rings là release style duy nhất được chụp trong AR. Song note-end + live release + seek ngược + decay vẫn do `VerifyReleaseFx` kiểm. |
 
 ### 4.5 Ambient — Particle & Energy (9)
 
 | ID | Mapping runtime hiện tại | Độ phủ / lưu ý |
 |---|---|---|
-| `ambient.embers` | `ImpactBurst="Embers"` / `ShowEmbers`. | Không phải `AmbientEnergy` choice; event-based burst. Alias; the mixed Ultra WARP fixture samples the projected particle channel but does not isolate the Embers alias; remains `Unverified`. |
+| `ambient.embers` | `ImpactBurst="Embers"` / `ShowEmbers`. | Không phải `AmbientEnergy` choice; event-based burst. Burst `Embers` có ảnh riêng trong **N12(b)** (xem `impact.ember-burst`); ambient slot không có Embers nên phần ambient của dòng này vẫn `Unverified`. |
 | `ambient.fire` | `ShowFlame` / flame hold path. | Không có ambient-slot `Fire`; đây là lớp theo phím/nốt. Alias; Flame is enabled in the mixed Ultra WARP fixture but not isolated by style/parameter; remains `Unverified`. |
 | `ambient.explosion` | `ImpactBurst` + velocity/particle response. | Event-based burst, không phải ambient slot. Alias; the mixed Ultra WARP fixture samples pitch-tagged particles but does not isolate Explosion/velocity-response values; remains `Unverified`. |
-| `ambient.sparkles` | `ShowStars` (starfield) hoặc `FallingTrail="Sparkles"`. | Hai đường khác nhau; không có `AmbientEnergy="Sparkles"`. Alias. |
-| `ambient.lightning` | `AmbientEnergy="Lightning Storm"`. | Choice ambient có thật; `VerifyAmbientFx` chọn Fireworks, chưa chọn Lightning Storm. |
-| `ambient.laser` | `AmbientEnergy="Laser Beams"`. | Choice ambient có thật; chưa test riêng. |
-| `ambient.plasma` | `ImpactFlashStyle="Plasma"`. | Impact flash cục bộ, không có ambient plasma orb selector. Alias/semantic mismatch; Plasma is included in a passing Ultra WARP pixel comparison, but full flash family/parameter coverage remains `Unverified`. |
-| `ambient.confetti` | `AmbientEnergy="Confetti Rain"` hoặc `ImpactBurst="Confetti"`. | Hai trigger khác nhau; catalog chưa phân biệt layer và impact. Ambient rain remains screen-space; the note-triggered Confetti burst is sampled in the mixed Ultra WARP fixture, not as a separate style contract. |
-| `ambient.firework` | `AmbientEnergy="Fireworks"` hoặc `ImpactBurst="Fireworks"`. | Hai trigger khác nhau; catalog chưa phân biệt layer và impact. Ambient fireworks remain screen-space; the note-triggered Fireworks burst has projection code but no isolated S5 WARP style assertion. |
+| `ambient.sparkles` | `ShowStars` (starfield) hoặc `FallingTrail="Sparkles"`. | Hai đường khác nhau; không có `AmbientEnergy="Sparkles"`. Đường trail (`FallingTrail="Sparkles"`) đã cô lập trong **N12(b)**; đường starfield (`ShowStars`) là control riêng, chưa có ảnh riêng. |
+| `ambient.lightning` | `AmbientEnergy="Lightning Storm"`. | Choice ambient có thật; **lựa chọn đã cô lập (N12(b))**: Lightning Storm khác baseline `None` và khác ba ambient style khác trên cả hai renderer. AR vẫn chưa: N12(d) chụp Laser Beams. |
+| `ambient.laser` | `AmbientEnergy="Laser Beams"`. | Choice ambient có thật; **lựa chọn đã cô lập (N12(b)) và qua cả ba pose AR (N12(d))** — Laser Beams là energy style duy nhất được chụp trong AR. |
+| `ambient.plasma` | `ImpactFlashStyle="Plasma"`. | Impact flash cục bộ, không có ambient plasma orb selector. Style `Plasma` của impact đã cô lập trong **N12(b)**; một orb ambient plasma thì không tồn tại trong settings. |
+| `ambient.confetti` | `AmbientEnergy="Confetti Rain"` hoặc `ImpactBurst="Confetti"`. | Hai trigger khác nhau; catalog chưa phân biệt layer và impact. **Cả hai đã cô lập trong N12(b)**: ambient `Confetti Rain` và burst `Confetti` mỗi bên một ảnh riêng, trên cả hai renderer. |
+| `ambient.firework` | `AmbientEnergy="Fireworks"` hoặc `ImpactBurst="Fireworks"`. | Hai trigger khác nhau; catalog chưa phân biệt layer và impact. **Cả hai đã cô lập**: burst trong N12(b), ambient trong N12(b) + N12(d) (ba pose AR). Việc tách layer/trigger trong catalog vẫn là §5.5. |
 
 ### 4.6 Ambient — Nature & Elements (9)
 
 | ID | Mapping runtime hiện tại | Độ phủ / lưu ý |
 |---|---|---|
 | `ambient.petals` | `ShowPetals` + `PetalAmount` + `PetalColor`. | Có renderer riêng, nhưng không nằm trong `AmbientNature` choice. |
-| `ambient.ripple` | `ImpactWave="Ripple"`. | Effect impact tại phím, không phải ambient layer tự chạy. Ripple is present in the mixed Ultra WARP impact comparison; it remains key-anchored, not ambient perspective projection, and the full wave parameter matrix is `Unverified`. |
-| `ambient.rain` | `AmbientNature="Rain"`. | Choice thật; chưa test riêng. |
-| `ambient.snow` | `AmbientNature="Snow"`. | Choice thật; được chọn trong `VerifyAmbientFx` như một phần composite. |
-| `ambient.smoke` | `AmbientNature="Smoke"` và `ReleaseEffect="Smoke"`. | Hai trigger/renderer context khác nhau; tên catalog chưa tách. Nature smoke remains screen-space; the S5 release WARP case selects Dissolve, so Smoke release style remains `Unverified`. |
-| `ambient.leaves` | `AmbientNature="Leaves"`. | Choice thật; chưa test riêng. |
-| `ambient.butterflies` | `AmbientNature="Butterflies"`. | Choice thật; chưa test riêng. |
-| `ambient.aurora` | `AmbientNature="Aurora"`; `BackgroundMotion="Aurora"` là shader nền riêng. | Hai đường Aurora khác nhau, cần mô tả capability/trigger. |
-| `ambient.dust` | `AmbientNature="Dust"` hoặc `ImpactBurst="Dust"`. | Ambient nature và impact burst cùng tên nhưng trigger/physics khác. |
+| `ambient.ripple` | `ImpactWave="Ripple"`. | Effect impact tại phím, không phải ambient layer tự chạy. **Lựa chọn đã cô lập (N12(b))**: Ripple khác baseline `None` và khác Ring/Shockwave trên cả hai renderer; nó vẫn neo ở phím, không phải ambient. |
+| `ambient.rain` | `AmbientNature="Rain"`. | Choice thật; **lựa chọn đã cô lập (N12(b))**: Rain khác baseline `None` và khác bảy style khác trên cả hai renderer. Còn chưa: mật độ/tốc độ hạt theo tham số. |
+| `ambient.snow` | `AmbientNature="Snow"`. | Choice thật; **lựa chọn đã cô lập (N12(b))**: Snow khác baseline và khác bảy style khác trên cả hai renderer, ngoài lần chọn composite trong `VerifyAmbientFx`. |
+| `ambient.smoke` | `AmbientNature="Smoke"` và `ReleaseEffect="Smoke"`. | Hai trigger/renderer context khác nhau; tên catalog chưa tách. **Cả hai đã cô lập trong N12(b)**: `AmbientNature="Smoke"` (screen-space) và `ReleaseEffect="Smoke"` (theo phím). |
+| `ambient.leaves` | `AmbientNature="Leaves"`. | Choice thật; **lựa chọn đã cô lập (N12(b))**: Leaves khác baseline và khác bảy style khác trên cả hai renderer. |
+| `ambient.butterflies` | `AmbientNature="Butterflies"`. | Choice thật; **lựa chọn đã cô lập (N12(b))**: Butterflies khác baseline và khác bảy style khác trên cả hai renderer. |
+| `ambient.aurora` | `AmbientNature="Aurora"`; `BackgroundMotion="Aurora"` là shader nền riêng. | Hai đường Aurora khác nhau. `AmbientNature="Aurora"` **đã cô lập (N12(b)) và qua cả ba pose AR (N12(d))**; `BackgroundMotion="Aurora"` là shader nền riêng và vẫn chưa có ảnh riêng. |
+| `ambient.dust` | `AmbientNature="Dust"` hoặc `ImpactBurst="Dust"`. | Ambient nature và impact burst cùng tên nhưng trigger/physics khác. **Cả hai đã cô lập trong N12(b)** (`AmbientNature="Dust"` và `ImpactBurst="Dust"`). |
 
 ### 4.7 Ambient — Light & Color (7)
 
 | ID | Mapping runtime hiện tại | Độ phủ / lưu ý |
 |---|---|---|
-| `ambient.glow` | `NoteStyle="Neon"`, `NoteGlow`, `NoteEdge`; key light có setting riêng. | Vật liệu/note rendering, không phải ambient slot. Alias. |
+| `ambient.glow` | `NoteStyle="Neon"`, `NoteGlow`, `NoteEdge`; key light có setting riêng. | Vật liệu/note rendering, không phải ambient slot. Style `Neon` đã cô lập trong **N12(b)** cùng năm style note khác; `NoteGlow`/`NoteEdge` là slider, N12(e) không chụp hai trục đó. |
 | `ambient.bloom` | `BloomIntensity` + `BloomSize` / GPU compositor. | Hậu kỳ toàn scene, không phải `AmbientLight` style. |
 | `ambient.flash` | `ShowImpactFlash` + `ImpactFlashStyle`. | Impact-local flash, không phải ambient slot. |
-| `ambient.splash` | `AmbientLight="Color Splash"`. | Choice ambient có thật; chưa test riêng. |
-| `ambient.rainbow-trail` | `FallingTrail="Rainbow"`. | Falling trail/body hue; không phải lớp ambient. Alias. |
-| `ambient.gradient-wave` | `AmbientLight="Gradient Wave"`. | Choice thật; test sample AmbientLight hiện dùng Prism. |
-| `ambient.prism` | `AmbientLight="Prism"`. | Choice thật; `VerifyAmbientFx` chọn Prism ở WPF layer. |
+| `ambient.splash` | `AmbientLight="Color Splash"`. | Choice ambient có thật; **lựa chọn đã cô lập (N12(b)) và qua cả ba pose AR (N12(d))** — Color Splash là light style duy nhất được chụp trong AR. |
+| `ambient.rainbow-trail` | `FallingTrail="Rainbow"`. | Falling trail/body hue; không phải lớp ambient. **Lựa chọn đã cô lập (N12(b))** (xem `falling.rainbow-shift`). |
+| `ambient.gradient-wave` | `AmbientLight="Gradient Wave"`. | Choice thật; **lựa chọn đã cô lập (N12(b))**: Gradient Wave khác baseline `None` và khác bốn light style khác trên cả hai renderer — không còn phụ thuộc vào việc `VerifyAmbientFx` chỉ chọn Prism. |
+| `ambient.prism` | `AmbientLight="Prism"`. | Choice thật; **lựa chọn đã cô lập (N12(b))**: Prism khác baseline và khác bốn light style khác trên cả hai renderer, ngoài lần chọn Prism trong `VerifyAmbientFx`. |
 
 ### 4.8 Ambient — Cosmic & Abstract (6)
 
 | ID | Mapping runtime hiện tại | Độ phủ / lưu ý |
 |---|---|---|
-| `ambient.galaxy` | `AmbientCosmic="Galaxy"`; `BackgroundMotion="Nebula"` là đường nền riêng. | `VerifyAmbientFx`/`VerifyGpuStage` có composite sample; chưa kiểm từng mode/pixel parity. |
-| `ambient.black-hole` | `AmbientCosmic="Black Hole"`. | Choice thật; chưa test riêng. |
-| `ambient.matrix` | `AmbientCosmic="Matrix Rain"`. | Choice thật; chưa test riêng. |
-| `ambient.geometry` | `AmbientCosmic="Geometric"`. | Choice thật; chưa test riêng. |
-| `ambient.fractal` | `AmbientCosmic="Fractal"`. | Choice thật; chưa test riêng. |
-| `ambient.ribbon` | `FallingTrail="Ribbon"`. | Alias với `falling.ribbon-twist`; không phải cosmic ambient. |
+| `ambient.galaxy` | `AmbientCosmic="Galaxy"`; `BackgroundMotion="Nebula"` là đường nền riêng. | `BackgroundMotion="Nebula"` là đường nền riêng. `AmbientCosmic="Galaxy"` **đã cô lập (N12(b)) và qua cả ba pose AR (N12(d))**; nền Nebula vẫn chưa có ảnh riêng và pixel parity giữa hai renderer vẫn chưa đo. |
+| `ambient.black-hole` | `AmbientCosmic="Black Hole"`. | Choice thật; **lựa chọn đã cô lập (N12(b))**: Black Hole khác baseline và khác năm style khác trên cả hai renderer. |
+| `ambient.matrix` | `AmbientCosmic="Matrix Rain"`. | Choice thật; **lựa chọn đã cô lập (N12(b))**: Matrix Rain khác baseline và khác năm style khác trên cả hai renderer. |
+| `ambient.geometry` | `AmbientCosmic="Geometric"`. | Choice thật; **lựa chọn đã cô lập (N12(b))**: Geometric khác baseline và khác năm style khác trên cả hai renderer. |
+| `ambient.fractal` | `AmbientCosmic="Fractal"`. | Choice thật; **lựa chọn đã cô lập (N12(b))**: Fractal khác baseline và khác năm style khác trên cả hai renderer. |
+| `ambient.ribbon` | `FallingTrail="Ribbon"`. | Alias với `falling.ribbon-twist`; không phải cosmic ambient. **Lựa chọn đã cô lập (N12(b)) và qua cả ba pose AR (N12(d))**. |
 
 ### 4.9 Smart modulators (9)
 
@@ -215,8 +229,10 @@
 ### 4.11 Ma trận option N12(b) — 11 trục, 128 ảnh
 
 Trước đợt này, mỗi family chỉ được kiểm bằng **một** style chọn tay (Confetti cho burst, Shatter cho morph,
-Sparkles cho trail…), nên câu "chưa test riêng option X" trong §4.1–4.8 là đúng: chưa có ảnh nào chứng minh
-chọn giá trị khác thì **có** pixel khác. Ma trận này bịt đúng khoảng đó, và **chỉ** khoảng đó.
+Sparkles cho trail…), nên lúc §4.1–4.8 được viết thì câu "chưa test riêng option X" là đúng: chưa có ảnh nào
+chứng minh chọn giá trị khác thì **có** pixel khác. Ma trận này bịt đúng khoảng đó, và **chỉ** khoảng đó — nên
+các ô §4.1–4.8 đã được viết lại theo nó (delta 2026-10-22 đầu tài liệu): "lựa chọn đã cô lập (N12(b))" thay cho
+"chưa test riêng", còn tham số, AR ngoài các giá trị đã chụp và parity pixel thì vẫn để nguyên là chưa.
 
 | Trục setting | Giá trị | Cảnh / mẫu | Kết luận sau N12(b) |
 |---|---|---|---|
@@ -276,7 +292,7 @@ plan **bằng đúng** mảng trong `PianoVisualSettings`, nên thêm một styl
 
 5. Phân biệt event-triggered `Embers/Fire/Explosion/Plasma/Water Ripple` với ambient chạy nền, đồng thời giữ alias cũ khi migrate preset.
 6. `Spotlights` là setting/UI choice bổ sung ngoài 87 ID hiện tại; WPF path và regression đã PASS trên CI. Trong Phase 2 ID normalization, quyết định có thêm ID explicit hay gộp vào Ambient Light capability; đồng thời lập mapping/verification cho `ShowStars`, `ShowPetals`, Shooting Stars, note landing glow, note shimmer, halo pulse và background motion — các control tồn tại nhưng không thuộc inventory 87 hiện tại.
-7. Mở rộng verify từ “một mẫu mỗi nhóm” sang từng Choice value tối thiểu: spawn/draw/decay, màu/size/speed/amount, disabled, seek/reset, preset round-trip. **Đã làm một nửa (N12(b), 2026-10-21):** 11 trục setting dạng chuỗi có ảnh riêng cho **mọi** giá trị trên WPF và GPU/WARP (128 ảnh, §4.11); phần **giá trị số** (amount/speed/intensity/size), seek/reset và round-trip preset vẫn còn.
+7. Mở rộng verify từ “một mẫu mỗi nhóm” sang từng Choice value tối thiểu: spawn/draw/decay, màu/size/speed/amount, disabled, seek/reset, preset round-trip. **Đã làm được phần “mọi giá trị” (N12, 2026-10-21→22):** 11 trục setting dạng chuỗi có ảnh riêng cho **mọi** giá trị trên WPF và GPU/WARP (128 ảnh, §4.11) và 9 trục số có ảnh ở thang giá trị (N12(e)); 63 ảnh N12(d) kiểm thêm cùng các giá trị đó qua ba pose AR. Nhờ vậy §4.1–§4.8 không còn dòng nào phải nói “chưa test riêng option X”, và `tools/check_sources.py` (`scan_audit_matrix_claims`) ghim điều đó. **Vẫn còn:** việc cô lập *giá trị* chưa phải cô lập *tham số* — hình dạng/hình học, thời gian sống, đường cong amount/size/speed cho từng giá trị, seek/reset và round-trip preset giữa các style.
 8. Kiểm tra pixel parity GPU/software trên tập scene chung; hiện có thể khẳng định cùng settings có đường code ở cả hai, nhưng chưa có bằng chứng mọi style render giống/đạt chất lượng tương đương.
 9. Tách `AudioReactive` envelope hiện tại khỏi mục tiêu FFT thật; chỉ quảng bá low/mid/high spectrum sau khi đường PCM → analyzer → smoothing → render đã được kiểm thử.
 
@@ -284,14 +300,14 @@ plan **bằng đúng** mảng trong `PianoVisualSettings`, nên thêm một styl
 
 | Nhóm verify | Bằng chứng trong mã | Chưa chứng minh |
 |---|---|---|
-| `VerifyImpactFx` | UI wave/flash; Shockwave + Flash sinh geometry và decay. | Mọi wave/burst/morph/flash value, GPU/AR parity. |
-| `VerifyFallingFx` | UI trail/pulse/ghost; Sparkles + Confetti/Shatter/Lightning sample; trail vẽ ra ngoài note; inventory assertion (87 total, 86 Available, head-to-tail Planned) PASS trong run `37467081020`. | Gradient head-to-tail chưa có renderer; 7 trail options còn lại chưa được verify riêng; GPU parity chưa được chứng minh. |
+| `VerifyImpactFx` | UI wave/flash; Shockwave + Flash sinh geometry và decay. | **Giá trị**: cả 17 wave/burst/morph/flash value đã cô lập bởi N12(b) (khác baseline và khác nhau từng cặp, hai renderer). Còn chưa: geometry/decay **theo từng giá trị**, parity pixel WPF↔GPU, và AR cho mọi value trừ Shockwave/Shatter/Morph/Fireworks (N12(d)). |
+| `VerifyFallingFx` | UI trail/pulse/ghost; Sparkles + Confetti/Shatter/Lightning sample; trail vẽ ra ngoài note; inventory assertion (87 total, 86 Available, head-to-tail Planned) PASS trong run `37467081020`. | Gradient head-to-tail chưa có renderer. Bảy trail option **đã** cô lập bởi N12(b) (mỗi style một ảnh, hai renderer); còn chưa: hình dạng/thời gian sống của trail, `FallingPulse`/`FallingGhost` (toggle riêng, không thuộc trục nào của ma trận), và parity pixel WPF↔GPU — N12 chứng minh hai bên cùng vẽ, không chứng minh vẽ giống nhau. |
 | `VerifyHoldFx` | UI các toggle; sounding note và Electric Arc geometry. | Flame/Wisps/Energy Column, từng modulation rate/amount và mọi renderer. |
-| `VerifyReleaseFx` | Echo Rings live + MIDI note-end + seek ngược + decay. | 5 release styles còn lại và GPU parity. |
-| `VerifyAmbientFx` | Bốn selector; sample Fireworks/Snow/Prism/Galaxy, 4 pass có geometry; WPF `Spotlights` zero-intensity, drawing-bounds và rasterized-pixel assertions cùng test Ripple PASS trong run `37467081020`. | Mọi ambient choice khác và parity pixel GPU/WPF vẫn chưa được chứng minh. |
+| `VerifyReleaseFx` | Echo Rings live + MIDI note-end + seek ngược + decay. | Cả sáu release style **đã** cô lập bởi N12(b) (Fade là baseline), và Echo Rings thêm N12(d) qua ba pose AR. Còn chưa: intensity/lifecycle theo từng style và parity pixel WPF↔GPU. |
+| `VerifyAmbientFx` | Bốn selector; sample Fireworks/Snow/Prism/Galaxy, 4 pass có geometry; WPF `Spotlights` zero-intensity, drawing-bounds và rasterized-pixel assertions cùng test Ripple PASS trong run `37467081020`. | **Mọi** giá trị ambient của bốn slot đã cô lập bởi N12(b) (28 giá trị, kể cả `Spotlights`), bốn trong số đó thêm N12(d) qua ba pose AR. Còn chưa: parity pixel GPU/WPF và hành vi ambient ngoài một mốc thời gian. |
 | `VerifySmartFx` | Octave recolor; velocity particle count; bass/treble zone; halo render sau khi bật boosts. | Đo riêng pedal/tempo/audio boost; FFT/latency/curve. |
 | `VerifyThemes` | Bảy preset graph có một số setting đại diện. | Render thumbnail/ảnh và settings đầy đủ của từng theme. |
-| `VerifyGpuStage` | Một bundle nhiều setting; WARP render, ambient count, recording tap. | Ma trận từng effect/option và GPU thật. |
+| `VerifyGpuStage` | Một bundle nhiều setting; WARP render, ambient count, recording tap. | Ma trận từng effect/option **đã có** cho 11 trục chuỗi (N12(b), §4.11) và 9 trục số (N12(e)); còn chưa: GPU thật, và các trục không phải chuỗi/số (màu, hình học nốt, curve). |
 | `VerifyArNoteProjection` | Windows CI [38014563330](https://github.com/lxmtuu/PianoPath/actions/runs/38014563330) PASS on the earlier source revision: calibrated Standard/Ultra, selected impact variants, Dissolve release, transformed pose/direction, and four hold modifiers with representative 0↔100 parameter pixel deltas. The current local branch adds note-colour/material/shimmer, released-bar lifetime, Lite/Standard/Ultra pixel parity for note and live-bar geometry, age-zero first-frame Perform onset/direction, and held-bar default-opacity WARP assertions; all of them pass in Windows CI [39294579913](https://github.com/lxmtuu/PianoPath/actions/runs/39294579913) (2026-10-20). | Only sampled styles/values; not all 14 families/parameter bindings. Those assertions ran on WARP in 39294579913; the remaining gap is per-value/per-binding coverage, and real webcam, OBS, physical GPU and performance are not verified. |
 | `VerifyEffectFamilyGpuRecordingCaptures` / `VerifyEffectFamilyWpfRecordingCaptures` | Windows CI [37762349649](https://github.com/lxmtuu/PianoPath/actions/runs/37762349649) PASS: 24/24 GPU tap families có changed-pixel evidence; 22/22 WPF-native families ghi PNG rồi decode/read back và pass pixel-diff. Hai WPF-only exclusions được assert chính xác. | Chỉ family-level presence trên WARP + WPF software-stage fixture; mọi `parameter.Bindings.Recording` vẫn `Unverified`, mọi `Cost.Recording` vẫn `Unmeasured`; không chứng nhận GPU phần cứng. |
 | `--verify-option-matrix-only` (N12(b)) | Ma trận option: 11 trục setting × mọi giá trị (62, trong đó 9 chính là trạng thái tắt) + 11 baseline = 64 cảnh × WPF/GPU‑WARP = **128 ảnh 960×540**, cùng cảnh/cùng seed; mỗi giá trị đổi ≥12 px so với baseline, mọi cặp trong một trục khác ảnh, baseline của các family chung một cảnh trùng nhau **từng bit**; `manifest.json` (sha256, số pixel đổi, bảng so cặp, counter GPU) và `index.html` trong `phase1-visual-review/option-matrix`. Đường tắt và `--verify` đầy đủ đều chạy nó; `tools/check_sources.py` ghim danh sách giá trị vào `PianoVisualSettings`. | Đã phủ thêm AR/pose (N12(d), `--verify-option-pose-only`): **63 ảnh WARP 1280×720** — phần 1 là 5 trục hiệu ứng × 3 pose × (tắt + bật) = 27 ảnh; phần 2 là chất liệu nốt, trail (dựng thành mảng chiếu; thân nốt 0–0,735 độ sâu phím, trail tới ~1,22 nên vẫn trong khung) và 4 lớp ambient × 3 pose × (tắt + bật) = 36 ảnh; artifact `option-pose-n12d`. Đã phủ thêm **trục số** (N12(e), `--verify-option-numeric-only`): 9 trục slider × 3 giá trị × WPF/GPU‑WARP = **54 ảnh 960×540**, artifact `option-numeric-n12e`; mọi **cặp** giá trị trong một trục phải đổi ≥12 px trên **cả hai** renderer, nên một ngưỡng/kẹp ẩn (như lỗi kẹp `NoteWidth` ở 60% — xem `NOTE-EFFECTS-ACTION-PLAN.md` §3.2b) làm lượt chạy đỏ. Đã phủ thêm **round-trip preset** (N12(f), `--verify-preset-roundtrip-only`): 20 preset đang ship (14 built-in + 6 shelf) đi đúng đường lưu/mở của sản phẩm — cả 255 thuộc tính ghi được phải giữ nguyên (so bằng reflection, không có danh sách bỏ qua, lỗi nêu tên thuộc tính) cả ở bản đọc từ tệp lẫn bản dock áp vào, và khung hình phải trùng từng byte trên cả hai renderer (dung sai 0); artifact `preset-roundtrip-n12f`. Chưa phủ: các **giá trị khác** của nốt/ambient trong AR (mỗi trục một giá trị), các trục số **không** thuộc nhóm trên (amount/size của wisp, flame, physics: gravity/drag/field), smart modulator, theme graph, GPU phần cứng, duyệt mỹ thuật hay thay đổi mặc định. |
