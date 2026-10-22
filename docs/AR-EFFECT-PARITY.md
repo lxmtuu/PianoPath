@@ -90,10 +90,18 @@ thứ ba hỏi được một câu khác.
   khung của cột giống nhau và trang sẽ ghi "family này không tới AR" — đúng câu trả lời sai theo cách nguy hiểm nhất.
   Bảng counter là thứ duy nhất trong review viết tay, nên `scan_ar_effect_family_review` bắt nó phải khớp **đúng**
   danh sách family của contract.
+- **Cổng dấu chân:** counter khác 0 mới chỉ nói layer *phát* quad; nó không nói quad có nhìn thấy được. Vì vậy hàng
+  `toggle` — hàng duy nhất lấy cả family ra khỏi ảnh — phải đổi **≥ 12 px**. Cung ở pose nhìn thẳng đã phát đủ 10
+  segment và vẽ gần như không có gì; cổng này bắt được đúng trường hợp đó và báo là *cảnh* sai, thay vì ghi ba khung
+  gần giống nhau thành một kết quả.
 
 ### 4.4 Phạm vi
 
-Pose `ar-reference`, camera tổng hợp `ar-keyboard-topdown.png`, 1280×720, 30 fps, 12 khung, seed `20261021`, WARP.
+Pose **`ar-oblique`** (camera nghiêng 55°), camera tổng hợp `ar-keyboard-topdown.png`, 1280×720, 30 fps, 12 khung,
+seed `20261021`, WARP. Pose này không phải pose chuẩn của các review nốt (`ar-reference`) vì một lý do đo được: ở
+`ar-reference` camera nhìn thẳng xuống bàn phím, còn cung giữ phím là một dải **dựng đứng** — bật cung lên ở 70% rồi
+tắt hẳn chỉ đổi **18 px**. Đó là một sự thật về pose, không phải về thiết lập, và một cột đo ở pose đó không trả lời
+được câu hỏi của nó.
 Một giá trị mỗi thiết lập, một pose, một tier. **Không** phải duyệt mỹ thuật, không phủ mọi giá trị, không phải camera
 thật hay khung hình phần cứng.
 

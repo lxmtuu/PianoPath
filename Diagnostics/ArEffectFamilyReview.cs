@@ -58,8 +58,13 @@ internal static class ArEffectFamilyReview
     /// percentage at the top of its declared range.</summary>
     private const int Columns = 3;
     private const int TileWidth = Width, TileHeight = Height;
-    /// <summary>The pose every capture uses: the reference pose the other AR reviews are calibrated against.</summary>
-    private const string PoseId = "ar-reference";
+    /// <summary>
+    /// The pose every capture uses: the leaned one, not the reference pose the note reviews are calibrated against.
+    /// A held arc is a stand-up ribbon, and the reference pose looks at the keyboard from straight above: the first
+    /// run measured <em>eighteen</em> pixels between an arc at 70% and no arc at all, so the column could not say
+    /// anything about the setting. Height needs an angle to be visible.
+    /// </summary>
+    private const string PoseId = "ar-oblique";
     /// <summary>Two keys held for the whole run: two live bars, and one arc between the two active pitches.</summary>
     private static readonly int[] HeldKeys = [60, 64];
     private const int Frames = 12;
@@ -139,11 +144,19 @@ internal static class ArEffectFamilyReview
                     throw new InvalidDataException(
                         $"{contract.Id}: switching {shape.Toggle} off leaves the overlay repainting {off.Painted} pixels " +
                         "of the camera picture; the comparison would be between two nearly empty frames.");
+                // The family's own footprint, not just its quad count: a stand-up ribbon drawn edge-on emits its ten
+                // segments and paints almost nothing, which no counter can tell you. If taking the family away does
+                // not move the picture, this column cannot answer its question and must say so instead of recording
+                // three near-identical frames as a result.
+                var footprint = OptionMatrixPlan.ChangedPixels(off.Pixels!, rest.Pixels!);
+                if (footprint < MinimumChangedPixels)
+                    throw new InvalidDataException(
+                        $"{contract.Id}: drawing the family changes {footprint} pixels (floor {MinimumChangedPixels}) at " +
+                        $"the pose '{PoseId}', so this column would measure a family the camera cannot see.");
                 shots.Add(off);
                 sheet.Blit(column * Columns + 1, captions[column * Columns + 1], off.Pixels!, Width, Height, premultiplied: false);
                 cells.Add(new Cell(contract.Id, shape.Toggle, "toggle", shape.ToggleValue, off.File, off.PixelSha256,
-                    OptionMatrixPlan.ChangedPixels(off.Pixels!, rest.Pixels!), off.Lit, off.Painted, off.Quads,
-                    Read(OptionMatrixPlan.ChangedPixels(off.Pixels!, rest.Pixels!)),
+                    footprint, off.Lit, off.Painted, off.Quads, Read(footprint),
                     "The switch turned off; every other frame of this column has the family on."));
 
                 // The percentage at the top of its declared range: the largest difference the setting can make
