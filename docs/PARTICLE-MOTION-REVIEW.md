@@ -237,7 +237,7 @@ px/s²). Cả `GpuStageSimulation` (wisp + lửa) và `PianoStage` (hai danh sá
 CPU nên đi theo miễn phí. Nó nằm sau slider **Coherent flow** (`ParticleFlow`, 0–100) **mặc định 0**: ở 0 hai
 integrator chạy đúng số học cũ, nên `wisps-v3`/`flames-v3` không đổi một byte và lượt CI vẫn xanh. Bật lên là look
 mới; lật **mặc định** mới là lần re-baseline — và đó là việc phải chạy trên máy có GPU/WPF thật, vì pipeline bằng
-chứng so hash với bản đã chấp nhận và không cho phép tự nhận bản mới (`review_flames_v3.retained`). Bản vào sản phẩm xanh ở [run 39799609388](https://github.com/lxmtuu/PianoPath/actions/runs/39799609388): `static`, `test`, `keyboard-light`, `build` đều qua, và bước `Validate and stage Flames v3` vẫn khớp đúng hash wisps/flames đã chấp nhận — mặc định 0 không đổi một pixel.
+chứng so hash với bản đã chấp nhận và không cho phép tự nhận bản mới (`review_flames_v3.retained`). Bản cuối (kèm cổng offset lúc vẽ) xanh ở [run 39810134854](https://github.com/lxmtuu/PianoPath/actions/runs/39810134854): `static`, `test`, `keyboard-light`, `build` đều qua; bước `Validate and stage paired Wisps v3 candidate` và `Validate and stage Flames v3 candidate` vẫn khớp đúng hash đã chấp nhận — mặc định 0 không đổi một pixel.
 
 **Offset lúc vẽ phải đứng xuống khi flow bật.** W1 chuyển cái lượn vào **vận tốc**, nên nếu renderer vẫn cộng
 `WispMotion.Offset` khi vẽ thì dòng vừa được làm liền lại bị tán ra lần thứ hai — và tệ hơn, AR (vốn đọc vị trí
