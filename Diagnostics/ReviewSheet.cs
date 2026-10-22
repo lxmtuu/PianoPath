@@ -139,6 +139,24 @@ internal static class ReviewSheet
     }
 
     /// <summary>
+    /// The one size every caption on a sheet is drawn at: two when the longest of them fits its strip with a
+    /// character of room on both sides, one otherwise. A sheet that mixed the two looked like a mistake — a
+    /// twelve-character caption came out twice the height of the twenty-seven-character one beside it — so the
+    /// size belongs to the page, not to the cell. The slack is there because a caption that fills its strip edge
+    /// to edge reads as if it were cut, which is the one thing a caption may not look like.
+    /// </summary>
+    internal static int CaptionScaleFor(IEnumerable<string> captions, int tileWidth)
+    {
+        var available = tileWidth - 2 * CaptionPadding - 2 * GlyphAdvance;
+        foreach (var caption in captions)
+            if (TextWidth(caption, 2) > available) return 1;
+        return 2;
+    }
+
+    /// <summary>Space between a caption and the edge of its strip, in pixels.</summary>
+    private const int CaptionPadding = 4;
+
+    /// <summary>
     /// One sheet being drawn. Cells are filled by index, row by row and left to right, so a review can post each
     /// picture as it captures it and never has to hold a whole run of frames to make one grid.
     /// </summary>
@@ -147,16 +165,20 @@ internal static class ReviewSheet
         private readonly byte[] _pixels;
         private readonly bool[] _filled;
         private readonly string _title;
+        private readonly int _captionScale;
 
-        internal Canvas(int count, int tileWidth, int tileHeight, int columns, string title)
+        internal Canvas(int count, int tileWidth, int tileHeight, int columns, string title, int captionScale = 2)
         {
+            if (captionScale is not (1 or 2))
+                throw new ArgumentOutOfRangeException(nameof(captionScale), captionScale, "A caption is drawn at one or two.");
+            _captionScale = captionScale;
             Sheet = Measure(count, tileWidth, tileHeight, columns);
             _pixels = new byte[Sheet.Width * Sheet.Height * 4];
             _filled = new bool[count];
             _title = title ?? string.Empty;
             Fill(_pixels, Sheet.Width, 0, 0, Sheet.Width, Sheet.Height, Page);
             if (_title.Length == 0) return;
-            var scale = ScaleFor(_title, Sheet.Width - 2 * Padding);
+            var scale = Math.Min(2, Math.Max(1, (Sheet.Width - 2 * Padding + 1) / Math.Max(1, TextWidth(_title, 1))));
             DrawText(_pixels, Sheet.Width, Padding, Padding + (TitleHeight - GlyphHeight * scale) / 2,
                 _title, scale, Sheet.Width - Padding, Heading);
         }
@@ -201,11 +223,18 @@ internal static class ReviewSheet
             Fill(_pixels, Sheet.Width, x + Border, captionY, Sheet.TileWidth, CaptionHeight, Cell);
             if (caption.Length > 0)
             {
-                var scale = ScaleFor(caption, Sheet.TileWidth - 8);
-                // Clipped to the strip, not to the page: an over-long caption must stop at its own cell instead
-                // of running across the frame and into the picture beside it.
-                DrawText(_pixels, Sheet.Width, x + Border + 4, captionY + (CaptionHeight - GlyphHeight * scale) / 2,
-                    caption, scale, x + Border + Sheet.TileWidth, Ink);
+                // Every caption on a sheet is drawn at the size the page chose, and one that does not fit is a
+                // refusal rather than a clip: a caption cut mid-word reads as a different value ("CONFETTI RA"),
+                // and the page is the only copy of these pictures that outlives the run.
+                var available = Sheet.TileWidth - 2 * CaptionPadding;
+                if (TextWidth(caption, _captionScale) > available)
+                    throw new InvalidDataException(
+                        $"The caption '{caption}' needs {TextWidth(caption, _captionScale)} pixels but cell {index} of " +
+                        $"the sheet '{_title}' gives it {available} at scale {_captionScale}; widen the cell or shorten " +
+                        "the caption instead of cutting it.");
+                DrawText(_pixels, Sheet.Width, x + Border + CaptionPadding,
+                    captionY + (CaptionHeight - GlyphHeight * _captionScale) / 2,
+                    caption, _captionScale, x + Border + Sheet.TileWidth - CaptionPadding, Ink);
             }
             // Only now is the cell done: an empty caption draws nothing but the picture still landed, and a cell
             // that returned early here would look to Finish exactly like one that was never drawn.
@@ -333,12 +362,6 @@ internal static class ReviewSheet
     /// <summary>The width a line takes at a scale; the last character is not followed by its gap.</summary>
     private static int TextWidth(string text, int scale) =>
         text.Length == 0 ? 0 : text.Length * GlyphAdvance * scale - scale;
-
-    /// <summary>
-    /// The size a caption is drawn at: two when it fits, one when it does not. A long caption shrinks to fit its
-    /// own strip instead of running into the cell beside it.
-    /// </summary>
-    private static int ScaleFor(string text, int available) => TextWidth(text, 2) <= available ? 2 : 1;
 
     /// <summary>One character's rows, or the fallback, so a caption never loses a letter without saying so.</summary>
     private static string[]? Glyph(char character)

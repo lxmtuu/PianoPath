@@ -164,9 +164,8 @@ public class ReviewSheetTests
     [Fact]
     public void A_caption_stays_in_the_strip_under_its_own_picture()
     {
-        var sheet = new ReviewSheet.Canvas(2, TileWidth, TileHeight, 2, "N12");
-        sheet.Blit(0, "A CAPTION FAR TOO LONG FOR A FORTY PIXEL STRIP", Solid(TileWidth, TileHeight, 40, 40, 40),
-            TileWidth, TileHeight, premultiplied: false);
+        var sheet = new ReviewSheet.Canvas(2, TileWidth, TileHeight, 2, "N12", captionScale: 1);
+        sheet.Blit(0, "GEM", Solid(TileWidth, TileHeight, 40, 40, 40), TileWidth, TileHeight, premultiplied: false);
         sheet.Blit(1, string.Empty, Solid(TileWidth, TileHeight, 40, 40, 40), TileWidth, TileHeight,
             premultiplied: false);
 
@@ -188,6 +187,47 @@ public class ReviewSheetTests
         Assert.True(ink > 0, "the caption drew nothing at all");
         // The picture above the strip is untouched: clipping is the strip's job, not the picture's.
         Assert.Equal((40, 40, 40, 255), At(pixels, width, cellRight - 1, stripTop - 1));
+    }
+
+    [Fact]
+    public void A_caption_that_does_not_fit_is_refused_instead_of_being_cut()
+    {
+        // Cutting mid-word is how "AMBIENT-ENERGY CONFETTI RAIN" became "CONFETTI RA" on a committed page: the
+        // reader cannot tell a shortened value from a different one.
+        var sheet = new ReviewSheet.Canvas(1, TileWidth, TileHeight, 1, string.Empty, captionScale: 1);
+
+        var tooLong = Assert.Throws<System.IO.InvalidDataException>(() =>
+            sheet.Blit(0, "A CAPTION FAR TOO LONG FOR A FORTY PIXEL STRIP", Solid(TileWidth, TileHeight, 0, 0, 0),
+                TileWidth, TileHeight, false));
+        Assert.Contains("instead of cutting it", tooLong.Message);
+    }
+
+    [Fact]
+    public void Every_caption_on_a_sheet_is_the_same_size()
+    {
+        // The page picked by CaptionScaleFor, not the cell: a twelve-character caption beside a
+        // twenty-seven-character one used to come out at twice the height.
+        var captions = new[] { "GEM", "AMBIENT-LIGHT GRADIENT WAVE" };
+        Assert.Equal(1, ReviewSheet.CaptionScaleFor(captions, 176));
+        Assert.Equal(2, ReviewSheet.CaptionScaleFor(new[] { "GEM", "RIBBON" }, 176));
+
+        var sheet = new ReviewSheet.Canvas(2, 176, TileHeight, 2, string.Empty,
+            ReviewSheet.CaptionScaleFor(captions, 176));
+        sheet.Blit(0, captions[0], Solid(176, TileHeight, 0, 0, 0), 176, TileHeight, false);
+        sheet.Blit(1, captions[1], Solid(176, TileHeight, 0, 0, 0), 176, TileHeight, false);
+
+        var pixels = sheet.Finish();
+        var width = sheet.Sheet.Width;
+        var inkRows = new List<(int Column, int Row)>();
+        for (var y = 0; y < sheet.Sheet.Height; y++)
+        for (var x = 0; x < width; x++)
+            if (At(pixels, width, x, y) == (0xE6, 0xD6, 0xC9, 255))
+                inkRows.Add((x < ReviewSheet.Padding + 178 ? 0 : 1, y));
+        foreach (var column in inkRows.GroupBy(entry => entry.Column))
+        {
+            var rows = column.Select(entry => entry.Row).Distinct().Count();
+            Assert.Equal(7, rows);
+        }
     }
 
     [Fact]
@@ -247,7 +287,7 @@ public class ReviewSheetTests
     {
         static byte[] Compose()
         {
-            var sheet = new ReviewSheet.Canvas(3, TileWidth, TileHeight, 2, "N12(D) FRONT");
+            var sheet = new ReviewSheet.Canvas(3, TileWidth, TileHeight, 2, "N12(D) FRONT", captionScale: 1);
             for (var index = 0; index < 3; index++)
                 sheet.Blit(index, $"CELL {index}", Solid(TileWidth * 2, TileHeight * 2, (byte)(index * 40), 12, 200),
                     TileWidth * 2, TileHeight * 2, premultiplied: false);

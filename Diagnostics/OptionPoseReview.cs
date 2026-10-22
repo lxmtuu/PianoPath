@@ -42,6 +42,13 @@ internal static class OptionPoseReview
     /// <summary>One pose fills one sheet: four pictures to a row, a quarter of the capture size each.</summary>
     private const int SheetTileWidth = Width / 4, SheetTileHeight = Height / 4, SheetColumns = 4;
 
+    /// <summary>Every caption one pose's sheet writes, off states first within their family.</summary>
+    private static IEnumerable<string> Captions() =>
+        new[] { OptionMatrixPlan.PoseSelections, OptionMatrixPlan.PoseSliceSelections }
+            .SelectMany(rows => rows.GroupBy(row => row.Family)
+                .SelectMany(group => new[] { $"{group.Key} off" }
+                    .Concat(group.Select(row => $"{group.Key} {row.Value}"))));
+
     private sealed record Counters(int Sprites, int ArParticles);
 
     private sealed record Shot(int Part, string Pose, string Family, string Setting, string Value, bool Neutral,
@@ -88,7 +95,7 @@ internal static class OptionPoseReview
             {
                 // One pose fills one sheet: every picture it writes, off and on, in plan order.
                 var sheet = new ReviewSheet.Canvas(ExpectedCaptures / poses.Length, SheetTileWidth, SheetTileHeight,
-                    SheetColumns, $"N12(D) {pose.Id}");
+                    SheetColumns, $"N12(D) {pose.Id}", ReviewSheet.CaptionScaleFor(Captions(), SheetTileWidth));
                 var cell = 0;
                 foreach (var (part, selections) in parts)
                 // One off state per family: the morph axis is shot twice at the same pose (its particle channel and

@@ -43,6 +43,10 @@ internal static class PresetRoundTripReview
     private const int ExpectedPresets = 20;
     /// <summary>The whole review on one page: four pictures to a row, a quarter of the capture size each.</summary>
     private const int SheetTileWidth = Width / 4, SheetTileHeight = Height / 4, SheetColumns = 4;
+
+    /// <summary>Every caption the page writes: one preset and one renderer per picture.</summary>
+    private static IEnumerable<string> Captions(IReadOnlyList<Case> cases) =>
+        cases.SelectMany(item => new[] { $"{item.Name} WPF", $"{item.Name} GPU-WARP" });
     /// <summary>The note-and-ambient scene: the one moment nearly every look differs at (material, trail, keys,
     /// background, ambient), and the slowest is 90 frames — acceptable for 20 presets on two renderers.</summary>
     private const OptionMatrixPlan.Scene Scene = OptionMatrixPlan.Scene.Falling;
@@ -82,7 +86,7 @@ internal static class PresetRoundTripReview
             // One page for the whole review: the player's look, before and after the round trip, on both
             // renderers. The 40 native captures stay in the artifact; this page is what gets committed.
             var sheet = new ReviewSheet.Canvas(cases.Count * 2, SheetTileWidth, SheetTileHeight, SheetColumns,
-                "N12(F) PRESET ROUND TRIP");
+                "N12(F) PRESET ROUND TRIP", ReviewSheet.CaptionScaleFor(Captions(cases), SheetTileWidth));
             var cell = 0;
             foreach (var item in cases)
             {

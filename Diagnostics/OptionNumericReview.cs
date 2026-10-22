@@ -40,6 +40,11 @@ internal static class OptionNumericReview
     /// <summary>The whole review on one page: six pictures to a row, a quarter of the capture size each.</summary>
     private const int SheetTileWidth = Width / 4, SheetTileHeight = Height / 4, SheetColumns = 6;
 
+    /// <summary>Every caption the page writes: one axis, one value and one renderer per picture.</summary>
+    private static IEnumerable<string> Captions() =>
+        OptionNumericPlan.Axes.SelectMany(axis => axis.Values.SelectMany(value => RendererIds
+            .Select(renderer => $"{axis.Id} {OptionNumericPlan.Label(value)} {renderer}")));
+
     private sealed record Shot(string Axis, string Setting, double Value, string Renderer, string File,
         string PixelSha256, double SampleSeconds, int Frames, int Sprites, int Notes)
     {
@@ -85,7 +90,7 @@ internal static class OptionNumericReview
             // One page for the whole review: a reviewer sees every axis against every other at once, and the page
             // is small enough to commit, which the 54 native captures are not.
             var sheet = new ReviewSheet.Canvas(expected, SheetTileWidth, SheetTileHeight, SheetColumns,
-                "N12(E) NUMERIC AXES");
+                "N12(E) NUMERIC AXES", ReviewSheet.CaptionScaleFor(Captions(), SheetTileWidth));
             var cell = 0;
             foreach (var axis in OptionNumericPlan.Axes)
             {

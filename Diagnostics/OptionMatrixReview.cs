@@ -45,8 +45,19 @@ internal static class OptionMatrixReview
     private const int MinimumChangedPixels = 12;
     /// <summary>Frames and captures the plan asks for: 62 values plus 11 scenes that keep their off baseline.</summary>
     private const int ExpectedScenes = 64, ExpectedCaptures = ExpectedScenes * 2;
-    /// <summary>One sheet per renderer, eight pictures to a row, a sixth of the capture size each.</summary>
-    private const int SheetTileWidth = Width / 6, SheetTileHeight = Height / 6, SheetColumns = 8;
+    /// <summary>One sheet per renderer, eight pictures to a row, a sixth of the capture height each.</summary>
+    private const int SheetColumns = 8, SheetTileHeight = Height / 6;
+    /// <summary>
+    /// Wide enough for the longest caption the matrix writes — "ambient-light Gradient Wave", 27 characters at
+    /// six pixels each — because a caption is never cut: it is either drawn whole or the run stops.
+    /// </summary>
+    private const int SheetTileWidth = 176;
+
+    /// <summary>Every caption this review writes, in plan order, without the renderer suffix.</summary>
+    private static IEnumerable<string> Captions() =>
+        OptionMatrixPlan.Families.SelectMany(family =>
+            new[] { $"{family.Id} {(family.Gate is null ? family.Neutral : "off")}" }
+                .Concat(OptionMatrixPlan.CapturedValues(family).Select(value => $"{family.Id} {value}")));
 
     internal sealed record GpuCounters(int Sprites, int Ambient, int NoteTrails, int Notes, int Keys);
 
@@ -95,9 +106,10 @@ internal static class OptionMatrixReview
             var baselines = new Dictionary<(OptionMatrixPlan.Scene Scene, string Renderer, string Family), (string Hash, int Lit)>();
             // Two pages for the whole review, one per renderer: a reviewer can see at a glance whether a value
             // draws at all, without the 128 native captures that only live in the artifact.
+            var captionScale = ReviewSheet.CaptionScaleFor(Captions(), SheetTileWidth);
             var sheets = RendererIds.ToDictionary(id => id,
                 id => new ReviewSheet.Canvas(ExpectedScenes, SheetTileWidth, SheetTileHeight, SheetColumns,
-                    $"N12(B) {id}"));
+                    $"N12(B) {id}", captionScale));
             var cells = RendererIds.ToDictionary(id => id, _ => 0);
 
             foreach (var family in OptionMatrixPlan.Families)

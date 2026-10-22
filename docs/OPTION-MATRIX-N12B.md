@@ -343,8 +343,8 @@ trong `docs/`. Mục này đóng đúng khoảng đó, và chỉ đóng nó: **b
 
 | Tệp trong `docs/evidence/n12-sheets/` | Nội dung | Lưới | Kích thước |
 |---|---|---|---|
-| `matrix-wpf.png` | cả 64 khung của N12(b) trên sân khấu phần mềm | 8×8 ô 160×90 | 1390×1018 |
-| `matrix-gpu-warp.png` | chính 64 khung đó trên D3D/WARP | 8×8 ô 160×90 | 1390×1018 |
+| `matrix-wpf.png` | cả 64 khung của N12(b) trên sân khấu phần mềm | 8×8 ô 176×90 | 1518×1018 |
+| `matrix-gpu-warp.png` | chính 64 khung đó trên D3D/WARP | 8×8 ô 176×90 | 1518×1018 |
 | `numeric.png` | 54 khung của N12(e): chín trục, mỗi hàng một trục, cặp WPF ↔ GPU cạnh nhau | 6×9 ô 240×135 | 1526×1545 |
 | `preset.png` | 40 khung của N12(f): hai mươi preset, mỗi preset một cặp renderer | 4×10 ô 240×135 | 1022×1712 |
 | `pose-front.png`, `pose-left.png`, `pose-right.png` | 21 khung của một pose AR: phần 1 rồi phần 2, mỗi family một khung tắt rồi khung bật | 4×6 ô 320×180 | 1342×1314 |
@@ -353,8 +353,11 @@ trong `docs/`. Mục này đóng đúng khoảng đó, và chỉ đóng nó: **b
 nhãn bằng một font bitmap 5×7 viết trong mã, và ghép theo phép tính thuần trên mảng byte — không WPF, không
 font hệ thống, không thiết bị đồ hoạ. Vì vậy `tests/PianoPath.Tests/ReviewSheetTests.cs` chạy được trên Linux
 và ghim: kích thước lưới, phép thu nhỏ, hai định dạng alpha, tính tất định, và việc một ô chưa vẽ thì sheet
-**không** được trả ra. Hai chỗ dễ sai đã có test riêng: một ô trong suốt không được để lộ màu RGB chưa nhân
-alpha, và nhãn dài không được tràn sang ô bên cạnh.
+**không** được trả ra. Bốn chỗ dễ sai đã có test riêng: một ô trong suốt không được để lộ màu RGB chưa nhân
+alpha; **một tờ dùng đúng một cỡ chữ** (bản đầu để mỗi nhãn tự chọn cỡ, nên "RELEASE FADE" cao gấp đôi nhãn
+bên cạnh); **nhãn không bao giờ bị cắt** — nhãn không vừa ô là lỗi, vì bản đầu cắt "AMBIENT-ENERGY CONFETTI
+RAIN" thành "CONFETTI RA" trên tờ đã commit, và người đọc không phân biệt được giá trị bị rút gọn với một giá
+trị khác; và nhãn không tràn sang ô bên cạnh.
 
 **Vì sao commit được.** Cùng một input cho ra đúng từng byte, nên CI commit tờ ảnh giống như commit preview.
 Bước `Stage the N12 contact sheets` (ngay sau suite, lúc ảnh còn trong thư mục review) chép bảy tệp vào
