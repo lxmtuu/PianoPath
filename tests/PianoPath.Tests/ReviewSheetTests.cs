@@ -222,6 +222,27 @@ public class ReviewSheetTests
     }
 
     [Fact]
+    public void Every_glyph_the_captions_use_draws_ink()
+    {
+        // The font is built the first time the class is touched and refuses a glyph that is not seven rows of
+        // five cells, which is how a separator typo failed loudly once already. This walks the characters a
+        // caption can hold so a glyph that is the right shape but blank is named here rather than noticed on a
+        // committed page.
+        foreach (var character in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-=./:()+,_#?")
+        {
+            var sheet = new ReviewSheet.Canvas(1, TileWidth, TileHeight, 1, string.Empty);
+            sheet.Blit(0, character.ToString(), Solid(TileWidth, TileHeight, 0, 0, 0), TileWidth, TileHeight,
+                premultiplied: false);
+            var pixels = sheet.Finish();
+            var ink = 0;
+            for (var y = 0; y < sheet.Sheet.Height; y++)
+            for (var x = 0; x < sheet.Sheet.Width; x++)
+                if (At(pixels, sheet.Sheet.Width, x, y) == (0xE6, 0xD6, 0xC9, 255)) ink++;
+            Assert.True(ink > 0, $"the glyph '{character}' drew nothing");
+        }
+    }
+
+    [Fact]
     public void The_same_tiles_always_compose_to_the_same_bytes()
     {
         static byte[] Compose()

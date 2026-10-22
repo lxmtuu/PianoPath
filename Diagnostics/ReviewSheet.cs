@@ -51,7 +51,8 @@ internal static class ReviewSheet
     private const int GlyphAdvance = GlyphWidth + 1;
 
     /// <summary>
-    /// A five-by-seven bitmap font, written as the picture it is: seven rows of five cells, '#' for ink.
+    /// A five-by-seven bitmap font, written as the picture it is: one string per glyph, seven rows of five cells
+    /// separated by '|', '#' for ink.
     ///
     /// <para>
     /// The captions are drawn from this rather than from a system font because a contact sheet that CI commits
@@ -337,7 +338,7 @@ internal static class ReviewSheet
         var font = new Dictionary<char, string[]>(Patterns.Length);
         foreach (var (key, pattern) in Patterns)
         {
-            var rows = pattern.Split('/');
+            var rows = pattern.Split('|');
             if (rows.Length != GlyphHeight || Array.Exists(rows, row => row.Length != GlyphWidth))
                 throw new InvalidOperationException(
                     $"The bitmap glyph '{key}' is not {GlyphHeight} rows of {GlyphWidth} cells.");
