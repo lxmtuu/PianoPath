@@ -43,6 +43,11 @@ Vì sao "dưới ngưỡng" chứ không "đúng 0": khung AR là ảnh ghép tr
 không tới được chất liệu*, không phải hai lần render cùng cảnh giống nhau tuyệt đối. Con số thật vẫn được ghi vào
 manifest từng ô, và ở N8 — nơi đo trên đường phẳng — cùng loại bằng chứng đã ra đúng **0 px**.
 
+**Chốt chặn chống "xanh vì không có gì để đổi":** khung AR là ảnh ghép trên camera, nên đếm pixel "không đen" luôn
+ra toàn ảnh (921 600 px) và chẳng chứng minh gì. Thứ đáng đếm là phần **lớp phủ vẽ đè lên camera**. Vì vậy *mọi* khung
+AR — kể cả khung "default" — phải tô đè ít nhất **500 px**; nếu quad biến mất hoặc mờ đi, mọi thiết lập sẽ ra 0 px và
+các ô "Ignored" sẽ đạt một cách vô nghĩa. Review ném lỗi ngay ở khung vi phạm, trước khi con số của nó được tin.
+
 Nói cách khác: nếu shader bắt đầu đọc một thứ mà contract nói nó không đọc, hoặc ngừng đọc một thứ contract nói
 nó đọc, lượt chạy đỏ và gọi tên ô đó. Đây là lý do review đọc `Bindings.GpuStage` thay vì so tên chất liệu — và
 `scan_ar_material_review` cấm review viết tên chất liệu vào mã.
@@ -55,7 +60,7 @@ người xem thấy; nó được ghi vào manifest kèm nhãn `Recorded` để 
 
 - Ảnh native: `<thư mục review>/ar-material/<chất liệu>/<thiết lập>-<giá trị>.png` (21 tệp, chỉ trong artifact).
 - Tờ ảnh: `<thư mục review>/ar-material/sheet.png` → commit thành `docs/evidence/ar-material-sheets/material.png`.
-- `manifest.json` ghi từng ô: `ArChanged`, `WpfChanged`, `GpuChanged`, `Claim` (`Applied`/`Ignored`/`Recorded`) và ghi chú.
+- `manifest.json` ghi từng ô: `ArChanged`, `WpfChanged`, `GpuChanged`, `ArLit`, `ArPainted` (phần lớp phủ vẽ đè camera), `Claim` (`Applied`/`Ignored`/`Recorded`) và ghi chú.
 - `index.html` là bảng đọc nhanh trong artifact.
 - Log có đúng một dòng `PASS AR note-material review (N16): 18 …`.
 

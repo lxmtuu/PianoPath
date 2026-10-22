@@ -41,6 +41,13 @@ internal static class ArMaterialReview
     private static readonly IReadOnlySet<int> NoPressed = new HashSet<int>();
     /// <summary>The same floor the other matrices use: more than a stray pixel is "the material changed".</summary>
     private const int MinimumChangedPixels = 12;
+    /// <summary>
+    /// How much of the camera picture the overlay has to repaint for a capture to mean anything. An AR frame is
+    /// composited over the camera, so "lit pixels" is the whole picture and proves nothing; the painting is what
+    /// the quad adds. If the quad went missing, every setting would move zero pixels and every Ignored expectation
+    /// would pass for the wrong reason, so each capture is checked before its number is believed.
+    /// </summary>
+    private const int MinimumOverlayPixels = 500;
     /// <summary>One column per piloted material, one row per setting; the first row is each material at rest.</summary>
     private const int Columns = 3;
     /// <summary>A cell is the capture's own size: a downscaled tile averages away the twelve-pixel differences this
@@ -61,12 +68,15 @@ internal static class ArMaterialReview
         internal required string File { get; init; }
         internal required string PixelSha256 { get; init; }
         internal required int Lit { get; init; }
+        /// <summary>Pixels the overlay repainted over the camera picture — the only measure that the quad drew.</summary>
+        internal required int Painted { get; init; }
         /// <summary>Held only while the pair is compared; dropped before the manifest is written.</summary>
         internal byte[]? Pixels { get; set; }
     }
 
     private sealed record Cell(string Material, string Parameter, bool Listed, double Value, string File,
-        string PixelSha256, int ArChanged, int WpfChanged, int GpuChanged, int ArLit, string Claim, string Note);
+        string PixelSha256, int ArChanged, int WpfChanged, int GpuChanged, int ArLit, int ArPainted,
+        string Claim, string Note);
 
     internal static int Render(string output)
     {
@@ -97,16 +107,17 @@ internal static class ArMaterialReview
             var sheet = new ReviewSheet.Canvas(styles.Length * rows, TileWidth, TileHeight, Columns,
                 "N16 AR MATERIAL", ReviewSheet.CaptionScaleFor(captions, TileWidth));
 
-            var arMeasurements = new List<(string Style, string Parameter, double Value, string File, string Sha, int Changed, int Lit, PianoVisualSettings Settings, PianoVisualSettings Resting)>();
+            var arMeasurements = new List<(string Style, string Parameter, double Value, string File, string Sha, int Changed, int Lit, int Painted, PianoVisualSettings Settings, PianoVisualSettings Resting)>();
             var shots = new List<Shot>(styles.Length * rows);
             for (var column = 0; column < styles.Length; column++)
             {
                 var style = styles[column];
                 var atRest = Settings(style, null, 0);
                 var rest = CaptureAr(root, renderer, pose, camera, atRest, style, "default");
-                if (rest.Lit < Width * Height / 50)
+                if (rest.Painted < MinimumOverlayPixels)
                     throw new InvalidDataException(
-                        $"{style} at rest lights {rest.Lit} pixels in AR; a picture this empty cannot show that a setting moved anything.");
+                        $"{style} at rest repaints {rest.Painted} pixels of the camera picture in AR; a picture this " +
+                        "empty cannot show that a setting moved anything.");
                 shots.Add(rest);
                 sheet.Blit(column, $"{style} default", rest.Pixels!, Width, Height, premultiplied: false);
 
@@ -116,11 +127,17 @@ internal static class ArMaterialReview
                     var (value, label) = Variants(pilot, style, parameter);
                     var settings = Settings(style, parameter, value);
                     var variant = CaptureAr(root, renderer, pose, camera, settings, style, $"{parameter}-{label}");
+                    if (variant.Painted < MinimumOverlayPixels)
+                        throw new InvalidDataException(
+                            $"{style}: {parameter} = {value} leaves the overlay repainting {variant.Painted} pixels of " +
+                            "the camera picture; with the quad this faint its zero-pixel expectations would pass for " +
+                            "the wrong reason.");
                     shots.Add(variant);
                     sheet.Blit((row + 1) * Columns + column, $"{style} {parameter} {label}", variant.Pixels!, Width, Height,
                         premultiplied: false);
                     arMeasurements.Add((style, parameter, value, variant.File, variant.PixelSha256,
-                        OptionMatrixPlan.ChangedPixels(variant.Pixels!, rest.Pixels!), variant.Lit, settings, atRest));
+                        OptionMatrixPlan.ChangedPixels(variant.Pixels!, rest.Pixels!), variant.Lit, variant.Painted,
+                        settings, atRest));
                     variant.Pixels = null;
                 }
                 rest.Pixels = null;
@@ -132,7 +149,7 @@ internal static class ArMaterialReview
             var restWpf = new Dictionary<string, byte[]>(StringComparer.Ordinal);
             var restGpu = new Dictionary<string, byte[]>(StringComparer.Ordinal);
             var cells = new List<Cell>(arMeasurements.Count);
-            foreach (var (style, parameter, value, file, sha, changed, lit, settings, atRest) in arMeasurements)
+            foreach (var (style, parameter, value, file, sha, changed, lit, painted, settings, atRest) in arMeasurements)
             {
                 if (!restWpf.ContainsKey(style))
                 {
@@ -145,7 +162,7 @@ internal static class ArMaterialReview
                     OptionMatrixReview.CaptureGpu(renderer, OptionMatrixPlan.Scene.Falling, settings).Pixels, restGpu[style]);
                 var contract = pilot.Single(candidate => candidate.LegacyAliases[0] == style);
                 var (claim, note, listed) = Judge(contract, parameter, changed, wpf, gpu);
-                cells.Add(new Cell(style, parameter, listed, value, file, sha, changed, wpf, gpu, lit, claim, note));
+                cells.Add(new Cell(style, parameter, listed, value, file, sha, changed, wpf, gpu, lit, painted, claim, note));
             }
 
             var finished = sheet.Finish();
@@ -172,7 +189,11 @@ internal static class ArMaterialReview
                 $"AR returned {pixels.Length} bytes for {style}/{label}; expected {Width}×{Height} BGRA pixels.");
         var relative = Path.Combine("ar-material", OptionMatrixPlan.Slug(style), $"{label}.png");
         var sha = ReviewPng.Write(Path.Combine(root, relative), pixels, Width, Height, $"{style}/{label} in AR");
-        return new Shot { File = relative.Replace('\\', '/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels), Pixels = pixels };
+        return new Shot
+        {
+            File = relative.Replace('\\', '/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels),
+            Painted = OptionMatrixPlan.ChangedPixels(pixels, camera), Pixels = pixels
+        };
     }
 
     /// <summary>One frame of the AR overlay: the calibrated pose, the shipped note scene and the material's look.</summary>
@@ -367,7 +388,8 @@ internal static class ArMaterialReview
             cells = cells.Select(cell => new
             {
                 cell.Material, cell.Parameter, cell.Listed, Value = Math.Round(cell.Value, 3), cell.File,
-                cell.PixelSha256, cell.ArChanged, cell.WpfChanged, cell.GpuChanged, cell.ArLit, cell.Claim, cell.Note
+                cell.PixelSha256, cell.ArChanged, cell.WpfChanged, cell.GpuChanged, cell.ArLit, cell.ArPainted,
+                cell.Claim, cell.Note
             })
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
