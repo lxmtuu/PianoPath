@@ -356,10 +356,12 @@ và ghim: kích thước lưới, phép thu nhỏ, hai định dạng alpha, tí
 **không** được trả ra. Hai chỗ dễ sai đã có test riêng: một ô trong suốt không được để lộ màu RGB chưa nhân
 alpha, và nhãn dài không được tràn sang ô bên cạnh.
 
-**Vì sao commit được.** Cùng một input cho ra đúng từng byte, nên CI commit tờ ảnh giống như commit preview:
-bước `Save the N12 contact sheets` chép bảy tệp từ thư mục review vào `docs/evidence/n12-sheets`, commit
-`[skip ci]`, và dùng đúng quy tắc push của các bước evidence khác — nhánh đã dịch chuyển trong lúc render thì
-giữ bản của tip mới hơn thay vì rebase đè. Mỗi review còn **từ chối** một tờ ảnh thiếu khung
+**Vì sao commit được.** Cùng một input cho ra đúng từng byte, nên CI commit tờ ảnh giống như commit preview.
+Bước `Stage the N12 contact sheets` (ngay sau suite, lúc ảnh còn trong thư mục review) chép bảy tệp vào
+`docs/evidence/n12-sheets`; bước `Commit refreshed previews` có sẵn — bước duy nhất trong job này được phép
+push — nhận thêm thư mục đó vào `git add` và commit chung. Một lần push, một quy tắc: nhánh đã dịch chuyển
+trong lúc render thì giữ bản của tip mới hơn. Hai bước commit riêng trong cùng một job sẽ tranh nhau tip và
+quy tắc đó sẽ bỏ qua một trong hai mỗi lượt — đó là lý do gộp. Mỗi review còn **từ chối** một tờ ảnh thiếu khung
 (`sheet.Tiles != <số capture>`), vì một ô trống trên tờ đọc ra đúng như "option này không vẽ gì" — kết luận mà
 review sinh ra để báo.
 

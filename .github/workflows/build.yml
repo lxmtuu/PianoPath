@@ -443,12 +443,14 @@ jobs:
       # enough to belong in Git: the 285 native captures stay in the run's artifacts, which are published on main
       # and not on a working branch. Copying the seven sheets into docs/evidence is what turns "the job was green"
       # into "here is what it drew, on this commit, for anyone who opens the repository".
-      - name: Save the N12 contact sheets
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')
+      #
+      # Staged here (just after the suite that wrote them) and committed by "Commit refreshed previews" further
+      # down, together with the previews, on purpose: a second commit step in this job would race the first one
+      # for the branch tip, and the tip rule those steps share ("a branch that moved keeps its own evidence")
+      # would then skip one of the two every time. One push, one rule, both sets of pictures.
+      - name: Stage the N12 contact sheets
         shell: bash
         run: |
-          git config user.name 'keyflow previews'
-          git config user.email 'actions@users.noreply.github.com'
           review="$RUNNER_TEMP/phase1-visual-review"
           # Every copy is required: a sheet the suite did not write is a finding, not something to skip past.
           out=docs/evidence/n12-sheets
@@ -462,25 +464,6 @@ jobs:
             cp -- "$file" "$out/pose-$name.png"
           done
           ls -l "$out"
-          git add "$out"
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'Refresh the N12 contact sheets [skip ci]'
-          # Same rule as the native evidence steps above: a branch that moved while this job rendered keeps the
-          # sheets belonging to its newer tip, and this run's pictures stay in the run's own review directory.
-          log="$RUNNER_TEMP/n12-sheets-push.log"
-          git fetch --quiet origin "$GITHUB_REF_NAME"
-          tip=$(git rev-parse "origin/$GITHUB_REF_NAME" 2>/dev/null || true)
-          if [ -n "$tip" ] && [ "$tip" != "$GITHUB_SHA" ]; then
-            echo "::warning title=N12 sheets not committed::The branch moved while this build rendered (now $tip, this run built $GITHUB_SHA), so the refreshed sheets were not pushed."
-            exit 0
-          fi
-          if git push >"$log" 2>&1; then cat "$log"; exit 0; fi
-          cat "$log"
-          if grep -Eqi 'GH013|repository rule violations|protected branch|non-fast-forward|fetch first|stale info|cannot lock ref' "$log"; then
-            echo "::warning title=N12 sheets not committed::The branch would not take the sheets push, so it keeps the set it already has."
-            exit 0
-          fi
-          exit 1
 
       # Isolate deterministic P0 capture from realtime/device smoke tests. Both still block the build.
       - name: Prism Flow baseline and candidate verification
@@ -1519,7 +1502,7 @@ jobs:
           if [ "$?" -ne 0 ]; then exit 1; fi
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3 docs/evidence/ar-particle-alignment docs/evidence/embers-art-v1 docs/evidence/embers-art-v2 docs/evidence/splash-art-v1 docs/evidence/fireworks-art-v1 docs/evidence/confetti-art-v1 docs/evidence/dust-art-v1 docs/evidence/dust-art-v2 docs/evidence/shatter-art-v1 docs/evidence/shatter-billboard-v1 docs/evidence/melt-art-v1 docs/evidence/bounce-art-v1 docs/evidence/release-float-up-v1 docs/evidence/release-dissolve-v1 docs/evidence/release-smoke-v1
+          git add docs/previews docs/evidence/n12-sheets docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3 docs/evidence/ar-particle-alignment docs/evidence/embers-art-v1 docs/evidence/embers-art-v2 docs/evidence/splash-art-v1 docs/evidence/fireworks-art-v1 docs/evidence/confetti-art-v1 docs/evidence/dust-art-v1 docs/evidence/dust-art-v2 docs/evidence/shatter-art-v1 docs/evidence/shatter-billboard-v1 docs/evidence/melt-art-v1 docs/evidence/bounce-art-v1 docs/evidence/release-float-up-v1 docs/evidence/release-dissolve-v1 docs/evidence/release-smoke-v1
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
             echo 'landed=true' >>"$GITHUB_OUTPUT"
