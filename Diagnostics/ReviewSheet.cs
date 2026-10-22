@@ -158,7 +158,7 @@ internal static class ReviewSheet
             if (_title.Length == 0) return;
             var scale = ScaleFor(_title, Sheet.Width - 2 * Padding);
             DrawText(_pixels, Sheet.Width, Padding, Padding + (TitleHeight - GlyphHeight * scale) / 2,
-                _title, scale, Heading);
+                _title, scale, Sheet.Width - Padding, Heading);
         }
 
         /// <summary>The grid this canvas draws, and the pixel size <see cref="Finish"/> returns.</summary>
@@ -202,8 +202,10 @@ internal static class ReviewSheet
             if (caption.Length > 0)
             {
                 var scale = ScaleFor(caption, Sheet.TileWidth - 8);
+                // Clipped to the strip, not to the page: an over-long caption must stop at its own cell instead
+                // of running across the frame and into the picture beside it.
                 DrawText(_pixels, Sheet.Width, x + Border + 4, captionY + (CaptionHeight - GlyphHeight * scale) / 2,
-                    caption, scale, Ink);
+                    caption, scale, x + Border + Sheet.TileWidth, Ink);
             }
             // Only now is the cell done: an empty caption draws nothing but the picture still landed, and a cell
             // that returned early here would look to Finish exactly like one that was never drawn.
@@ -304,8 +306,11 @@ internal static class ReviewSheet
         }
     }
 
-    /// <summary>Draws a line of text at a scale; every pixel is either ink or left alone, so text never blends.</summary>
-    private static void DrawText(byte[] target, int targetWidth, int x, int y, string text, int scale,
+    /// <summary>
+    /// Draws a line of text at a scale, stopping at <paramref name="limit"/>: every pixel is either ink or left
+    /// alone, so text never blends, and a glyph that runs past the limit is cut rather than wrapped or dropped.
+    /// </summary>
+    private static void DrawText(byte[] target, int targetWidth, int x, int y, string text, int scale, int limit,
         (byte B, byte G, byte R) colour)
     {
         var cursor = x;
@@ -315,8 +320,12 @@ internal static class ReviewSheet
             if (glyph is not null)
                 for (var row = 0; row < GlyphHeight; row++)
                 for (var column = 0; column < GlyphWidth; column++)
-                    if (glyph[row][column] == '#')
-                        Fill(target, targetWidth, cursor + column * scale, y + row * scale, scale, scale, colour);
+                {
+                    if (glyph[row][column] != '#') continue;
+                    var left = cursor + column * scale;
+                    var width = Math.Min(scale, limit - left);
+                    if (width > 0) Fill(target, targetWidth, left, y + row * scale, width, scale, colour);
+                }
             cursor += GlyphAdvance * scale;
         }
     }
