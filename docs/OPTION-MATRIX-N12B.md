@@ -358,10 +358,15 @@ alpha, và nhãn dài không được tràn sang ô bên cạnh.
 
 **Vì sao commit được.** Cùng một input cho ra đúng từng byte, nên CI commit tờ ảnh giống như commit preview.
 Bước `Stage the N12 contact sheets` (ngay sau suite, lúc ảnh còn trong thư mục review) chép bảy tệp vào
-`docs/evidence/n12-sheets`; bước `Commit refreshed previews` có sẵn — bước duy nhất trong job này được phép
-push — nhận thêm thư mục đó vào `git add` và commit chung. Một lần push, một quy tắc: nhánh đã dịch chuyển
-trong lúc render thì giữ bản của tip mới hơn. Hai bước commit riêng trong cùng một job sẽ tranh nhau tip và
-quy tắc đó sẽ bỏ qua một trong hai mỗi lượt — đó là lý do gộp. Mỗi review còn **từ chối** một tờ ảnh thiếu khung
+`docs/evidence/n12-sheets`; bước `Save the N12 contact sheets` ở cuối job commit rồi đẩy.
+
+Nó **không** dùng quy tắc "tip phải vẫn là commit mình vừa build" mà bốn bước evidence khác dùng: trên nhánh
+này, job `keyboard-light` chạy song song và đẩy commit evidence của nó vài phút sau khi lượt bắt đầu, nên tip
+đã dịch chuyển từ rất lâu trước khi job build render xong — quy tắc đó sẽ bỏ qua **mọi** lượt (đã thử: commit
+`ece10f6`, tip nhảy sang `e064a0e` lúc 01:06). Thay vào đó nó replay đúng một commit — bảy tệp **mới**, không
+bước nào khác ghi vào — lên tip mới, rồi push. Nếu replay đó xung đột thật (một lượt khác đã ghi tờ ảnh khác),
+nó `git rebase --abort`, cảnh báo và để nhánh giữ bản của mình; không bao giờ để lại cây gãy hay job đỏ vì
+chuyện đó. Push bị chặn (GH013, protected branch) cũng chỉ là cảnh báo, như các bước evidence khác. Mỗi review còn **từ chối** một tờ ảnh thiếu khung
 (`sheet.Tiles != <số capture>`), vì một ô trống trên tờ đọc ra đúng như "option này không vẽ gì" — kết luận mà
 review sinh ra để báo.
 
