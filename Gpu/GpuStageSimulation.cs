@@ -219,6 +219,18 @@ internal sealed partial class GpuStageSimulation
         ParticlesBorn = EmitterParticlesBorn = 0;
     }
 
+    /// <summary>
+    /// One W1 step for a single particle: the engine stores floats, the law works in doubles, and the conversion
+    /// happens in one place so the software stage's doubles and these floats feed the law identical inputs.
+    /// </summary>
+    private void StepFlow(ref float x, ref float y, ref float vx, ref float vy, float phase, float dt, GpuLook look)
+    {
+        double px = x, py = y, pxv = vx, pyv = vy;
+        ParticleFlow.Step(ref px, ref py, ref pxv, ref pyv, phase / ParticleFlow.Turn, _time, dt,
+            look.VectorField * 100.0, look.FieldScale, look.EvolutionSpeed, look.ParticleFlow);
+        x = (float)px; y = (float)py; vx = (float)pxv; vy = (float)pyv;
+    }
+
     /// <summary>Advances the simulation by one rendered frame.</summary>
     internal void Step(double seconds, GpuFrameInput input, GpuStageFeed feed, float sceneWidth)
     {
@@ -452,6 +464,15 @@ internal sealed partial class GpuStageSimulation
             ref var p = ref _particles[i];
             p.Age += particleDt;
             if (p.Age >= p.Life) { _particles[i] = _particles[--_count]; continue; }
+            if (look.ParticleFlow > 0 && (p.Wisp || (p.Shape == Shape.Flame && !look.FlameMotionV3ForReview)))
+            {
+                // W1: the held stream is carried by Stage/ParticleFlow.cs instead of its own sine — the same law
+                // the software stage calls, so the two renderers bend the same way. Zero flow never reaches here,
+                // which is what keeps the accepted wisps/flames captures byte-identical.
+                StepFlow(ref p.X, ref p.Y, ref p.Vx, ref p.Vy, p.Phase, particleDt, look);
+                if (p.Wisp) p.Vy *= MathF.Exp(-.35f * particleDt);
+                continue;
+            }
             if (p.Wisp)
             {
                 p.Y += p.Vy * particleDt;
@@ -869,7 +890,9 @@ internal sealed partial class GpuStageSimulation
                     var px = x;
                     if (p.Wisp)
                     {
-                        px += WispMotion.Offset(look.WispTurbulence, look.WispWidth, p.Age, p.Phase);
+                        // W1 replaces the draw-time sway with motion that is already in the velocity: adding the
+                        // old curve on top would re-scatter the stream the flow just made coherent.
+                        if (look.ParticleFlow <= 0) px += WispMotion.Offset(look.WispTurbulence, look.WispWidth, p.Age, p.Phase);
                     }
                     sprites.Add(new GpuSpriteInstance
                     {
@@ -988,7 +1011,7 @@ internal sealed partial class GpuStageSimulation
                     var gain = glowGain;
                     if (p.Wisp)
                     {
-                        px += WispMotion.Offset(look.WispTurbulence, look.WispWidth, p.Age, p.Phase);
+                        if (look.ParticleFlow <= 0) px += WispMotion.Offset(look.WispTurbulence, look.WispWidth, p.Age, p.Phase);
                         gain = .6f + p.Glow * 1.6f;
                         fade = MathF.Min(1, u * 6) * (1 - u);
                     }

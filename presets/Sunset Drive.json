@@ -143,6 +143,7 @@
     "WispWidth": 40.0,
     "WispTurbulence": 55.0,
     "WispGlow": 80.0,
+    "ParticleFlow": 0,
     "FlameIntensity": 0,
     "FlameHeight": 30,
     "FlameColorMode": "Warm",

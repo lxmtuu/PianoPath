@@ -24,6 +24,7 @@ và không được lặp lại ở đây; tài liệu kế hoạch phát triể
 - **Wisp và ember khi giữ phím** ở bản phần mềm phát đúng mật độ của engine và lắc theo cùng một đường cong — trước đây bản phần mềm chỉ phát một phần tư số wisp, không có ember, và cộng dao động vào vận tốc nên hạt vẫn trôi khi xem slow-motion.
 - **Note morph, hiệu ứng nhả và flash** tự vẽ theo đúng công tắc của chúng: chọn Shatter, Melt, Absorb, Bounce, Star morph, Snap Back hay Echo Rings vẫn thấy hiệu ứng dù đã tắt *Enable impact wave*, *Impact flash* hay *Sparks* — trước đây các lựa chọn đó được nhận nhưng không vẽ gì.
 - Thẻ **Note morph** trong Settings luôn hiện đủ lựa chọn, và thanh **Morph intensity** chỉ hiện khi đã chọn một kiểu morph.
+- **Coherent flow** (Settings → Particles → Wisps): một luồng gió chung cuốn wisp và lửa đang giữ đi cùng nhau thay vì mỗi hạt lượn theo pha riêng — dòng hẹp hơn, cong như một khối và nở dần theo tuổi hạt. Mặc định **0** nên mọi preset đang có vẽ y như trước; kéo lên để bật.
 
 ### Sửa lỗi
 - **Bề rộng nốt dưới 60%** giờ vẽ thanh giữ phím đúng bằng nốt rơi trên cả hai đường render: bản phần mềm từng kẹp thanh giữ phím ở 60% nên cùng một preset cho thanh rộng gấp đôi nốt rơi cùng cao độ — và rộng gấp đôi so với máy có GPU, nơi slider luôn được đọc đúng.

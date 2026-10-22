@@ -25,6 +25,7 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 - **Held wisps and embers** now leave the software renderer at the engine's density and sway on the same curve — before, the software path emitted a quarter of the wisps, had no ember channel, and added the sway to velocity, so the motes kept drifting in slow motion.
 - **Note morph, release effects and the morph flash** now draw under their own switch: Shatter, Melt, Absorb, Bounce, Star morph, Snap Back and Echo Rings appear even with *Enable impact wave*, *Impact flash* or *Sparks* off — before, those choices were accepted and then drew nothing.
 - The **Note morph** card in Settings always offers its choices, and **Morph intensity** only appears once a morph is selected.
+- **Coherent flow** (Settings → Particles → Wisps): one wind carries held wisps and flames together instead of each mote waving on its own phase — a narrower stream that bends as a body and widens as its motes age. It defaults to **0**, so every existing preset draws exactly as before; raise it to turn the new flow on.
 
 ### Fixes
 - **Note widths below 60%** now draw the held-key bar exactly as wide as the falling note on both renderers: the software stage used to floor the held bar at 60%, so one preset produced a bar twice as wide as its own falling note — and twice as wide as the same preset on a GPU machine, which has always read the slider.

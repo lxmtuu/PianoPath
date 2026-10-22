@@ -462,7 +462,10 @@ internal sealed partial class GpuArLayer
         var y = Math.Clamp((simulation.SimulationHitY - particle.Y) * unit, -.2, 2.4);
         if (particle.Wisp)
         {
-            x += WispMotion.OffsetPrecise(look.WispTurbulence, look.WispWidth, (float)particle.Age, (float)particle.Phase) * unit;
+            // Same rule as the stage sprites: with W1's flow on, the wander is already in the simulated
+            // velocity, so the draw-time curve is not added a second time.
+            if (look.ParticleFlow <= 0)
+                x += WispMotion.OffsetPrecise(look.WispTurbulence, look.WispWidth, (float)particle.Age, (float)particle.Phase) * unit;
         }
         var anchorX = layout.CenterX(particle.Pitch) * pose.KeyboardWidthDepthRatio;
         var center = legacyAxes ? new ArVec3(x, .12, -y) : frame.Point(new(anchorX, .12, 0), x - anchorX, y);

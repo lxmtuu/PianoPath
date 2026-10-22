@@ -240,6 +240,12 @@ internal sealed class PianoVisualSettings
     public double WispWidth { get; set; } = 40;
     public double WispTurbulence { get; set; } = 55;
     public double WispGlow { get; set; } = 80;
+    /// <summary>
+    /// W1's coherent flow, 0..100. Zero draws the stream exactly as it has always been drawn — the accepted
+    /// <c>wisps-v3</c>/<c>flames-v3</c> captures depend on that — and raising it hands held wisps and flames to
+    /// <see cref="ParticleFlow"/>: one wind they are entrained by, one eddy each, and a widening with age.
+    /// </summary>
+    public double ParticleFlow { get; set; }
     public double FlameIntensity { get; set; } = 70;
     public double FlameHeight { get; set; } = 60;
     /// <summary>Warm (classic fire) or Note (flame takes the note color).</summary>
@@ -770,6 +776,7 @@ internal sealed class PianoVisualSettings
         WispAmount = Math.Clamp(WispAmount, 0, 150); WispSpeed = Math.Clamp(WispSpeed, 20, 600); WispHeight = Math.Clamp(WispHeight, 5, 100);
         WispWidth = Math.Clamp(WispWidth, 0, 100); WispTurbulence = Math.Clamp(WispTurbulence, 0, 100); WispGlow = Math.Clamp(WispGlow, 0, 200);
         FlameIntensity = Math.Clamp(FlameIntensity, 0, 100); FlameHeight = Math.Clamp(FlameHeight, 0, 100); RingSize = Math.Clamp(RingSize, 0, 100);
+        ParticleFlow = Math.Clamp(ParticleFlow, 0, 100);
         ImpactWaveIntensity = Math.Clamp(ImpactWaveIntensity, 0, 150); ImpactFlashIntensity = Math.Clamp(ImpactFlashIntensity, 0, 100);
         FallingTrailIntensity = Math.Clamp(FallingTrailIntensity, 0, 100); FallingTrailLength = Math.Clamp(FallingTrailLength, 0, 100);
         FallingPulseRate = Math.Clamp(FallingPulseRate, 0, 100); FallingGhostAmount = Math.Clamp(FallingGhostAmount, 0, 100);

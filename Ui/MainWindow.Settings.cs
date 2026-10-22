@@ -457,6 +457,9 @@ public partial class MainWindow
         SliderRow(wisps, "Height", nameof(PianoVisualSettings.WispHeight), 5, 100, "How far the stream reaches before fading.");
         SliderRow(wisps, "Width", nameof(PianoVisualSettings.WispWidth), 0, 100, "Spread of the stream at its base.");
         SliderRow(wisps, "Turbulence", nameof(PianoVisualSettings.WispTurbulence), 0, 100, "Sideways waving of the stream.");
+        // W1: off at 0 so every preset that exists today draws the stream it was saved with; raised, the wisps
+        // and the flames are carried by one wind instead of each mote waving on its own phase.
+        SliderRow(wisps, "Coherent flow", nameof(PianoVisualSettings.ParticleFlow), 0, 100, "One wind that bends held wisps and flames together instead of waving each mote on its own. 0 keeps the classic wobble.");
         SliderRow(wisps, "Glow", nameof(PianoVisualSettings.WispGlow), 0, 200, "Brightness of the wisps.");
 
         var flames = Card(ParticleSettingsHost, "FLAMES", "Fire at the impact point while a key sounds.");

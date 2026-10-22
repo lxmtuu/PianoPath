@@ -737,6 +737,16 @@ internal sealed partial class PianoStage : FrameworkElement
             if (p.Age >= p.Life) { _sparks.RemoveAt(i); continue; }
             if (p.Wisp)
             {
+                if (_visual.ParticleFlow > 0)
+                {
+                    // W1: the same Stage/ParticleFlow.cs the engine calls. The draw-time sway below stays a W0
+                    // offset either way, so slow motion still cannot move a mote by re-timing the render.
+                    ParticleFlow.Step(ref p.X, ref p.Y, ref p.Vx, ref p.Vy, p.Phase / ParticleFlow.Turn, _elapsed,
+                        particleDt, _visual.VectorField, _visual.FieldScale, _visual.EvolutionSpeed / 100,
+                        _visual.ParticleFlow / 100);
+                    p.Vy *= Math.Exp(-.35 * particleDt);
+                    continue;
+                }
                 // The sideways wander is not velocity: it is an offset the renderer adds when it draws the mote,
                 // the same WispMotion.Offset the GPU sprites and the AR quads use. Integrating it here made the
                 // two renderers disagree by 10.6 px after 0.8 s (PARTICLE-MOTION-REVIEW §4.3).
@@ -764,8 +774,15 @@ internal sealed partial class PianoStage : FrameworkElement
             var mote = _flameMotes[i];
             mote.Age += particleDt;
             if (mote.Age >= mote.Life) { _flameMotes.RemoveAt(i); continue; }
-            mote.X += mote.Vx * particleDt; mote.Y += mote.Vy * particleDt;
-            mote.Vx += FlameMotion.Sway(mote.Age, mote.Phase) * particleDt;
+            if (_visual.ParticleFlow > 0)
+                ParticleFlow.Step(ref mote.X, ref mote.Y, ref mote.Vx, ref mote.Vy, mote.Phase / ParticleFlow.Turn,
+                    _elapsed, particleDt, _visual.VectorField, _visual.FieldScale, _visual.EvolutionSpeed / 100,
+                    _visual.ParticleFlow / 100);
+            else
+            {
+                mote.X += mote.Vx * particleDt; mote.Y += mote.Vy * particleDt;
+                mote.Vx += FlameMotion.Sway(mote.Age, mote.Phase) * particleDt;
+            }
         }
         for (var i = _rings.Count - 1; i >= 0; i--)
         {
@@ -2064,8 +2081,10 @@ internal sealed partial class PianoStage : FrameworkElement
                 if (!_visual.ShowWisps) continue;
                 var wispAlpha = Alpha(210 * Math.Pow(fade, 1.4) * wispGlow);
                 var wispSize = particle.Size * (1.2 + particle.Age * 1.3);
-                var wispX = particle.X + WispMotion.Offset((float)(_visual.WispTurbulence / 100), (float)(_visual.WispWidth / 100),
-                    (float)particle.Age, (float)particle.Phase);
+                var wispX = particle.X;
+                if (_visual.ParticleFlow <= 0)
+                    wispX += WispMotion.Offset((float)(_visual.WispTurbulence / 100), (float)(_visual.WispWidth / 100),
+                        (float)particle.Age, (float)particle.Phase);
                 var wispCore = Color.FromArgb(wispAlpha, particle.Color.R, particle.Color.G, particle.Color.B);
                 // Three concentric shells approximate a smooth gaussian falloff, so the wisp reads as a
                 // soft mote of light/smoke instead of a flat disc with a hard rim.

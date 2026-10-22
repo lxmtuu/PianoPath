@@ -230,6 +230,15 @@ Khuếch tán là quá trình có lịch sử — không thể tính lại tại
 WPF và AR phải chạy **cùng một** integrator (AR đọc vị trí CPU nên điều này khả thi), và mọi frame của
 `wisps-v3`/`flames-v3` sẽ đổi. Đó là lý do W1 dừng ở mức mô hình + số đo: cần một lần re-baseline có chủ đích.
 
+**Đã vào sản phẩm (2026-10-22), và đây là cách nó giữ được bước re-baseline:** luật bốn phần nằm trong
+`Stage/ParticleFlow.cs` — gió không phân kỳ (`Wind`), xoáy riêng từng hạt (`Curl`), khuếch tán (`Diffusion`), và
+một `Step` ghép chúng — với đúng hằng số của lab (`EntrainSeconds` 0,45 s; `VerticalShare` 0,12; `DiffusionRate` 46
+px/s²). Cả `GpuStageSimulation` (wisp + lửa) và `PianoStage` (hai danh sách rời) gọi **cùng** hàm đó; AR đọc vị trí
+CPU nên đi theo miễn phí. Nó nằm sau slider **Coherent flow** (`ParticleFlow`, 0–100) **mặc định 0**: ở 0 hai
+integrator chạy đúng số học cũ, nên `wisps-v3`/`flames-v3` không đổi một byte và lượt CI vẫn xanh. Bật lên là look
+mới; lật **mặc định** mới là lần re-baseline — và đó là việc phải chạy trên máy có GPU/WPF thật, vì pipeline bằng
+chứng so hash với bản đã chấp nhận và không cho phép tự nhận bản mới (`review_flames_v3.retained`).
+
 **Về slider:** đề xuất *không* thêm control nào ở màn hình mặc định. Năm tham số mới (1, 4, 6, 8 và độ
 lạnh của họ) nên nằm sau **Nâng cao**, đúng nguyên tắc "control phổ biến trước" của
 [PRISM-FLOW-DESIGN-ROADMAP](PRISM-FLOW-DESIGN-ROADMAP.md) §5 (Quy tắc thiết kế UI). Bốn control cũ (`Velocity`, `Spread`, `Drag`,
@@ -316,7 +325,7 @@ GPU/WPF bằng số thay vì bằng mắt.
 | Lát | Nội dung | Vì sao trước | Cổng |
 |---|---|---|---|
 | **W0 · Hợp đồng** | **Xong 2026-10-20:** gom `WispMotion` (5 bản sao → 1), WPF bỏ dao động khỏi vận tốc, tách `particleDt` khỏi `frameDt` (`StageClock`), và **mật độ phát** của emitter giữ phím (`HeldEmission` — trước đó WPF phát 1/4 wisp và không có ember), guard trong `check_sources` + `--verify`. **Chuyển sang W2:** vật lý flame — nó **đổi pixel**, mà bằng chứng `flames-v3` đang ghim đúng hình flame hiện tại, nên phải làm cùng lúc với một lần re-baseline có chủ đích, không phải như một refactor | Sửa lỗi, không đổi nghệ thuật; tạo nền để so sánh được | Test so sánh vị trí wisp GPU/WPF; slow-motion không đổi tốc độ live bar |
-| **W1 · Hình dáng dòng chảy** | **Mô hình + số đo xong 2026-10-20:** bốn thành phần (emitter sustain, gió cuốn, curl theo seed, khuếch tán) chạy trong lab dưới `MODEL.FLOW`, có chế độ so sánh trên trang và 12 assertion đo trong `check_particle_motion_lab.cjs` §7. **Chưa vào sản phẩm:** khuếch tán là quá trình có lịch sử nên phải nằm trong integrator của cả ba đường render, tức là đổi pixel của `wisps-v3`/`flames-v3` — cần một lần re-baseline có chủ đích, cùng loại với W2 | 80% cảm giác "flow" mà roadmap P3b hứa; không thêm hạt | **Đo được:** độ rộng 0,14 / 0,41 / 0,49 phím ở ba lát (cổng 1,5 — dòng đang ship đo 1,87), local spread 0,29 so với 0,47, mất 11% độ cao. Còn thiếu ảnh/clip 3 checkpoint trên máy có GPU |
+| **W1 · Hình dáng dòng chảy** | **Mô hình + số đo xong 2026-10-20:** bốn thành phần (emitter sustain, gió cuốn, curl theo seed, khuếch tán) chạy trong lab dưới `MODEL.FLOW`, có chế độ so sánh trên trang và 12 assertion đo trong `check_particle_motion_lab.cjs` §7. **Đã vào sản phẩm 2026-10-22 sau slider `ParticleFlow` mặc định 0:** `Stage/ParticleFlow.cs` là luật duy nhất, `GpuStageSimulation` + `PianoStage` cùng gọi, `scan_particle_flow_contract` ghim hình dạng đó và `ParticleFlowTests` ghim bốn tính chất; còn lại là lật mặc định = re-baseline `wisps-v3`/`flames-v3` trên máy có GPU thật, cùng loại với W2 | 80% cảm giác "flow" mà roadmap P3b hứa; không thêm hạt | **Đo được:** độ rộng 0,14 / 0,41 / 0,49 phím ở ba lát (cổng 1,5 — dòng đang ship đo 1,87), local spread 0,29 so với 0,47, mất 11% độ cao. Còn thiếu ảnh/clip 3 checkpoint trên máy có GPU |
 | **W2 · Vật liệu** | **Nửa đầu xong 2026-10-20:** bản phần mềm vẽ flame bằng đúng luật hạt của engine (`FlameMotion`, guard + 5 fact + `VerifyWpfFlameParity`) thay cho chùm ellipse dán phím. **Candidate 2026-10-21:** vật lý của chính engine (nổi có gia tốc, drag, nở khi nguội) nằm ở `FlameMotion.StepV3` và chỉ bật trong clip đối chứng `flames-v3/motion`, nên ảnh tĩnh v2/v3 vẫn đo ánh sáng trên cùng geometry. **Còn lại:** chốt candidate (đưa vào preset/`UpgradedParticleEffects`) và màu theo nhiệt độ nếu review đòi | Làm đám hạt có khối lượng và "chín" | Bảng `LifeCurve` cho 5 họ × 3 look; review ảnh tĩnh + clip |
 | **W3 · Tương tác & tải** | Va chạm (thành phần 8), bảng `exp`/`sin` nếu đo thấy cần; **cân nhắc** `EmissionScale` cho adaptive | Chỉ làm sau khi hình đã chốt | Benchmark `--bench` trên GPU thật (ngoài sandbox này) |
 

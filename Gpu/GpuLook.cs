@@ -244,6 +244,8 @@ internal sealed class GpuLook
     public float WispHeight { get; init; } = .55f;
     public float WispWidth { get; init; } = .4f;
     public float WispTurbulence { get; init; } = .55f;
+    /// <summary>W1's flow slider, 0..1; zero leaves the shipped wisp and flame integrators untouched.</summary>
+    public float ParticleFlow { get; init; }
     public float WispGlow { get; init; } = .8f;
     public float FlameIntensity { get; init; } = .7f;
     public float FlameHeight { get; init; } = .6f;
@@ -432,7 +434,7 @@ internal sealed class GpuLook
             HeldParticleArt = s.HeldParticleArt || s.UpgradedParticleEffects,
             UpgradedParticleEffects = s.UpgradedParticleEffects,
             WispAmount = (float)s.WispAmount, WispSpeed = (float)s.WispSpeed, WispHeight = P(s.WispHeight), WispWidth = P(s.WispWidth),
-            WispTurbulence = P(s.WispTurbulence), WispGlow = P(s.WispGlow),
+            WispTurbulence = P(s.WispTurbulence), WispGlow = P(s.WispGlow), ParticleFlow = P(s.ParticleFlow),
             FlameIntensity = P(s.FlameIntensity), FlameHeight = P(s.FlameHeight), FlameNoteColor = s.FlameColorMode == "Note",
 
             ShowKeys = s.ShowKeys && !overCamera, AnimateKeys = s.AnimateKeys, ShowKeyFelt = s.ShowKeyFelt, ShowKeyShadow = s.ShowKeyShadow, ShowHalo = s.ShowHalo, HaloIntensity = P(s.HaloIntensity),

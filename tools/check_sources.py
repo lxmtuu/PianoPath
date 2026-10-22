@@ -1111,6 +1111,58 @@ def scan_flame_motion_contract():
     return errors
 
 
+def scan_particle_flow_contract():
+    """W1's flow is one law, two integrators and one switch that defaults to off.
+
+    The shipped wisps and flames are pinned by the accepted ``wisps-v3``/``flames-v3`` captures, so the flow
+    may only run when the slider is raised: the engines keep their old arithmetic on the zero path, and both of
+    them call ``Stage/ParticleFlow.cs`` on the other one. This check is a drift detector for that shape — a
+    second copy of the wind in either renderer, or a setting nobody wired, is what it exists to catch.
+    """
+    errors = []
+    helper_path = ROOT / "Stage" / "ParticleFlow.cs"
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    gpu_path = ROOT / "Gpu" / "GpuStageSimulation.cs"
+    settings_path = ROOT / "Stage" / "PianoVisualSettings.cs"
+    look_path = ROOT / "Gpu" / "GpuLook.cs"
+    dock_path = ROOT / "Ui" / "MainWindow.Settings.cs"
+    for path in (helper_path, stage_path, gpu_path, settings_path, look_path, dock_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; it is part of the flow contract"]
+    helper = _code(helper_path.read_text(encoding="utf-8"))
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    gpu = _code(gpu_path.read_text(encoding="utf-8"))
+    settings = _code(settings_path.read_text(encoding="utf-8"))
+    look = _code(look_path.read_text(encoding="utf-8"))
+    dock = _code(dock_path.read_text(encoding="utf-8"))
+    for name in ("EntrainSeconds", "VerticalShare", "DiffusionRate", "Wind(", "Curl(", "Diffusion(", "Step("):
+        if name not in helper:
+            errors.append(f"Stage/ParticleFlow.cs: {name} is gone, so the flow's four parts no longer live in one law")
+    # Both renderers call the law; neither carries the numbers.
+    # The engine steps a wisp and a flame through one branch; the software stage keeps its two lists apart, so
+    # it has one call per list. Both counts are exact: a third call means a third copy of the law.
+    for path, text, gate, calls in (("Gpu/GpuStageSimulation.cs", gpu, "look.ParticleFlow > 0", 1),
+                                    ("Stage/PianoStage.cs", stage, "_visual.ParticleFlow > 0", 2)):
+        if text.count("ParticleFlow.Step(") != calls:
+            errors.append(f"{path}: expected exactly {calls} call(s) to ParticleFlow.Step, found {text.count('ParticleFlow.Step(')}")
+        if gate not in text:
+            errors.append(f"{path}: the flow step lost its '{gate}' gate, so raising the slider is not what turns it on")
+        for name in ("EntrainSeconds", "VerticalShare", "DiffusionRate"):
+            if name in text:
+                errors.append(f"{path}: carries the flow's {name} as well as calling it; the constant belongs in Stage/ParticleFlow.cs")
+        if "ParticleFlow.Turn" not in text:
+            errors.append(f"{path}: the per-particle phase is no longer folded through ParticleFlow.Turn")
+    if "public double ParticleFlow { get; set; }" not in settings:
+        errors.append("Stage/PianoVisualSettings.cs: the Flow setting is gone")
+    if "ParticleFlow = Math.Clamp(ParticleFlow, 0, 100);" not in settings:
+        errors.append("Stage/PianoVisualSettings.cs: ParticleFlow is not clamped with its own range")
+    if "ParticleFlow = P(s.ParticleFlow)" not in look:
+        errors.append("Gpu/GpuLook.cs: the engine never receives the flow slider")
+    if "nameof(PianoVisualSettings.ParticleFlow)" not in dock:
+        errors.append("Ui/MainWindow.Settings.cs: no row drives the flow slider")
+    return errors
+
+
 def scan_note_width_parity():
     """One bar, one slider: the held-key bar and the falling note must take ``Note width`` as it is.
 
@@ -3004,6 +3056,7 @@ def main():
     errors.extend(scan_wisp_motion_contract())
     errors.extend(scan_stage_clock_contract())
     errors.extend(scan_flame_motion_contract())
+    errors.extend(scan_particle_flow_contract())
     errors.extend(scan_held_emission_parity())
     errors.extend(scan_note_width_parity())
     errors.extend(scan_option_matrix())
@@ -3038,6 +3091,7 @@ def main():
     print("checked that the wisp sway lives in one curve and that the stage, the AR quads and the alignment review all draw it")
     print("checked that slow motion scales the particles on both renderers and leaves the held bar, rings and flashes on the real clock")
     print("checked that the held-key flame keeps the engine's law on the software stage instead of a plume pinned to the key")
+    print("checked that W1's flow stays one law called by both integrators, and that the slider gates it instead of replacing the shipped stream")
     print("checked that a held key lets off the engine's amount of embers and wisps on both renderers, ceilings aside")
     print("checked that the falling note and the held bar size themselves from one Note width slider, with no floor of their own")
     print("checked that every option the settings offer is captured by the N12(b) matrix on both renderers, off state included")
