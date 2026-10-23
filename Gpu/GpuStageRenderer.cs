@@ -423,6 +423,8 @@ internal sealed class GpuStageRenderer : IDisposable
     internal int ArLiveBarCount => _arLayer.LiveBarCount;
     internal int ArRisingMidiNoteCount => _arLayer.RisingMidiNoteCount;
     internal int ArNoteTrailQuadCount => _arLayer.NoteTrailQuadCount;
+    /// <summary>Sheen quads drawn inside existing AR note bodies; the shimmer family's own witness.</summary>
+    internal int ArNoteShimmerQuadCount => _arLayer.NoteShimmerQuadCount;
     internal int ArGhostNoteQuadCount => _arLayer.GhostNoteQuadCount;
     internal int ArLandingGlowCount => _arLayer.LandingGlowCount;
     internal int ArNoteLabelCount => _arLayer.NoteLabelCount;

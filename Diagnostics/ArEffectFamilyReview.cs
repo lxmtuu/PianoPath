@@ -110,6 +110,8 @@ internal static class ArEffectFamilyReview
         ("hold.arc", Stage.Held),
         ("particles.wisps", Stage.Held),
         ("particles.flames", Stage.Held),
+        ("falling.trail", Stage.Approach),
+        ("falling.shimmer", Stage.Approach),
         ("falling.pulse", Stage.Approach),
         ("impact.burst", Stage.Impact),
         ("particles.sparks", Stage.Impact),
@@ -132,7 +134,16 @@ internal static class ArEffectFamilyReview
         ["ImpactWave"] = "None",
         ["ImpactMorph"] = "None",
         ["ReleaseEffect"] = "Fade",
+        ["FallingTrail"] = "None",
     };
+
+    /// <summary>
+    /// The booleans the review pins <em>on</em> because the family cannot be drawn without them. Every other boolean
+    /// it pins <em>off</em>: a boolean that is not the family's own switch is an extra effect of its own
+    /// (<c>FallingGhost</c> draws ghost notes, <c>FallingTrail</c>-independent), and turning it on would put a second
+    /// thing in a frame that is supposed to contain one family.
+    /// </summary>
+    private static readonly IReadOnlySet<string> PinnedOn = new HashSet<string> { "ShowImpactRings" };
 
     /// <summary>One setting the page drives: its contract name, its kind, and the value the row shoots.</summary>
     private sealed record DrivenSetting(string Name, EffectParameterKind Kind, double Number, string Choice)
@@ -250,6 +261,10 @@ internal static class ArEffectFamilyReview
                     // be bound, read back and still draw nothing at the moment the frame is taken - a styled flash
                     // outlives its 0.26 s life while the strike scene was shot at 0.30 s - and the column would then
                     // carry a row that measures the off frame twice.
+                    if (changed < MinimumChangedPixels)
+                        throw new InvalidDataException(
+                            $"{family.Id}: its far row ({family.Far.Name} {family.Far.Label}) changes {changed} pixels against the " +
+                            $"family at its own values (floor {MinimumChangedPixels}), so the third picture repeats the first.");
                     var againstOff = OptionMatrixPlan.ChangedPixels(far.Pixels!, off.Pixels!);
                     if (againstOff < MinimumChangedPixels)
                         throw new InvalidDataException(
@@ -317,44 +332,13 @@ internal static class ArEffectFamilyReview
                 ?? throw new InvalidDataException(
                     $"{id} declares neither a boolean nor a choice with a declared off value, so the review has no way " +
                     "to take the family out of the picture for its middle row.");
-            // A family may declare more than two settings - the particles pilot declares six, five and three - and
-            // one column still holds exactly one switch and one second setting. A family with exactly two keeps the
-            // behaviour it always had: the other setting is the far row whatever kind it is, which is how
-            // impact.burst pushes a choice to its last declared value. A family with more than two has no single
-            // "other" setting, so the contract's own order decides: the first percentage after the switch, at the
-            // number the contract declares. Every setting left over is written into the manifest as unshot. A page
-            // that quietly shot one of six settings and called the column the whole family would be claiming
-            // coverage it does not have, which is the one thing this review exists to prevent; saying which
-            // settings it did not shoot costs nothing.
+            // One column still holds exactly one switch and exactly one second setting, however many a family
+            // declares: the particles pilot declares six, five and three, and falling.trail declares five. The
+            // settings left over are pinned (a value the scene has to hold) or listed in the manifest as unshot
+            // (a percentage the column never moves). A page that quietly shot one of six settings and called the
+            // column the whole family would be claiming coverage it does not have, which is the one thing this
+            // review exists to prevent; saying which settings it did not shoot costs nothing.
             var others = contract.Parameters.Where(parameter => parameter.SettingName != toggle.SettingName).ToArray();
-            // Two settings: the other one is the far row whatever kind it is. More than two: a *choice* is the far
-            // row when the family declares one, because a style change is what a reader can see - impact.flash's
-            // Flare and Plasma are two different pictures, while its intensity at 0.3 s after the strike is a
-            // handful of levels of a fade. Only when no other choice exists does the first percentage take the row.
-            var second = others.Length == 1
-                ? others[0]
-                : others.FirstOrDefault(parameter => parameter.Kind == EffectParameterKind.Choice)
-                    ?? others.FirstOrDefault(parameter => parameter.Kind == EffectParameterKind.Percentage)
-                    ?? throw new InvalidDataException(
-                        $"{id} declares no second setting with a range to shoot, so its far row has nothing to push.");
-            // The rows that are not the switch keep their own on values: a boolean pinned true, a choice pinned to a
-            // value the renderer draws. Without this, impact.wave's rest frame would be a wave that never spawns,
-            // because the option matrix's neutral look turns ShowImpactRings and ImpactWave off.
-            var pinned = others.Where(parameter => parameter.SettingName != second.SettingName)
-                .Select(parameter => parameter.Kind switch
-                {
-                    EffectParameterKind.Boolean => DrivenSetting.Switch(parameter.SettingName, true),
-                    EffectParameterKind.Choice => new DrivenSetting(parameter.SettingName, parameter.Kind, 0,
-                        OnValue(parameter.SettingName)),
-                    _ => null,
-                })
-                .OfType<DrivenSetting>().ToArray();
-            // Only the percentages can be left alone: a boolean or a choice that is neither the switch nor the far
-            // row still has to be given a value for the scene to be valid, so it is pinned and reported as pinned
-            // rather than silently listed as unshot.
-            var unshot = others.Where(parameter => parameter.SettingName != second.SettingName
-                    && parameter.Kind == EffectParameterKind.Percentage)
-                .Select(parameter => parameter.SettingName).ToArray();
             var on = toggle.Kind == EffectParameterKind.Choice
                 ? new DrivenSetting(toggle.SettingName, toggle.Kind, 0, OnValue(toggle.SettingName))
                 : DrivenSetting.Switch(toggle.SettingName, true);
@@ -365,13 +349,54 @@ internal static class ArEffectFamilyReview
                 ? new DrivenSetting(toggle.SettingName, toggle.Kind, 0, OffValues[toggle.SettingName])
                 : DrivenSetting.Switch(toggle.SettingName, false);
             var offLabel = toggle.Kind == EffectParameterKind.Choice ? OffValues[toggle.SettingName] : "off";
-            var far = second.Kind switch
+
+            // The far row, in the order the page explains: a *choice* before a percentage (a style is a different
+            // picture, a level is the same picture brighter), then the percentages in contract order. A candidate is
+            // skipped when its far value is the value the reference frame already shows - that row would repeat the
+            // middle picture. falling.trail is why this exists: the product's own look already carries
+            // FallingTrailIntensity at the contract's maximum, so intensity could never be its far row, while
+            // FallingTrailLength at 100 is a longer trail than the 55 the reference frame draws.
+            IEnumerable<EffectParameterContract> candidates = others.Length == 1
+                ? others
+                : others.Where(parameter => parameter.Kind == EffectParameterKind.Choice)
+                    .Concat(others.Where(parameter => parameter.Kind == EffectParameterKind.Percentage));
+            EffectParameterContract? second = null;
+            DrivenSetting? far = null;
+            DrivenSetting[] pinned = [];
+            foreach (var candidate in candidates)
             {
-                EffectParameterKind.Percentage => new DrivenSetting(second.SettingName, second.Kind,
-                    second.Maximum ?? throw new InvalidDataException($"{id}: {second.SettingName} has no maximum to shoot."), ""),
-                EffectParameterKind.Choice => new DrivenSetting(second.SettingName, second.Kind, 0, FarChoice(second.SettingName)),
-                _ => throw new InvalidDataException($"{id}: the review cannot drive a {second.Kind} setting."),
-            };
+                DrivenSetting? candidateFar = candidate.Kind switch
+                {
+                    EffectParameterKind.Percentage => new DrivenSetting(candidate.SettingName, candidate.Kind,
+                        candidate.Maximum ?? throw new InvalidDataException($"{id}: {candidate.SettingName} has no maximum to shoot."), ""),
+                    EffectParameterKind.Choice => new DrivenSetting(candidate.SettingName, candidate.Kind, 0,
+                        FarChoice(candidate.SettingName)),
+                    _ => null,
+                };
+                if (candidateFar is null) continue;
+                var candidatePins = others.Where(parameter => parameter.SettingName != candidate.SettingName)
+                    .Select(Pin).OfType<DrivenSetting>().ToArray();
+                var reference = OptionMatrixReview.BaseSettings();
+                foreach (var pin in candidatePins) Apply(reference, pin);
+                Apply(reference, on);
+                reference.Clamp();
+                var differs = candidateFar.Kind == EffectParameterKind.Choice
+                    ? ReadChoice(reference, candidateFar.Name) != candidateFar.Choice
+                    : Math.Abs(Read(reference, candidateFar.Name) - candidateFar.Number) > .001;
+                if (!differs) continue;
+                second = candidate; far = candidateFar; pinned = candidatePins;
+                break;
+            }
+            if (second is null || far is null)
+                throw new InvalidDataException(
+                    $"{id}: every setting after its switch already sits at the value the reference frame uses, so the far " +
+                    "row would repeat the first one. The page needs a setting whose far end is not what the product keeps.");
+            // Only the percentages can be left alone: a boolean or a choice that is neither the switch nor the far
+            // row still has to be given a value for the scene to be valid, so it is pinned and reported as pinned
+            // rather than silently listed as unshot.
+            var unshot = others.Where(parameter => parameter.SettingName != second.SettingName
+                    && parameter.Kind == EffectParameterKind.Percentage)
+                .Select(parameter => parameter.SettingName).ToArray();
             built[index] = new Family(id, stage, on, off, far, offLabel, pinned, unshot);
         }
         return built;
@@ -388,6 +413,7 @@ internal static class ArEffectFamilyReview
         "ImpactFlashStyle" => PianoVisualSettings.ImpactFlashStyles,
         "ImpactMorph" => PianoVisualSettings.ImpactMorphs,
         "ReleaseEffect" => PianoVisualSettings.ReleaseEffects,
+        "FallingTrail" => PianoVisualSettings.FallingTrails,
         _ => throw new InvalidDataException(
             $"The AR effect review cannot drive the choice '{setting}'; teach Choices() which list owns it."),
     };
@@ -397,6 +423,18 @@ internal static class ArEffectFamilyReview
     /// or the first declared value when the choice has no off value at all (ImpactFlashStyle picks a look, not a
     /// switch).
     /// </summary>
+    /// <summary>
+    /// How a setting that is neither the switch nor the far row is held for the whole column: a boolean at the value
+    /// <see cref="PinnedOn"/> gives it, a choice at the first value that draws, a percentage left alone because the
+    /// settings class already carries a value for it and the column does not judge it.
+    /// </summary>
+    private static DrivenSetting? Pin(EffectParameterContract parameter) => parameter.Kind switch
+    {
+        EffectParameterKind.Boolean => DrivenSetting.Switch(parameter.SettingName, PinnedOn.Contains(parameter.SettingName)),
+        EffectParameterKind.Choice => new DrivenSetting(parameter.SettingName, parameter.Kind, 0, OnValue(parameter.SettingName)),
+        _ => null,
+    };
+
     private static string OnValue(string setting) => OffValues.TryGetValue(setting, out var off)
         ? Choices(setting).First(value => value != off)
         : Choices(setting)[0];
@@ -603,6 +641,10 @@ internal static class ArEffectFamilyReview
         "impact.morph" => renderer.ArParticleFxCount,
         "release.fx" => renderer.ArReleaseEffectCount,
         "atmosphere.beams" => renderer.ArBeamCount,
+        // A trail is one quad behind the note; the shimmer is a second quad inside the note's own patch, which is why
+        // it needed a counter of its own rather than being inferred from the object quad count.
+        "falling.trail" => renderer.ArNoteTrailQuadCount,
+        "falling.shimmer" => renderer.ArNoteShimmerQuadCount,
         _ => throw new InvalidDataException(
             $"The AR effect review has no witness counter for '{family}'; teach Probe() about it before the page " +
             "claims to have shot it.")
@@ -654,6 +696,13 @@ internal static class ArEffectFamilyReview
             case "ReleaseIntensity": settings.ReleaseIntensity = setting.Number; break;
             case "ShowLightBeams": settings.ShowLightBeams = setting.Number >= 0.5; break;
             case "BeamIntensity": settings.BeamIntensity = setting.Number; break;
+            case "FallingTrail": settings.FallingTrail = setting.Choice; break;
+            case "FallingTrailIntensity": settings.FallingTrailIntensity = setting.Number; break;
+            case "FallingTrailLength": settings.FallingTrailLength = setting.Number; break;
+            case "FallingGhost": settings.FallingGhost = setting.Number >= 0.5; break;
+            case "FallingGhostAmount": settings.FallingGhostAmount = setting.Number; break;
+            case "NoteShimmer": settings.NoteShimmer = setting.Number >= 0.5; break;
+            case "NoteShimmerAmount": settings.NoteShimmerAmount = setting.Number; break;
             default:
                 throw new InvalidDataException(
                     $"The AR effect review cannot drive '{setting.Name}'; teach Apply() and Read() about it first.");
@@ -696,6 +745,12 @@ internal static class ArEffectFamilyReview
         "ReleaseIntensity" => settings.ReleaseIntensity,
         "ShowLightBeams" => settings.ShowLightBeams ? 1 : 0,
         "BeamIntensity" => settings.BeamIntensity,
+        "FallingTrailIntensity" => settings.FallingTrailIntensity,
+        "FallingTrailLength" => settings.FallingTrailLength,
+        "FallingGhost" => settings.FallingGhost ? 1 : 0,
+        "FallingGhostAmount" => settings.FallingGhostAmount,
+        "NoteShimmer" => settings.NoteShimmer ? 1 : 0,
+        "NoteShimmerAmount" => settings.NoteShimmerAmount,
         _ => throw new InvalidDataException($"The AR effect review cannot read '{parameter}'.")
     };
 
@@ -706,6 +761,7 @@ internal static class ArEffectFamilyReview
         "ImpactFlashStyle" => settings.ImpactFlashStyle,
         "ImpactMorph" => settings.ImpactMorph,
         "ReleaseEffect" => settings.ReleaseEffect,
+        "FallingTrail" => settings.FallingTrail,
         _ => throw new InvalidDataException($"The AR effect review cannot read the choice '{parameter}'.")
     };
 

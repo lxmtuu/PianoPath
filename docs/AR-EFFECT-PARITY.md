@@ -1,6 +1,6 @@
 # Family hiệu ứng trong lớp AR: mười bảy family `Unverified` (N17)
 
-> **Trạng thái:** đợt 1–4, 2026-10-23 · **Ảnh:** `docs/evidence/ar-effect-sheets/{held,approach,impact,release}.png` · **Mã:** `Diagnostics/ArEffectFamilyReview.cs` · **Chốt chặn:**
+> **Trạng thái:** đợt 1–5, 2026-10-23 · **Ảnh:** `docs/evidence/ar-effect-sheets/{held,approach,impact,release}.png` · **Mã:** `Diagnostics/ArEffectFamilyReview.cs` · **Chốt chặn:**
 > `tools/check_sources.py` (`scan_ar_effect_family_review`)
 
 ## 1. Câu hỏi, và câu trả lời ngắn
@@ -296,10 +296,10 @@ của chính cột đó, dung sai 2/255, đọc lại từ tờ ảnh đã commi
    2/255. Cột này **qua cổng** nhưng là cột mỏng nhất trang — mỏng hơn cả cung `hold.arc` (124 px) — nên nó được
    ghi đúng như vậy thay vì được mô tả là một family nổi bật.
 2. **`particles.wisps` chạm trần của lớp AR, và đó là lý do đầu xa không nổ to.** Wisp phát `WispAmount × 4`
-   hạt/giây/phím và sống ~1,4 s; ở 45 là ~180 hạt/giây, ở 150 là 600. Nhưng lớp AR chỉ vẽ tối đa **192 hạt mỗi
-   khung**, chọn từ hạt mới nhất, nên khi kéo `WispAmount` lên 150 khung hình đã **bão hoà**: con số 85 px là một
-   tập hạt khác trong cùng trần, không phải "gấp ba số wisp". Nếu muốn đo đúng độ nhạy của `WispAmount` trong AR
-   thì phải hạ `WispHeight` hoặc đo dưới trần — việc đó nằm ngoài đợt này và được ghi lại thay vì bị che.
+   hạt/giây/phím và sống `0,35 + WispHeight × 1,9` giây; ở 45 là ~180 hạt/giây, ở 150 là 600. Nhưng lớp AR chỉ vẽ
+   tối đa **192 hạt mỗi khung**, nên khi kéo `WispAmount` lên 150 khung hình đã **bão hoà**: con số 85 px là một
+   tập hạt khác trong cùng trần, không phải "gấp ba số wisp". Phép tính đầy đủ ở §7.6 — và nó cho thấy **không có
+   cảnh hợp lệ nào** đo được `WispAmount` dưới trần khi contract khai tối đa 150.
 3. **Dự đoán ở §7.3 đúng từng pixel.** `impact.burst` và `particles.sparks` nằm sau cùng công tắc `ShowEmbers`:
    hai khung `rest` và `off` của chúng **trùng nhau từng pixel** — cùng **986 px**, cùng hộp bao **128 × 43**, cùng
    delta lớn nhất **224**. Chỉ khung đầu xa tách hai cột ra: **2 219 px** cho `ImpactBurst` = `Dust` (đám mây, hộp
@@ -315,6 +315,33 @@ của chính cột đó, dung sai 2/255, đọc lại từ tờ ảnh đã commi
 
 **Không có gì được lật.** Contract vẫn `Unverified` cho cả mười family, và ba family `particles.*` vẫn khai
 **sáu, năm và ba** thiết lập mà trang chỉ chụp hai — phần còn lại nằm trong `unshot` của manifest.
+
+### 7.6 Vì sao cột `particles.wisps` đo **cái trần**, không đo `WispAmount`
+
+Đây là phép tính từ mã nguồn, **không phải phép đo từ ảnh**, và nó được ghi lại vì con số 52/85 px ở §7.5 một mình
+sẽ bị đọc thành "wisp gần như không đổi khi tăng gấp ba".
+
+| Đại lượng | Công thức / hằng số trong mã | Ở `WispAmount` 45 | Ở 150 |
+|---|---|---:|---:|
+| Hạt phát ra mỗi giây, mỗi phím | `WispAmount × 4` (`wispCount = … look.WispAmount * 4f`) | 180 | 600 |
+| Đời sống trung bình | `life = .35 + WispHeight × 1.9`, mỗi hạt nhân thêm hệ số trung bình 1,0; `WispHeight` mặc định 55 ⇒ 1,395 s | 1,395 s | 1,395 s |
+| Hạt còn sống, mỗi phím | tích hai dòng trên | ≈ **251** | ≈ **837** |
+| Hạt còn sống, hai phím đang giữ | × 2 | ≈ **502** | ≈ **1 674** |
+| Trần vẽ của lớp AR | `MaxProjectedParticles = 192` (`GpuArLayer.Effects.cs`) | **192** | **192** |
+
+**Kết luận, và nó là kết luận về sản phẩm chứ không về trang:** ở cả hai đầu thiết lập, số hạt sống đều **vượt trần
+192 từ 2,6 đến 8,7 lần**, nên khung chụp chỉ chứa một **tập con 192 hạt**. Có thể làm cả hai đầu xuống dưới trần
+không? Không, với bất kỳ cảnh hợp lệ nào:
+
+- Hạ `WispHeight` xuống **tối thiểu 5** ⇒ đời sống 0,445 s ⇒ ở 150 vẫn còn **267 hạt/phím**; một phím vẫn vượt 192.
+- Bỏ một phím (chỉ giữ một) ⇒ 267 > 192 ở đầu xa.
+- `WispAmount` 150 là **`Maximum` mà contract khai**; hạ nó xuống là tự đặt một ngưỡng không thuộc về contract, và
+  khi đó cột không còn đo "đầu xa" nữa.
+
+Nên đây **không phải lỗ hổng của trang**: muốn đo độ nhạy của `WispAmount` trong AR thì phải đổi **chính sách trần**
+(`MaxProjectedParticles`, ảnh hưởng hiệu năng thật) hoặc đo trên **renderer sân khấu** — nơi `KeyEmissionBudget` và
+trần sprite là chuyện khác. Cả hai là quyết định của sản phẩm, không phải của một trang ảnh. Trang ghi đúng như vậy
+thay vì thêm một cột trông như đã trả lời.
 
 ## 8. Đợt 4: năm family cuối, và ba cơ chế mới
 
@@ -424,15 +451,73 @@ Bốn tờ: `held.png` **3 890 × 6 058** (3 cột × **8 hàng**), `impact.png`
 
 **Không có gì được lật.** Contract vẫn `Unverified` cho cả mười lăm family.
 
-## 9. Việc tiếp theo
+## 9. Đợt 5: `falling.trail` + `falling.shimmer`, và trang đủ 17/17
+
+Hai family này **không phải chỗ trống**: `VerifyArNoteProjection` đã đo cả hai bằng assertion từ trước (trail: Glow
+và Stream phải khác nhau, mỗi cái > 20 px; shimmer: số quad phải gấp đôi số nốt). Đợt này không tìm ra điều mới — nó
+đưa hai family vào trang để **17/17 family `Unverified` đều có ảnh**, đúng thứ tự đã ghi ở §9 của bản trước.
+
+Nhưng khi đưa vào thì ba chỗ trong chính cái trang này lộ ra là chưa đủ.
+
+### 9.1 Công tắc lại là một *choice*
+
+`falling.trail` không có `Show…`: công tắc của nó là `FallingTrail`, và giá trị renderer coi là tắt là `None`
+(`AddProjectedTrail` trả về ngay). Thêm một dòng vào `OffValues` là xong — nhưng nó kéo theo một luật khác phải sửa.
+
+### 9.2 Boolean nào cũng ghim "bật" là sai
+
+`falling.trail` khai **năm** thiết lập: `FallingTrail`, `FallingTrailIntensity`, `FallingTrailLength`, `FallingGhost`,
+`FallingGhostAmount`. Cột chỉ chụp công tắc và một thiết lập, nên `FallingGhost` thuộc diện **ghim**. Trước đợt này
+mọi boolean ghim đều bị đặt **bật** — và `FallingGhost` bật nghĩa là **bóng nốt tương lai** được vẽ thêm, tức một thứ
+khác hẳn cái cột này tên, trong một khung chỉ nên có một family.
+
+Luật mới: boolean chỉ ghim **bật** khi family **không vẽ được nếu thiếu nó** — hiện đúng một trường hợp,
+`ShowImpactRings` của `impact.wave` (nó là cổng của cả đường ring). Mọi boolean khác ghim **tắt**. Danh sách đó nằm
+trong `PinnedOn`, và manifest ghi `pinned` nên hàng nào bị ghim tắt đều đọc được.
+
+### 9.3 Hàng "đầu xa" có thể trùng đúng hàng đầu tiên
+
+`FallingTrailIntensity` là thiết lập thứ hai tự nhiên của `falling.trail`, và contract khai `Maximum = 100`. Nhưng
+look mà trang bắt đầu từ đó (`OptionMatrixReview.BaseSettings`) **đã đặt `FallingTrailIntensity = 100`** — nên hàng
+`far` sẽ là `100` và hàng `rest` cũng là `100`: **ba khung, hai khung y hệt nhau**. Cổng thứ tư của đợt 4 (`far` ↔
+`off`) không bắt được lỗi này vì cả hai đều khác `off`.
+
+Hai thay đổi:
+
+1. **Chọn hàng xa theo giá trị, không theo thứ tự.** Trang thử lần lượt các ứng viên (choice trước, rồi các phần
+   trăm theo thứ tự contract) và **bỏ qua** ứng viên mà đầu xa của nó **bằng đúng** giá trị khung tham chiếu đang
+   mang. `falling.trail` vì thế rơi xuống `FallingTrailLength` (**100** so với **55** của khung tham chiếu) — một
+   vệt dài hơn hẳn, thứ nhìn thấy được. Nếu không ứng viên nào khác được, family **bị từ chối** thay vì được chụp.
+2. **Cổng thứ năm**: `far` ↔ `rest` ≥ 12 px. Ba cổng trước bảo đảm khung tham chiếu có family và khung tắt không có
+   nó; cổng này bảo đảm **ba khung là ba bức ảnh**, không có cặp nào trùng.
+
+### 9.4 Shimmer cần một counter của chính nó
+
+Shimmer không vẽ quad riêng: nó vẽ **một quad thứ hai nằm trong thân nốt** (`AddNoteShimmer`), nên không counter nào
+thấy nó — suite cũ phải suy ra bằng `ArObjectQuadCount == số nốt × 2`. Trang này đòi mỗi family có một counter
+**riêng** khác 0, nên đã thêm `NoteShimmerQuadCount` vào lớp AR (`ArNoteShimmerQuadCount` ở renderer). Đó là **counter
+chẩn đoán**, không đổi pixel nào: ba hàm `AddSongNote` / `AddLiveBar` / `AddNoteShimmer` chuyển từ `static` sang
+instance để đếm được, phần vẽ giữ nguyên từng dòng.
+
+### 9.5 Cảnh
+
+Cả hai là family **đang rơi** (`NoteBoreRendered`, `WhileNoteVisible`) nên chụp trong cảnh *Approach* đã có — cùng nốt
+C4 đang bay, chưa vang. Tờ `approach.png` thành **3 hàng** (`falling.trail`, `falling.shimmer`, `falling.pulse`).
+Tổng: **17 family × 3 khung = 51 ảnh**, bốn tờ.
+
+### 9.6 Kết quả
+
+<!-- N17E:RESULTS -->
+
+## 10. Việc tiếp theo
 
 | Đợt | Nội dung | Vì sao đứng ở thứ tự này |
 |---|---|---|
 | ~~2~~ | ~~`falling.pulse` + `impact.burst`~~ | **xong** (§6) |
 | ~~3~~ | ~~ba family `particles.*`~~ | **xong** (§7), kèm phần chưa phủ ghi trong `unshot` |
-| ~~4~~ | ~~`impact.wave/flash/morph`, `release.fx`, `atmosphere.beams`~~ | **mã + guard xong** (§8) |
-| 5 | hai family `falling.trail` / `falling.shimmer` | chúng đã có assertion riêng (> 20 px, shimmer nhân đôi quad) nên không phải chỗ trống; đưa vào đây là để trang phủ **đủ 17 family**, không phải để tìm ra điều mới |
-| 5b | đo lại `particles.wisps` dưới trần 192 hạt/khung | con số 52/85 px hiện đo **cái trần** nhiều hơn đo `WispAmount` |
+| ~~4~~ | ~~`impact.wave/flash/morph`, `release.fx`, `atmosphere.beams`~~ | **xong** (§8) |
+| ~~5~~ | ~~`falling.trail` + `falling.shimmer`~~ | **mã + guard xong** (§9) — trang phủ **17/17 family** |
+| 6 | `particles.wisps`: đo **dưới** trần 192 hạt/khung | con số 52/85 px hiện đo **cái trần** nhiều hơn đo `WispAmount` (§7.6). §7.6 chứng minh không cảnh AR hợp lệ nào làm được điều này với `Maximum` 150 ⇒ đây là **quyết định sản phẩm** (nâng trần, ảnh hưởng hiệu năng) hoặc đo trên renderer sân khấu, **cần cậu gật** |
 
 Không đợt nào trong bốn đợt trên được phép lật binding. Muốn lật thì phải phủ **giá trị và vòng đời**, không phải
 thêm một pose nữa — và đó là việc phải làm trên máy có GPU thật, không phải trong sandbox này.

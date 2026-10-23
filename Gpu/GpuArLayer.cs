@@ -74,6 +74,8 @@ internal sealed partial class GpuArLayer
     internal int LiveBarCount { get; private set; }
     internal int RisingMidiNoteCount { get; private set; }
     internal int NoteTrailQuadCount { get; private set; }
+    /// <summary>Sheen quads drawn inside existing note bodies; the shimmer has no quad of its own on the page.</summary>
+    internal int NoteShimmerQuadCount { get; private set; }
     internal int GhostNoteQuadCount { get; private set; }
     internal int LandingGlowCount { get; private set; }
     internal int NoteLabelCount { get; private set; }
@@ -108,7 +110,7 @@ internal sealed partial class GpuArLayer
         quads.Clear();
         _shapes.Clear(); _projectedShapes.Clear(); _liveBars.Clear(); _projectedLiveBars.Clear(); _risingMidiNotes.Clear();
         KeyQuadCount = LiveBarCount = RisingMidiNoteCount = 0;
-        NoteTrailQuadCount = GhostNoteQuadCount = LandingGlowCount = NoteLabelCount = 0;
+        NoteTrailQuadCount = GhostNoteQuadCount = LandingGlowCount = NoteLabelCount = NoteShimmerQuadCount = 0;
         ImpactLightCount = NoteLightCount = PulseCount = ParticleFxCount = FlashCount = HoldArcCount = BeamCount = ReleaseEffectCount = 0;
         DamperStripCount = DamperCellCount = DamperTickCount = 0;
         AlignmentGuideCount = 0;
@@ -318,7 +320,7 @@ internal sealed partial class GpuArLayer
         return color;
     }
 
-    private static void AddSongNote(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, int noteIndex,
+    private void AddSongNote(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, int noteIndex,
         bool sounding, double fade, NoteEvent note, float opacity, GpuLook look, double time, bool ghostPass = false)
     {
         var played = note.Played;
@@ -348,7 +350,7 @@ internal sealed partial class GpuArLayer
         return look.RainbowTrail ? GpuStageSimulation.ColorFromHue(time * look.RainbowHueSpeed + pitch * 9) : color;
     }
 
-    private static void AddLiveBar(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, double fade, bool held,
+    private void AddLiveBar(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, double fade, bool held,
         float strength, Vector3 color, float opacity, GpuLook look, double time, bool ghostPass = false)
     {
         var breath = held && look.HoldBreath
@@ -368,7 +370,7 @@ internal sealed partial class GpuArLayer
     private static double Distance(double x, double y) => Math.Sqrt(x * x + y * y);
 
     /// <summary>Projects the GPU stage's moving note sheen along an AR note's own calibrated quad.</summary>
-    private static void AddNoteShimmer(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch,
+    private void AddNoteShimmer(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch,
         Vector3 linearColor, float alpha, GpuLook look)
     {
         if (!look.NoteShimmer || look.NoteShimmerAmount <= .01f || alpha <= .01f) return;
@@ -380,6 +382,7 @@ internal sealed partial class GpuArLayer
         var phase = pitch * 1.6180339f + .37f;
         quads.Add(Pack(patch, linearColor, alpha,
             new Vector4(phase, look.NoteShimmerAmount, 8, 0)));
+        NoteShimmerQuadCount++;
     }
 
     /// <summary>A flat screen-space rectangle in output pixels: the AR layer's own strokes need no projection.</summary>
