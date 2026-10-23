@@ -115,7 +115,7 @@ internal static class ArEffectFamilyReview
     /// <summary>One family as the page draws it: where it is shot, its switch, and the setting the far row pushes.</summary>
     private sealed record Family(string Id, Stage Stage, DrivenSetting On, DrivenSetting Far)
     {
-        internal string Sheet => $"ar-effect/sheet-{Stage.ToString().ToLowerInvariant()}.png";
+        internal string Sheet => $"ar-effect/sheet-{this.Stage.ToString().ToLowerInvariant()}.png";
     }
 
     private sealed class Shot
@@ -159,7 +159,7 @@ internal static class ArEffectFamilyReview
 
             // One sheet per scene, so the numbers on a page always come from the same camera and the same moment.
             var reports = new List<SheetReport>(3);
-            var shots = new List<Shot>(families.Count * Columns);
+            var shots = new List<Shot>(families.Length * Columns);
             foreach (var group in families.GroupBy(family => family.Stage))
             {
                 var page = group.ToArray();
@@ -235,7 +235,8 @@ internal static class ArEffectFamilyReview
                 var cells = reports.SelectMany(report => report.Cells).Where(cell => cell.Family == family.Id).ToArray();
                 var off = cells.Single(cell => cell.Row == "off");
                 var far = cells.Single(cell => cell.Row == "far");
-                return $"{family.Id} {off.ArChanged} px off / {far.Parameter} {(far.Choice.Length > 0 ? far.Choice : far.Value.ToString("0"))} {far.ArChanged} px";
+                var label = far.Choice.Length > 0 ? far.Choice : far.Value.ToString("0");
+                return $"{family.Id} {off.ArChanged} px off / {far.Parameter} {label} {far.ArChanged} px";
             }));
             var total = reports.Sum(report => report.Cells.Count);
             WriteManifest(root, renderer.AdapterName, families, reports, total);
@@ -374,14 +375,14 @@ internal static class ArEffectFamilyReview
     {
         // A stage that is never drawn: only its colour pipeline and keyboard fraction feed the look, exactly as the
         // flat matrices do, so both pages resolve the same palette from the same settings.
-        var stage = new PianoStage { Width = Width, Height = Height };
-        stage.SetVisualSettings(settings);
-        stage.Measure(new Size(Width, Height));
-        stage.Arrange(new Rect(0, 0, Width, Height));
-        stage.UpdateLayout();
+        var piano = new PianoStage { Width = Width, Height = Height };
+        piano.SetVisualSettings(settings);
+        piano.Measure(new Size(Width, Height));
+        piano.Arrange(new Rect(0, 0, Width, Height));
+        piano.UpdateLayout();
         var feed = new GpuStageFeed { LabelAtlas = PianoStage.GpuGlyphAtlas };
-        feed.SetLook(GpuLook.From(settings, (pitch, track) => stage.AdjustColor(stage.NoteColor(pitch, track)),
-            stage.KeyboardHeight / stage.ActualHeight, stage.AdjustColor, true));
+        feed.SetLook(GpuLook.From(settings, (pitch, track) => piano.AdjustColor(piano.NoteColor(pitch, track)),
+            piano.KeyboardHeight / piano.ActualHeight, piano.AdjustColor, true));
         feed.SetStageHeight(Height);
         var calibration = ArCalibration.Create(KeyboardLayout.Standard88, pose.Corners!, Width, Height, out var problem,
             HeldParticleControlPlan.Fov) ?? throw new InvalidDataException($"AR effect calibration: {problem}");
