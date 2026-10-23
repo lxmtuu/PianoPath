@@ -403,7 +403,7 @@ jobs:
           if (Test-Path $log) {
             Get-Content $log | ForEach-Object {
               Write-Output $_
-              if ($_ -like 'FAIL*') { "::error title=N17 AR effect families::$_" } elseif ($_ -like 'PASS AR hold-family review*') { "::notice title=N17 AR effect families::$_" }
+              if ($_ -like 'FAIL*') { "::error title=N17 AR effect families::$_" } elseif ($_ -like 'PASS AR effect-family review*') { "::notice title=N17 AR effect families::$_" }
             }
           } else { "::error title=N17 AR effect families::No verification log was written" }
           exit $proc.ExitCode

@@ -2080,6 +2080,19 @@ def scan_ar_effect_family_review():
     if "AR effect-family review (N17)" not in workflow or "--verify-ar-effect-only" not in workflow:
         errors.append(".github/workflows/build.yml no longer runs --verify-ar-effect-only, so a crash in the "
                       "review takes the whole suite down instead of naming itself")
+    # The step turns the suite's PASS line into a notice annotation so the measured counts are readable without
+    # downloading the artifact. That match is a literal prefix, so renaming the suite's line silently kills the
+    # annotation - which is exactly what happened between rounds 2 and 5, and nobody noticed until a number was needed
+    # from it. The workflow's prefix has to be a prefix the suite actually prints.
+    notice = re.search(r"-like 'PASS ([^'*]+)\*'", workflow)
+    if not notice:
+        errors.append(".github/workflows/build.yml no longer turns the N17 PASS line into a notice annotation; the "
+                      "measured counts would only exist in an artifact")
+    elif f"PASS {notice.group(1)}" not in suite:
+        errors.append(f".github/workflows/build.yml waits for a PASS line starting 'PASS {notice.group(1)}', which "
+                      "Diagnostics/VerificationSuite.cs no longer prints; the N17 notice annotation would silently "
+                      "disappear and the measured counts with it")
+
     if "docs/evidence/ar-effect-sheets" not in workflow:
         errors.append(".github/workflows/build.yml no longer stages docs/evidence/ar-effect-sheets; the page's "
                       "committed pictures would never reach the repository")
