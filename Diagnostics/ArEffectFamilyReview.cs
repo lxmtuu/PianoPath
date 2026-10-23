@@ -246,9 +246,19 @@ internal static class ArEffectFamilyReview
                     sheet.Blit(column * Columns + 2, captions[column * Columns + 2], far.Pixels!, Width, Height,
                         premultiplied: false);
                     var changed = OptionMatrixPlan.ChangedPixels(far.Pixels!, rest.Pixels!);
+                    // The far row has to be a third picture, not the middle one under another caption. A setting can
+                    // be bound, read back and still draw nothing at the moment the frame is taken - a styled flash
+                    // outlives its 0.26 s life while the strike scene was shot at 0.30 s - and the column would then
+                    // carry a row that measures the off frame twice.
+                    var againstOff = OptionMatrixPlan.ChangedPixels(far.Pixels!, off.Pixels!);
+                    if (againstOff < MinimumChangedPixels)
+                        throw new InvalidDataException(
+                            $"{family.Id}: its far row ({family.Far.Name} {family.Far.Label}) changes {againstOff} pixels " +
+                            $"against the same family switched off (floor {MinimumChangedPixels}), so the third picture " +
+                            "is the middle one under another caption.");
                     cells.Add(new Cell(family.Id, family.Stage, family.Far.Name, "far", family.Far.Number, family.Far.Choice,
                         far.File, far.PixelSha256, changed, far.Lit, far.Painted, far.Quads, Read(changed),
-                        "The contract's far end, against the product's own value."));
+                        $"The contract's far end, against the product's own value; {againstOff} px against the family switched off."));
 
                     off.Pixels = null;
                     far.Pixels = null;
@@ -472,8 +482,12 @@ internal static class ArEffectFamilyReview
         Stage.Held => (12, 1.0 / 30),
         // The note's head sits 0.4 s above the keys at 0.5 s in, so it is in flight and not yet sounding.
         Stage.Approach => (30, 1.0 / 60),
-        // 0.3 s after the strike: the burst has left the key and has not begun to fade.
-        Stage.Impact => (18, 1.0 / 60),
+        // 0.2 s after the strike. It was 0.3 s until round 4 put a styled flash on this sheet: a styled flash
+        // (Lightning, Plasma) lives EffectBudget.StyledFlashLifeSeconds = 0.26 s, so at 0.30 s the far row of
+        // impact.flash was drawn from a flash that had already died and came out byte-identical to the off row.
+        // 0.2 s is inside every effect this scene carries: the flare lives 0.38 s, a styled flash 0.26 s, the ring
+        // 0.55 s and the burst's particles more than that.
+        Stage.Impact => (12, 1.0 / 60),
         // The finger lifts at frame 12 (0.2 s) and the capture is taken 0.2 s later, while the release effect is
         // still in the air: Float Up droplets live 0.7-1.2 s, so the last frame of a 0.4 s run still has them.
         Stage.Release => (24, 1.0 / 60),

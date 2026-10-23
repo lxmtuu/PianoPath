@@ -247,7 +247,7 @@ tiên. Family khai **đúng hai** thiết lập thì giữ nguyên luật cũ �
 `impact.burst` vẫn đẩy `ImpactBurst` tới giá trị cuối trong danh sách. Family khai **nhiều hơn hai** thì đầu xa là
 **choice đầu tiên sau công tắc** nếu family khai thêm một choice, ngược lại là **phần trăm đầu tiên**, lấy `Maximum`
 mà contract ghi. Lý do của thứ tự đó: một đổi *kiểu* là thứ nhìn thấy được (`impact.flash` từ Flare sang Plasma là
-hai bức ảnh khác nhau), còn độ sáng của một vệt loé đã tàn 0,3 s sau cú đánh chỉ còn vài mức chênh — đo cái sau rồi
+hai bức ảnh khác nhau), còn độ sáng của một vệt loé đã tàn chỉ còn vài mức chênh — đo cái sau rồi
 báo "không thấy gì" sẽ là kết luận sai về family chứ không phải về thiết lập. Mọi thiết lập
 còn lại được ghi vào manifest dưới khoá `unshot` và hiện thành một cột **"Không chụp ở đợt
 này"** ngay trên trang HTML. Như vậy cột này không thể bị đọc thành "cả family đã được phủ": nó nói rõ nó phủ cái
@@ -354,12 +354,32 @@ phát hiệu ứng nhả nằm ở event live chứ không ở trạng thái ph�
 | `particles.sparks` | Impact | *(đợt 3)* |
 | `impact.burst` | Impact | *(đợt 2)* |
 | `release.fx` | **Release** | chỉ tồn tại sau khi phím lên |
-| `atmosphere.beams` | Held | chùm sáng neo vào **phím đang sáng**, không neo vào nốt; cảnh Held có hai phím sáng liên tục, còn cảnh Impact chỉ sáng một phím trong 0,3 s. Family là `Continuous` + `StageTick` nên nó không cần một cảnh "rảnh" riêng — nó cần một bàn phím có đèn |
+| `atmosphere.beams` | Held | chùm sáng neo vào **phím đang sáng**, không neo vào nốt; cảnh Held có hai phím sáng liên tục, còn cảnh Impact chỉ sáng một phím trong 0,2 s. Family là `Continuous` + `StageTick` nên nó không cần một cảnh "rảnh" riêng — nó cần một bàn phím có đèn |
 
 Tổng: **15 family × 3 khung = 45 ảnh**, bốn tờ. `held.png` thành 8 hàng, `approach.png` 1 hàng, `impact.png` 5 hàng,
 `release.png` 1 hàng.
 
-### 8.4 Kết quả
+### 8.4 Cổng thứ tư: hàng "đầu xa" phải là một bức ảnh thứ ba
+
+Đợt này thêm một cổng, và nó bắt được một lỗi thật ngay lần đầu: **hàng `far` phải khác hàng `off` ít nhất 12 px**.
+Không có cổng đó, một thiết lập có thể **được bind, đọc lại đúng, và vẫn không vẽ gì** ở đúng thời điểm chụp — và cột
+sẽ mang ba khung trong đó khung thứ ba là khung thứ hai dưới một chú thích khác.
+
+Lỗi cụ thể: `impact.flash` có hàng `far` là `ImpactFlashStyle = Plasma`. Một flash có kiểu sống
+`EffectBudget.StyledFlashLifeSeconds` = **0,26 s**, còn cảnh Impact khi đó chụp ở **0,30 s**. Ảnh `Plasma` vì thế
+**trùng từng byte** với ảnh tắt family (`off` ↔ `far` = **0 px**), trong khi phép đo cũ (`far` ↔ `rest`) vẫn ra
+**32 453 px** vì khung `rest` có vệt loé và hai khung kia không có gì. Cột qua cổng cũ mà không đo được cái nó tên.
+
+Hai thay đổi, cả hai đều để lại dấu:
+
+1. **Cảnh Impact rút từ 18 khung xuống 12 khung** (0,30 s → **0,20 s**), để nằm trong đời sống của mọi thứ cảnh này
+   mang: vệt loé 0,38 s, flash có kiểu 0,26 s, vòng sóng 0,55 s. Đây là **đổi cảnh có chủ đích**, nên mọi con số của
+   cảnh Impact trong tài liệu này — kể cả `impact.burst` (đợt 2) và `particles.sparks` (đợt 3) — đã được **đo lại**
+   từ tờ ảnh mới, không phải chép lại từ lượt trước.
+2. **Cổng thứ tư** trong review, chạy trước khi ghi manifest: `far` ↔ `off` ≥ 12 px, nếu không thì cột bị **từ chối**
+   chứ không được ghi thành kết quả. Ghi chú của ô `far` trong manifest cũng ghi luôn con số đó.
+
+### 8.5 Kết quả
 
 <!-- N17D:RESULTS -->
 
