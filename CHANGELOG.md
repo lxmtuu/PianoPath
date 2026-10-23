@@ -31,15 +31,19 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
 - Nhịp mô phỏng hạt tách khỏi nhịp khung hình: cùng một preset cho cùng một chuyển động ở 60 Hz, 144 Hz và khi xuất video, thay vì nhanh dần theo tần số quét.
 
 ### Kiểm chứng
-- **Bảy family hiệu ứng AR có trang ảnh kiểm chứng, mỗi family chụp trong đúng cảnh mà vòng đời của nó cần**
-  (`--verify-ar-effect-only`: ba tờ `held` / `approach` / `impact`, 21 khung). Năm family giữ phím chụp khi hai phím
-  đang giữ; `falling.pulse` chụp trên một nốt đang **bay, chưa vang**; `impact.burst` chụp đúng một cú đánh vào
-  phím. Mỗi cột chỉ bật **một** family, và review **từ chối** cột đó thay vì ghi ba khung gần giống nhau thành kết
-  quả: khung gốc phải đè ≥ 500 px lên hình camera, layer phải phát quad riêng, và lấy family ra khỏi ảnh phải đổi
-  ≥ 12 px. Số đọc lại từ tờ ảnh: bốn family thanh giữ phím đổi 6 915–11 469 px khi tắt và 8 357–14 625 px ở đầu
-  trên, `hold.arc` **124 / 87 px**, `falling.pulse` **4 504 / 4 439 px**, `impact.burst` **986 / 2 219 px** — mọi
-  cột đều trên ngưỡng. Đây là **trang ảnh**, không phải lật trạng thái: contract typed vẫn để cả bảy family là
-  `Unverified`.
+- **Mười family hiệu ứng AR có trang ảnh kiểm chứng, mỗi family chụp trong đúng cảnh mà vòng đời của nó cần**
+  (`--verify-ar-effect-only`: ba tờ `held` / `approach` / `impact`, 30 khung). Năm family giữ phím cùng
+  `particles.wisps` và `particles.flames` chụp khi hai phím đang giữ; `falling.pulse` chụp trên một nốt đang **bay,
+  chưa vang**; `impact.burst` và `particles.sparks` chụp đúng một cú đánh vào phím. Mỗi cột chỉ bật **một** family,
+  và review **từ chối** cột đó thay vì ghi ba khung gần giống nhau thành kết quả: khung gốc phải đè ≥ 500 px lên hình
+  camera, layer phải phát quad riêng, và lấy family ra khỏi ảnh phải đổi ≥ 12 px. Family khai nhiều hơn hai thiết lập
+  chỉ chụp công tắc và **phần trăm đầu tiên sau nó**; mọi thiết lập không chụp được ghi tên trong manifest (`unshot`)
+  và trên trang. Số đọc lại từ tờ ảnh: bốn family thanh giữ phím đổi 6 915–11 469 px khi tắt và 8 357–14 625 px ở
+  đầu trên, `hold.arc` **124 / 87 px**, `particles.wisps` **52 / 85 px**, `particles.flames` **1 167 / 16 232 px**,
+  `falling.pulse` **4 504 / 4 439 px**, `impact.burst` **986 / 2 219 px**, `particles.sparks` **986 / 2 312 px**.
+  `impact.burst` và `particles.sparks` nằm sau cùng công tắc `ShowEmbers` nên hai khung `rest`/`off` của chúng trùng
+  nhau từng pixel; trang nói rõ điều đó thay vì trình bày chúng như hai phép đo độc lập. Đây là **trang ảnh**, không
+  phải lật trạng thái: contract typed vẫn để cả mười family là `Unverified`.
 
 ## 2.2.0 — 2026-10-18
 

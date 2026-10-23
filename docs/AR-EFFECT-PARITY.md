@@ -267,14 +267,52 @@ tờ `impact.png` thành **2 hàng**. Tổng: **10 family × 3 khung = 30 ảnh*
 
 ### 7.5 Kết quả
 
-<!-- N17C:RESULTS -->
+Ba tờ: `held.png` **3 890 × 5 306** (3 cột × **7 hàng**), `impact.png` **3 890 × 1 546** (3 cột × **2 hàng**),
+`approach.png` không đổi (3 890 × 794, 1 hàng). 10 family × 3 khung = **30 ô**. Vẫn là pixel đổi so với khung `rest`
+của chính cột đó, dung sai 2/255, đọc lại từ tờ ảnh đã commit.
+
+| Family | Cảnh | Công tắc **tắt** | Đầu xa |
+|---|---|---:|---:|
+| `particles.wisps` | Held | `ShowWisps` off → **52 px** | `WispAmount` 150 → **85 px** |
+| `particles.flames` | Held | `ShowFlame` off → **1 167 px** | `FlameIntensity` 100 → **16 232 px** |
+| `particles.sparks` | Impact | `ShowEmbers` off → **986 px** | `ParticleAmount` 120 → **2 312 px** |
+
+**Đọc bảng:**
+
+1. **Đo được cả ba, nhưng độ dày rất khác nhau — và đó là kết quả, không phải lỗi.** `particles.flames` là family
+   dày nhất trong cả ba đợt: tắt lửa đổi **1 167 px**, đẩy `FlameIntensity` từ 70 lên 100 đổi **16 232 px**, hộp
+   bao từ **330 × 60** phình thành **413 × 150** — lửa cao lên chứ không chỉ sáng hơn. `particles.sparks` đổi
+   **2 312 px** ở `ParticleAmount` 120, hộp bao **145 × 51**. Còn `particles.wisps` chỉ **52 / 85 px**: một hạt
+   wisp là chấm 0,6–1,8 px ở alpha thấp, và 144 hạt đang bay ở giá trị sản phẩm chỉ phủ **52 px** đổi quá ngưỡng
+   2/255. Cột này **qua cổng** nhưng là cột mỏng nhất trang — mỏng hơn cả cung `hold.arc` (124 px) — nên nó được
+   ghi đúng như vậy thay vì được mô tả là một family nổi bật.
+2. **`particles.wisps` chạm trần của lớp AR, và đó là lý do đầu xa không nổ to.** Wisp phát `WispAmount × 4`
+   hạt/giây/phím và sống ~1,4 s; ở 45 là ~180 hạt/giây, ở 150 là 600. Nhưng lớp AR chỉ vẽ tối đa **192 hạt mỗi
+   khung**, chọn từ hạt mới nhất, nên khi kéo `WispAmount` lên 150 khung hình đã **bão hoà**: con số 85 px là một
+   tập hạt khác trong cùng trần, không phải "gấp ba số wisp". Nếu muốn đo đúng độ nhạy của `WispAmount` trong AR
+   thì phải hạ `WispHeight` hoặc đo dưới trần — việc đó nằm ngoài đợt này và được ghi lại thay vì bị che.
+3. **Dự đoán ở §7.3 đúng từng pixel.** `impact.burst` và `particles.sparks` nằm sau cùng công tắc `ShowEmbers`:
+   hai khung `rest` và `off` của chúng **trùng nhau từng pixel** — cùng **986 px**, cùng hộp bao **128 × 43**, cùng
+   delta lớn nhất **224**. Chỉ khung đầu xa tách hai cột ra: **2 219 px** cho `ImpactBurst` = `Dust` (đám mây, hộp
+   bao 128 × 53) so với **2 312 px** cho `ParticleAmount` = 120 (chùm tia dày hơn, hộp bao 145 × 51). Trang trình
+   bày đúng như vậy: hai cột đo **hai thiết lập khác nhau của cùng một công tắc**, không phải hai phép đo độc lập.
+4. **Tất định, lần thứ ba.** Năm family hold cho lại đúng chín con số của đợt 1 và đợt 2, và `falling.pulse`
+   (4 504 / 4 439) cùng `impact.burst` (986 / 2 219) cho lại đúng số của đợt 2 — dù tờ `held.png` và `impact.png`
+   đã dài thêm hàng và được render trong một lượt CI mới. Một trang 30 ô mà hai phần ba số liệu cũ vẫn khớp từng
+   đơn vị nghĩa là phép đo không phụ thuộc vào việc trang có thêm cột hay không.
+5. **Cả 30 ô đều qua cổng.** Không ô nào bị từ chối: khung gốc đè ≥ 500 px lên hình camera, layer phát quad riêng,
+   và tắt family đổi ≥ 12 px. Ô nhỏ nhất là **52 px** (`particles.wisps`), ô lớn nhất **16 232 px**
+   (`particles.flames` ở 100).
+
+**Không có gì được lật.** Contract vẫn `Unverified` cho cả mười family, và ba family `particles.*` vẫn khai
+**sáu, năm và ba** thiết lập mà trang chỉ chụp hai — phần còn lại nằm trong `unshot` của manifest.
 
 ## 8. Việc tiếp theo
 
 | Đợt | Nội dung | Vì sao đứng ở thứ tự này |
 |---|---|---|
 | ~~2~~ | ~~`falling.pulse` + `impact.burst`~~ | **xong** (§6) |
-| ~~3~~ | ~~ba family `particles.*`~~ | **mã + guard xong**; §7.2 ghi rõ phần chưa phủ |
+| ~~3~~ | ~~ba family `particles.*`~~ | **xong** (§7), kèm phần chưa phủ ghi trong `unshot` |
 | 4 | `release.fx`, `atmosphere.beams`, `impact.wave/flash/morph` | đã có phép đo riêng; đợt này chỉ là đưa ảnh vào repo |
 
 Không đợt nào trong bốn đợt trên được phép lật binding. Muốn lật thì phải phủ **giá trị và vòng đời**, không phải
