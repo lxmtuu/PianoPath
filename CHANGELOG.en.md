@@ -31,6 +31,18 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 - **Note widths below 60%** now draw the held-key bar exactly as wide as the falling note on both renderers: the software stage used to floor the held bar at 60%, so one preset produced a bar twice as wide as its own falling note — and twice as wide as the same preset on a GPU machine, which has always read the slider.
 - Particle pacing is decoupled from the frame rate: one preset now moves the same at 60 Hz, 144 Hz and in an exported video, instead of speeding up with the refresh rate.
 
+### Verification
+- **All seven AR effect families now have a review sheet, each shot in the scene its own lifecycle needs**
+  (`--verify-ar-effect-only`: three sheets, `held` / `approach` / `impact`, 21 frames). The five held-key families
+  are shot while two keys are held; `falling.pulse` on a note **still falling and not yet sounding**; `impact.burst`
+  on exactly one strike at the keys. Each column turns on **one** family at a time, and the review **refuses that
+  column** instead of recording three near-identical frames as a result: the family's own frame must repaint
+  ≥ 500 px of the camera picture, the layer must emit its own quads, and taking the family away must change
+  ≥ 12 px. Read back from the sheets: the four bar families change 6 915–11 469 px when off and 8 357–14 625 px at
+  the far end, `hold.arc` **124 / 87 px**, `falling.pulse` **4 504 / 4 439 px**, `impact.burst` **986 / 2 219 px** —
+  every column above the floor. This is a **sheet of pictures**, not a status flip: the typed contract still lists
+  all seven families as `Unverified`.
+
 ## 2.2.0 — 2026-10-18
 
 ### AR overlay

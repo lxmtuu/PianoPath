@@ -30,6 +30,17 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
 - **Bề rộng nốt dưới 60%** giờ vẽ thanh giữ phím đúng bằng nốt rơi trên cả hai đường render: bản phần mềm từng kẹp thanh giữ phím ở 60% nên cùng một preset cho thanh rộng gấp đôi nốt rơi cùng cao độ — và rộng gấp đôi so với máy có GPU, nơi slider luôn được đọc đúng.
 - Nhịp mô phỏng hạt tách khỏi nhịp khung hình: cùng một preset cho cùng một chuyển động ở 60 Hz, 144 Hz và khi xuất video, thay vì nhanh dần theo tần số quét.
 
+### Kiểm chứng
+- **Bảy family hiệu ứng AR có trang ảnh kiểm chứng, mỗi family chụp trong đúng cảnh mà vòng đời của nó cần**
+  (`--verify-ar-effect-only`: ba tờ `held` / `approach` / `impact`, 21 khung). Năm family giữ phím chụp khi hai phím
+  đang giữ; `falling.pulse` chụp trên một nốt đang **bay, chưa vang**; `impact.burst` chụp đúng một cú đánh vào
+  phím. Mỗi cột chỉ bật **một** family, và review **từ chối** cột đó thay vì ghi ba khung gần giống nhau thành kết
+  quả: khung gốc phải đè ≥ 500 px lên hình camera, layer phải phát quad riêng, và lấy family ra khỏi ảnh phải đổi
+  ≥ 12 px. Số đọc lại từ tờ ảnh: bốn family thanh giữ phím đổi 6 915–11 469 px khi tắt và 8 357–14 625 px ở đầu
+  trên, `hold.arc` **124 / 87 px**, `falling.pulse` **4 504 / 4 439 px**, `impact.burst` **986 / 2 219 px** — mọi
+  cột đều trên ngưỡng. Đây là **trang ảnh**, không phải lật trạng thái: contract typed vẫn để cả bảy family là
+  `Unverified`.
+
 ## 2.2.0 — 2026-10-18
 
 ### AR overlay

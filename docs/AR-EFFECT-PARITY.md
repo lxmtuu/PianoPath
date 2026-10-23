@@ -185,7 +185,41 @@ tấm ảnh sẽ mang chú thích `Dust` trong khi thực chất là `Embers`.
 
 ### 6.4 Kết quả
 
-<!-- N17B:RESULTS -->
+Ba tờ ảnh đã commit: `docs/evidence/ar-effect-sheets/held.png` (3 890 × 3 802, lưới 3 cột × 5 hàng — số của phần
+này đã báo ở §5), `approach.png` (3 890 × 794, 3 cột × 1 hàng) và `impact.png` (3 890 × 794, 3 cột × 1 hàng). Mỗi ô
+là ảnh gốc 1280 × 720 **không hạ mẫu**; cột 1 là family ở giá trị sản phẩm, cột 2 là công tắc **tắt**, cột 3 là
+**đầu xa** của contract. Số là pixel đổi so với khung `rest` của chính cột đó, dung sai 2/255, **đọc lại từ tờ ảnh
+đã commit** — manifest của lượt chạy nằm trong artifact mà sandbox này không tải được, cùng cách §5 đã làm.
+
+| Family | Cảnh | Công tắc **tắt** | Đầu xa |
+|---|---|---:|---:|
+| `falling.pulse` | Approach | `FallingPulse` off → **4 504 px** | `FallingPulseRate` 100 → **4 439 px** |
+| `impact.burst` | Impact | `ShowEmbers` off → **986 px** | `ImpactBurst` `Dust` → **2 219 px** |
+
+**Đọc bảng:**
+
+1. **`falling.pulse` đo đúng thân nốt.** Hộp bao của phần đổi là **58 × 105 px**, đúng bằng thân một nốt C4 ở cỡ
+   đó, và phép so phóng 8× cho thấy phần đổi là **một vòng kín quanh thân nốt** (một phép dịch vị trí sẽ ra hai
+   lưỡi liềm ở hai bên đối nhau, không ra một vòng kín): family đổi **độ sáng và quầng của nốt đang bay**, không
+   đẩy nốt sang chỗ khác. Delta lớn nhất chỉ **19** (tắt) và **28** (đầu trên) trên thang 255 — đây là thứ thấy
+   được khi đặt hai khung cạnh nhau, không phải một đốm sáng mới. Hai đầu gần bằng nhau (4 504 / 4 439) là đúng
+   bản chất: tắt `FallingPulse` bỏ hẳn phần nhân alpha, còn đẩy `FallingPulseRate` lên 100 chỉ đổi pha ở thời điểm
+   chụp — cả hai đều là **cùng một thân nốt** đổi sáng.
+2. **`impact.burst` thấy bằng mắt thường.** Hộp bao **128 × 43 px** khi tắt và **128 × 53 px** khi `Dust`, nằm ngay
+   trên phím bị đánh, delta lớn nhất **224**. `Embers` là chùm tia toả ra còn `Dust` là đám mây mờ: nhìn ba ô cạnh
+   nhau là thấy, đúng thứ một trang kiểm chứng phải đưa ra. Đây cũng là lý do `impact.burst` phải chụp ở cảnh
+   *impact* — trong cảnh giữ phím, con số sẽ đo emitter sustain chứ không đo cú nổ.
+3. **Cả 21 ô đều qua cổng.** Review tự ném lỗi nếu khung gốc đè dưới 500 px lên hình camera, nếu layer không phát
+   quad riêng nào, hoặc nếu tắt family không đổi đủ 12 px; bước 6 của CI xanh nghĩa là **không ô nào** bị từ chối,
+   kể cả hai ô nhỏ nhất (`hold.arc` 124 / 87 px và `impact.burst` 986 px). Con số nhỏ ở đây là hình học của hiệu
+   ứng, không phải binding hỏng.
+4. **Tất định.** Tờ `held.png` của lượt này cho lại **đúng từng con số** của đợt 1 (7 948 / 6 915 / 7 824 / 11 469 /
+   124 và 14 625 / 9 463 / 8 357 / 13 319 / 87) dù là một lượt CI mới trên runner mới: cùng seed, cùng pose, cùng
+   12 khung thì ra cùng một ảnh. Hai tờ mới sinh trong cùng lượt đó nên dùng chung chuẩn ấy.
+
+**Không có gì được lật.** Contract vẫn `Unverified` cho cả bảy family. Bảng trên là bằng chứng rằng bảy family
+**tới được** lớp phủ AR và **đổi ảnh** ở cả hai đầu thiết lập; việc lật trạng thái là một bước riêng, cần ảnh
+chứng minh **và** người duyệt.
 
 ## 7. Việc tiếp theo
 
