@@ -1,7 +1,7 @@
 # Family hiệu ứng trong lớp AR: mười bảy family `Unverified` (N17)
 
-> **Trạng thái:** đợt 1 + đợt 2 + đợt 3, 2026-10-23 · **Mã:** `Diagnostics/ArEffectFamilyReview.cs` · **Chốt chặn:**
-> `tools/check_sources.py` (`scan_ar_effect_family_review`) · **Ảnh:** `docs/evidence/ar-effect-sheets/{held,approach,impact}.png`
+> **Trạng thái:** đợt 1–4, 2026-10-23 · **Ảnh:** `docs/evidence/ar-effect-sheets/{held,approach,impact,release}.png` · **Mã:** `Diagnostics/ArEffectFamilyReview.cs` · **Chốt chặn:**
+> `tools/check_sources.py` (`scan_ar_effect_family_review`)
 
 ## 1. Câu hỏi, và câu trả lời ngắn
 
@@ -245,7 +245,10 @@ ba** thiết lập, nên lý do đó phải được trả lời chứ không ph
 Quy tắc chọn thiết lập thứ hai là **máy đọc từ contract**, không phải người chọn: công tắc là tham số boolean đầu
 tiên. Family khai **đúng hai** thiết lập thì giữ nguyên luật cũ — thiết lập còn lại là đầu xa, bất kể loại, nên
 `impact.burst` vẫn đẩy `ImpactBurst` tới giá trị cuối trong danh sách. Family khai **nhiều hơn hai** thì đầu xa là
-**phần trăm đầu tiên sau công tắc** theo đúng thứ tự contract khai báo, lấy `Maximum` mà contract ghi. Mọi thiết lập
+**choice đầu tiên sau công tắc** nếu family khai thêm một choice, ngược lại là **phần trăm đầu tiên**, lấy `Maximum`
+mà contract ghi. Lý do của thứ tự đó: một đổi *kiểu* là thứ nhìn thấy được (`impact.flash` từ Flare sang Plasma là
+hai bức ảnh khác nhau), còn độ sáng của một vệt loé đã tàn 0,3 s sau cú đánh chỉ còn vài mức chênh — đo cái sau rồi
+báo "không thấy gì" sẽ là kết luận sai về family chứ không phải về thiết lập. Mọi thiết lập
 còn lại được ghi vào manifest dưới khoá `unshot` và hiện thành một cột **"Không chụp ở đợt
 này"** ngay trên trang HTML. Như vậy cột này không thể bị đọc thành "cả family đã được phủ": nó nói rõ nó phủ cái
 gì, và phần còn lại là việc của một đợt sau.
@@ -307,13 +310,68 @@ của chính cột đó, dung sai 2/255, đọc lại từ tờ ảnh đã commi
 **Không có gì được lật.** Contract vẫn `Unverified` cho cả mười family, và ba family `particles.*` vẫn khai
 **sáu, năm và ba** thiết lập mà trang chỉ chụp hai — phần còn lại nằm trong `unshot` của manifest.
 
-## 8. Việc tiếp theo
+## 8. Đợt 4: năm family cuối, và ba cơ chế mới
+
+Năm family còn lại: `impact.wave`, `impact.flash`, `impact.morph`, `release.fx`, `atmosphere.beams`. Chúng không
+khó vì khó chụp mà vì **ba trong năm không có công tắc boolean** — thứ mà cả ba đợt trước đều mặc định là có.
+
+### 8.1 Công tắc có thể là một *choice*
+
+`impact.morph` và `release.fx` chỉ khai hai thiết lập: một choice và một phần trăm. Không có `Show…` nào để tắt.
+Nhưng người dùng vẫn tắt được chúng — bằng cách chọn giá trị **không vẽ gì**, và chính renderer nói giá trị đó là gì:
+
+| Family | Choice | Giá trị "tắt" | Renderer nói gì |
+|---|---|---|---|
+| `impact.morph` | `ImpactMorph` | `None` | `SpawnImpactMorph` trả về ngay khi `ImpactMorph == "None"` |
+| `release.fx` | `ReleaseEffect` | `Fade` | `SpawnReleaseFx` trả về khi `ReleaseEffect == "Fade"` **hoặc** `ReleaseIntensity <= 0` |
+| `impact.wave` | `ImpactWave` | `None` | `Impact()` chỉ thêm ring khi `ShowImpactRings && ImpactWave != "None"` |
+
+Ba giá trị đó được khai **một lần** trong review (`OffValues`), không suy ra từ danh sách: `ImpactFlashStyle` cũng là
+choice nhưng **không** có giá trị tắt (Flash/Lightning/Plasma đều là look), nên nó không bao giờ được dùng làm công
+tắc. Với family vừa có boolean vừa có choice-tắt (`impact.wave`), review chọn **choice** làm công tắc và **ghim
+boolean bật** — vì `ShowImpactRings` không phải "family wave", nó là cổng của cả đường ring mà morph cũng đi qua.
+
+**Hệ quả phải nói rõ:** hàng `rest` của hai family này không phải "giá trị sản phẩm" nữa. Mặc định của sản phẩm là
+`ImpactMorph = None` và `ReleaseEffect = Fade`, tức **family đang tắt** — một khung như thế không chứng minh được gì.
+Vì vậy hàng `rest` chụp family ở **giá trị đầu tiên mà danh sách của chính nó khai** (`Shatter`, `Float Up`), và
+manifest ghi cả `onValue`/`offValue`/`pinned` để trang không thể bị đọc thành "đây là look mặc định".
+
+### 8.2 Một cảnh mới: nhả phím
+
+Bốn family kia sống trong cảnh đã có. `release.fx` thì không: hiệu ứng nhả chỉ sinh ra bởi **sự kiện note-off**
+(`SpawnReleaseFx`), mà cảnh *Held* giữ phím tới hết lượt chạy. Nên có cảnh thứ tư — **Release**: phím C4 xuống ở
+khung 0, **nhấc ở khung 12** (0,2 s), chụp ở khung 23 (0,2 s sau khi nhấc), tổng 24 khung ở 1/60. Sự kiện nhấc được
+gửi **đúng một lần** bằng `LiveNote(pitch, false, …)`; chỉ đổi tập phím đang giữ thì không sinh hiệu ứng, vì đường
+phát hiệu ứng nhả nằm ở event live chứ không ở trạng thái phím.
+
+### 8.3 Cảnh của từng family
+
+| Family | Cảnh | Vì sao |
+|---|---|---|
+| `impact.wave` | Impact | vòng sóng neo ở điểm chạm (`EffectAnchor.HitPoint`), sinh bởi cú đánh |
+| `impact.flash` | Impact | cùng lý do; flash là ánh loé tại điểm chạm |
+| `impact.morph` | Impact | morph là hình dạng của cú đánh (`EffectAnchor.Key`, sinh trong `Impact()`) |
+| `particles.sparks` | Impact | *(đợt 3)* |
+| `impact.burst` | Impact | *(đợt 2)* |
+| `release.fx` | **Release** | chỉ tồn tại sau khi phím lên |
+| `atmosphere.beams` | Held | chùm sáng neo vào **phím đang sáng**, không neo vào nốt; cảnh Held có hai phím sáng liên tục, còn cảnh Impact chỉ sáng một phím trong 0,3 s. Family là `Continuous` + `StageTick` nên nó không cần một cảnh "rảnh" riêng — nó cần một bàn phím có đèn |
+
+Tổng: **15 family × 3 khung = 45 ảnh**, bốn tờ. `held.png` thành 8 hàng, `approach.png` 1 hàng, `impact.png` 5 hàng,
+`release.png` 1 hàng.
+
+### 8.4 Kết quả
+
+<!-- N17D:RESULTS -->
+
+## 9. Việc tiếp theo
 
 | Đợt | Nội dung | Vì sao đứng ở thứ tự này |
 |---|---|---|
 | ~~2~~ | ~~`falling.pulse` + `impact.burst`~~ | **xong** (§6) |
 | ~~3~~ | ~~ba family `particles.*`~~ | **xong** (§7), kèm phần chưa phủ ghi trong `unshot` |
-| 4 | `release.fx`, `atmosphere.beams`, `impact.wave/flash/morph` | đã có phép đo riêng; đợt này chỉ là đưa ảnh vào repo |
+| ~~4~~ | ~~`impact.wave/flash/morph`, `release.fx`, `atmosphere.beams`~~ | **mã + guard xong** (§8) |
+| 5 | hai family `falling.trail` / `falling.shimmer` | chúng đã có assertion riêng (> 20 px, shimmer nhân đôi quad) nên không phải chỗ trống; đưa vào đây là để trang phủ **đủ 17 family**, không phải để tìm ra điều mới |
+| 6 | đo `particles.wisps` dưới trần 192 hạt/khung | con số 52/85 px hiện đo **cái trần** nhiều hơn đo `WispAmount` |
 
 Không đợt nào trong bốn đợt trên được phép lật binding. Muốn lật thì phải phủ **giá trị và vòng đời**, không phải
 thêm một pose nữa — và đó là việc phải làm trên máy có GPU thật, không phải trong sandbox này.

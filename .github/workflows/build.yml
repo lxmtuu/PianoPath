@@ -497,7 +497,7 @@ jobs:
           # Every sheet is required: a scene the suite did not write is a finding, not something to skip past.
           effect=docs/evidence/ar-effect-sheets
           mkdir -p "$effect"
-          for sheet in held approach impact; do
+          for sheet in held approach impact release; do
             cp -- "$review/ar-effect/sheet-$sheet.png" "$effect/$sheet.png"
           done
           ls -l "$out" "$refraction" "$ar" "$effect"

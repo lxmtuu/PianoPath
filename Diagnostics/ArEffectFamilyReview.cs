@@ -71,7 +71,12 @@ internal static class ArEffectFamilyReview
     /// </summary>
     private static readonly int[] HeldKeys = [48, 72];
     /// <summary>The pitch a burst is struck on, and the one the approach scene's note is written for.</summary>
-    private const int BurstPitch = 60, ApproachPitch = 60;
+    private const int BurstPitch = 60, ApproachPitch = 60, ReleasePitch = 60;
+    /// <summary>
+    /// The frame the finger leaves the key in the release scene. Half of the twenty-four frame run: long enough for
+    /// the key to be lit and fully pressed when it goes up, and long enough after it for the effect to be drawn.
+    /// </summary>
+    private const int ReleaseLiftFrame = 12;
     private static readonly IReadOnlySet<int> NoPressed = new HashSet<int>();
 
     /// <summary>
@@ -87,6 +92,8 @@ internal static class ArEffectFamilyReview
         Approach,
         /// <summary>One strike on the hit line, no note and no finger.</summary>
         Impact,
+        /// <summary>A key held and then lifted: what is left after the finger leaves.</summary>
+        Release,
     }
 
     /// <summary>
@@ -106,18 +113,42 @@ internal static class ArEffectFamilyReview
         ("falling.pulse", Stage.Approach),
         ("impact.burst", Stage.Impact),
         ("particles.sparks", Stage.Impact),
+        ("impact.wave", Stage.Impact),
+        ("impact.flash", Stage.Impact),
+        ("impact.morph", Stage.Impact),
+        ("release.fx", Stage.Release),
+        ("atmosphere.beams", Stage.Held),
     ];
+
+    /// <summary>
+    /// The value of a choice setting that means "this family is not here". It is the value the renderer itself
+    /// treats as a no-op - <c>Impact()</c> skips the wave when <c>ImpactWave</c> is None, <c>SpawnImpactMorph</c>
+    /// returns on None, and <c>SpawnReleaseFx</c> returns on Fade - so the middle row of a family whose switch is a
+    /// choice turns the family off exactly the way the product does. A choice that has no such value
+    /// (ImpactFlashStyle is a style, not a switch) is never used as a switch.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> OffValues = new Dictionary<string, string>
+    {
+        ["ImpactWave"] = "None",
+        ["ImpactMorph"] = "None",
+        ["ReleaseEffect"] = "Fade",
+    };
 
     /// <summary>One setting the page drives: its contract name, its kind, and the value the row shoots.</summary>
     private sealed record DrivenSetting(string Name, EffectParameterKind Kind, double Number, string Choice)
     {
-        internal string Label => Kind == EffectParameterKind.Choice ? Choice : Number.ToString("0", System.Globalization.CultureInfo.InvariantCulture);
+        internal string Label => Kind switch
+        {
+            EffectParameterKind.Choice => Choice,
+            EffectParameterKind.Boolean => Number >= .5 ? "on" : "off",
+            _ => Number.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
+        };
         internal static DrivenSetting Switch(string name, bool on) => new(name, EffectParameterKind.Boolean, on ? 1 : 0, "");
     }
 
     /// <summary>One family as the page draws it: where it is shot, its switch, and the setting the far row pushes.</summary>
-    private sealed record Family(string Id, Stage Stage, DrivenSetting On, DrivenSetting Far,
-        IReadOnlyList<string> Unshot)
+    private sealed record Family(string Id, Stage Stage, DrivenSetting On, DrivenSetting Off, DrivenSetting Far,
+        string OffLabel, IReadOnlyList<DrivenSetting> Pinned, IReadOnlyList<string> Unshot)
     {
         internal string Sheet => $"ar-effect/sheet-{this.Stage.ToString().ToLowerInvariant()}.png";
     }
@@ -169,7 +200,7 @@ internal static class ArEffectFamilyReview
                 var page = group.ToArray();
                 var captions = page.SelectMany(family => new[]
                     {
-                        $"{family.Id} on", $"{family.On.Name} off", $"{family.Far.Name} {family.Far.Label}"
+                        $"{family.Id} on", $"{family.On.Name} {family.OffLabel}", $"{family.Far.Name} {family.Far.Label}"
                     }).ToArray();
                 var sheet = new ReviewSheet.Canvas(page.Length * Columns, TileWidth, TileHeight, Columns,
                     $"N17 AR {group.Key.ToString().ToUpperInvariant()}", ReviewSheet.CaptionScaleFor(captions, TileWidth));
@@ -192,8 +223,7 @@ internal static class ArEffectFamilyReview
                         rest.Lit, rest.Painted, rest.Quads, "Reference", "The family at the product's own values."));
 
                     // The switch, off: the only row that takes the whole family out of the picture.
-                    var off = CaptureAr(root, renderer, pose, camera, Settings(family, family.On with { Number = 0, Choice = "" }),
-                        family, "off");
+                    var off = CaptureAr(root, renderer, pose, camera, Settings(family, family.Off), family, "off");
                     shots.Add(off);
                     sheet.Blit(column * Columns + 1, captions[column * Columns + 1], off.Pixels!, Width, Height,
                         premultiplied: false);
@@ -264,11 +294,19 @@ internal static class ArEffectFamilyReview
             var (id, stage) = Driven[index];
             var contract = all.SingleOrDefault(candidate => candidate.Id == id)
                 ?? throw new InvalidDataException($"The AR effect review drives '{id}', which the contract does not declare.");
-            var toggle = contract.Parameters[0].Kind == EffectParameterKind.Boolean
-                ? contract.Parameters[0]
-                : contract.Parameters[1].Kind == EffectParameterKind.Boolean
-                    ? contract.Parameters[1]
-                    : throw new InvalidDataException($"{id} declares no boolean switch for the review to turn off.");
+            // The switch is the family's own on/off. A family may declare a boolean for it (ShowWisps, ShowLightBeams,
+            // ShowImpactFlash) or a choice whose off value the renderer honours (ImpactWave None, ImpactMorph None,
+            // ReleaseEffect Fade); impact.morph now has no boolean at all, and turning it off means choosing None,
+            // which is what a user does. A boolean is preferred only when no such choice exists, because the choice
+            // is the family and the boolean is usually a part of it (impact.wave's ShowImpactRings gates the ring
+            // pass that the wave also rides on, so it has to be pinned on rather than driven).
+            var choiceSwitch = contract.Parameters.FirstOrDefault(parameter =>
+                parameter.Kind == EffectParameterKind.Choice && OffValues.ContainsKey(parameter.SettingName));
+            var toggle = choiceSwitch
+                ?? contract.Parameters.FirstOrDefault(parameter => parameter.Kind == EffectParameterKind.Boolean)
+                ?? throw new InvalidDataException(
+                    $"{id} declares neither a boolean nor a choice with a declared off value, so the review has no way " +
+                    "to take the family out of the picture for its middle row.");
             // A family may declare more than two settings - the particles pilot declares six, five and three - and
             // one column still holds exactly one switch and one second setting. A family with exactly two keeps the
             // behaviour it always had: the other setting is the far row whatever kind it is, which is how
@@ -279,13 +317,44 @@ internal static class ArEffectFamilyReview
             // coverage it does not have, which is the one thing this review exists to prevent; saying which
             // settings it did not shoot costs nothing.
             var others = contract.Parameters.Where(parameter => parameter.SettingName != toggle.SettingName).ToArray();
+            // Two settings: the other one is the far row whatever kind it is. More than two: a *choice* is the far
+            // row when the family declares one, because a style change is what a reader can see - impact.flash's
+            // Flare and Plasma are two different pictures, while its intensity at 0.3 s after the strike is a
+            // handful of levels of a fade. Only when no other choice exists does the first percentage take the row.
             var second = others.Length == 1
                 ? others[0]
-                : others.FirstOrDefault(parameter => parameter.Kind == EffectParameterKind.Percentage)
+                : others.FirstOrDefault(parameter => parameter.Kind == EffectParameterKind.Choice)
+                    ?? others.FirstOrDefault(parameter => parameter.Kind == EffectParameterKind.Percentage)
                     ?? throw new InvalidDataException(
-                        $"{id} declares no percentage after its switch, so the far row has no declared maximum to shoot.");
-            var unshot = others.Where(parameter => parameter.SettingName != second.SettingName)
+                        $"{id} declares no second setting with a range to shoot, so its far row has nothing to push.");
+            // The rows that are not the switch keep their own on values: a boolean pinned true, a choice pinned to a
+            // value the renderer draws. Without this, impact.wave's rest frame would be a wave that never spawns,
+            // because the option matrix's neutral look turns ShowImpactRings and ImpactWave off.
+            var pinned = others.Where(parameter => parameter.SettingName != second.SettingName)
+                .Select(parameter => parameter.Kind switch
+                {
+                    EffectParameterKind.Boolean => DrivenSetting.Switch(parameter.SettingName, true),
+                    EffectParameterKind.Choice => new DrivenSetting(parameter.SettingName, parameter.Kind, 0,
+                        OnValue(parameter.SettingName)),
+                    _ => null,
+                })
+                .OfType<DrivenSetting>().ToArray();
+            // Only the percentages can be left alone: a boolean or a choice that is neither the switch nor the far
+            // row still has to be given a value for the scene to be valid, so it is pinned and reported as pinned
+            // rather than silently listed as unshot.
+            var unshot = others.Where(parameter => parameter.SettingName != second.SettingName
+                    && parameter.Kind == EffectParameterKind.Percentage)
                 .Select(parameter => parameter.SettingName).ToArray();
+            var on = toggle.Kind == EffectParameterKind.Choice
+                ? new DrivenSetting(toggle.SettingName, toggle.Kind, 0, OnValue(toggle.SettingName))
+                : DrivenSetting.Switch(toggle.SettingName, true);
+            // The middle row: a boolean switch goes false, a choice switch takes the value the renderer treats as off.
+            // It is built here rather than by zeroing a copy of the on row, so a choice family never depends on the
+            // settings class happening to clamp an empty string to the right value.
+            var off = toggle.Kind == EffectParameterKind.Choice
+                ? new DrivenSetting(toggle.SettingName, toggle.Kind, 0, OffValues[toggle.SettingName])
+                : DrivenSetting.Switch(toggle.SettingName, false);
+            var offLabel = toggle.Kind == EffectParameterKind.Choice ? OffValues[toggle.SettingName] : "off";
             var far = second.Kind switch
             {
                 EffectParameterKind.Percentage => new DrivenSetting(second.SettingName, second.Kind,
@@ -293,10 +362,34 @@ internal static class ArEffectFamilyReview
                 EffectParameterKind.Choice => new DrivenSetting(second.SettingName, second.Kind, 0, FarChoice(second.SettingName)),
                 _ => throw new InvalidDataException($"{id}: the review cannot drive a {second.Kind} setting."),
             };
-            built[index] = new Family(id, stage, DrivenSetting.Switch(toggle.SettingName, true), far, unshot);
+            built[index] = new Family(id, stage, on, off, far, offLabel, pinned, unshot);
         }
         return built;
     }
+
+    /// <summary>
+    /// The allowed values of a choice, read from the settings model that owns the list. The review never copies a
+    /// list; a value it writes is one the product itself declares.
+    /// </summary>
+    private static IReadOnlyList<string> Choices(string setting) => setting switch
+    {
+        "ImpactBurst" => PianoVisualSettings.ImpactBursts,
+        "ImpactWave" => PianoVisualSettings.ImpactWaves,
+        "ImpactFlashStyle" => PianoVisualSettings.ImpactFlashStyles,
+        "ImpactMorph" => PianoVisualSettings.ImpactMorphs,
+        "ReleaseEffect" => PianoVisualSettings.ReleaseEffects,
+        _ => throw new InvalidDataException(
+            $"The AR effect review cannot drive the choice '{setting}'; teach Choices() which list owns it."),
+    };
+
+    /// <summary>
+    /// A value of a choice that makes its family draw: the first declared value that is not the family's off value,
+    /// or the first declared value when the choice has no off value at all (ImpactFlashStyle picks a look, not a
+    /// switch).
+    /// </summary>
+    private static string OnValue(string setting) => OffValues.TryGetValue(setting, out var off)
+        ? Choices(setting).First(value => value != off)
+        : Choices(setting)[0];
 
     /// <summary>
     /// The far end of a choice: the last value its own list declares that differs from what the product keeps. The
@@ -305,14 +398,8 @@ internal static class ArEffectFamilyReview
     /// </summary>
     private static string FarChoice(string setting)
     {
-        var choices = setting switch
-        {
-            "ImpactBurst" => PianoVisualSettings.ImpactBursts,
-            _ => throw new InvalidDataException(
-                $"The AR effect review cannot drive the choice '{setting}'; teach FarChoice() which list owns it."),
-        };
         var current = ReadChoice(OptionMatrixReview.BaseSettings(), setting);
-        return choices.LastOrDefault(value => value != current)
+        return Choices(setting).LastOrDefault(value => value != current)
             ?? throw new InvalidDataException($"The choice '{setting}' declares no value other than '{current}' to shoot.");
     }
 
@@ -324,15 +411,23 @@ internal static class ArEffectFamilyReview
     private static PianoVisualSettings Settings(Family family, DrivenSetting? row)
     {
         var settings = OptionMatrixReview.BaseSettings();
+        foreach (var pinned in family.Pinned) Apply(settings, pinned);
         Apply(settings, family.On);
         if (row is not null) Apply(settings, row);
         settings.Clamp();
         // The rest frame and the far row have to carry the family; only the off row may take it away.
-        if (row?.Name != family.On.Name && Read(settings, family.On.Name) < .5)
+        if (row?.Name != family.On.Name && !IsOn(settings, family))
             throw new InvalidDataException($"The settings class turned {family.On.Name} off; the scene would have no family in it.");
+        foreach (var pinned in family.Pinned) Verify(settings, pinned);
         if (row is not null) Verify(settings, row);
         return settings;
     }
+
+    /// <summary>Whether the family is in the picture: its switch is on, whichever kind of switch it has.</summary>
+    private static bool IsOn(PianoVisualSettings settings, Family family) =>
+        family.On.Kind == EffectParameterKind.Choice
+            ? ReadChoice(settings, family.On.Name) != OffValues[family.On.Name]
+            : Read(settings, family.On.Name) >= .5;
 
     /// <summary>Reads a setting back out of a clamped settings object, so a value the model refused cannot be shot.</summary>
     private static void Verify(PianoVisualSettings settings, DrivenSetting setting)
@@ -379,6 +474,9 @@ internal static class ArEffectFamilyReview
         Stage.Approach => (30, 1.0 / 60),
         // 0.3 s after the strike: the burst has left the key and has not begun to fade.
         Stage.Impact => (18, 1.0 / 60),
+        // The finger lifts at frame 12 (0.2 s) and the capture is taken 0.2 s later, while the release effect is
+        // still in the air: Float Up droplets live 0.7-1.2 s, so the last frame of a 0.4 s run still has them.
+        Stage.Release => (24, 1.0 / 60),
         _ => throw new ArgumentOutOfRangeException(nameof(stage)),
     };
 
@@ -418,11 +516,27 @@ internal static class ArEffectFamilyReview
                 "note would already be sounding and its pulse would never be applied.");
         var notes = stage == Stage.Approach ? ApproachNotes : Array.Empty<NoteEvent>();
         var playing = stage == Stage.Approach;
-        var pressed = stage == Stage.Held ? new HashSet<int>(HeldKeys) : NoPressed;
+        var pressed = stage switch
+        {
+            Stage.Held => new HashSet<int>(HeldKeys),
+            Stage.Release => new HashSet<int> { ReleasePitch },
+            _ => NoPressed,
+        };
         void BeforeFrame(int frame)
         {
-            feed.SetDeterministicState(notes, (frame + 1) * dt, playing, pressed);
+            // The release scene is the only one whose finger moves: it is down until the lift frame and up after it,
+            // so the same key is held for the first half of the run and released for the second.
+            var held = stage == Stage.Release && frame >= ReleaseLiftFrame ? NoPressed : pressed;
+            feed.SetDeterministicState(notes, (frame + 1) * dt, playing, held);
             feed.SetDeterministicBeatPulse(0);
+            if (stage == Stage.Release)
+            {
+                // Down at the first frame, up at the lift frame. A release effect is spawned by the note-off event
+                // itself, not by the pressed set going empty, so the event has to be sent exactly once.
+                if (frame == 0) feed.LiveNote(ReleasePitch, true, .9);
+                if (frame == ReleaseLiftFrame) feed.LiveNote(ReleasePitch, false, .9);
+                return;
+            }
             if (frame != 0) return;
             // The scene's event, sent once because it stays true for the rest of the run: a finger that never lifts, or
             // a strike whose burst is still in the air.
@@ -468,6 +582,13 @@ internal static class ArEffectFamilyReview
         "particles.wisps" => renderer.ArParticleFxCount,
         "particles.flames" => renderer.ArParticleFxCount,
         "particles.sparks" => renderer.ArParticleFxCount,
+        "impact.wave" => renderer.ArPulseCount,
+        "impact.flash" => renderer.ArFlashCount,
+        // Shatter is the first morph its own list offers, and it is a particle burst; the counter is shared with the
+        // other particle families on purpose - it answers "did this family emit quads", not "how many belong to it".
+        "impact.morph" => renderer.ArParticleFxCount,
+        "release.fx" => renderer.ArReleaseEffectCount,
+        "atmosphere.beams" => renderer.ArBeamCount,
         _ => throw new InvalidDataException(
             $"The AR effect review has no witness counter for '{family}'; teach Probe() about it before the page " +
             "claims to have shot it.")
@@ -507,6 +628,18 @@ internal static class ArEffectFamilyReview
             case "FlameIntensity": settings.FlameIntensity = setting.Number; break;
             case "FlameHeight": settings.FlameHeight = setting.Number; break;
             case "ImpactBurst": settings.ImpactBurst = setting.Choice; break;
+            case "ShowImpactRings": settings.ShowImpactRings = setting.Number >= 0.5; break;
+            case "ImpactWave": settings.ImpactWave = setting.Choice; break;
+            case "ImpactWaveIntensity": settings.ImpactWaveIntensity = setting.Number; break;
+            case "ShowImpactFlash": settings.ShowImpactFlash = setting.Number >= 0.5; break;
+            case "ImpactFlashStyle": settings.ImpactFlashStyle = setting.Choice; break;
+            case "ImpactFlashIntensity": settings.ImpactFlashIntensity = setting.Number; break;
+            case "ImpactMorph": settings.ImpactMorph = setting.Choice; break;
+            case "ImpactMorphIntensity": settings.ImpactMorphIntensity = setting.Number; break;
+            case "ReleaseEffect": settings.ReleaseEffect = setting.Choice; break;
+            case "ReleaseIntensity": settings.ReleaseIntensity = setting.Number; break;
+            case "ShowLightBeams": settings.ShowLightBeams = setting.Number >= 0.5; break;
+            case "BeamIntensity": settings.BeamIntensity = setting.Number; break;
             default:
                 throw new InvalidDataException(
                     $"The AR effect review cannot drive '{setting.Name}'; teach Apply() and Read() about it first.");
@@ -541,12 +674,24 @@ internal static class ArEffectFamilyReview
         "ShowFlame" => settings.ShowFlame ? 1 : 0,
         "FlameIntensity" => settings.FlameIntensity,
         "FlameHeight" => settings.FlameHeight,
+        "ShowImpactRings" => settings.ShowImpactRings ? 1 : 0,
+        "ImpactWaveIntensity" => settings.ImpactWaveIntensity,
+        "ShowImpactFlash" => settings.ShowImpactFlash ? 1 : 0,
+        "ImpactFlashIntensity" => settings.ImpactFlashIntensity,
+        "ImpactMorphIntensity" => settings.ImpactMorphIntensity,
+        "ReleaseIntensity" => settings.ReleaseIntensity,
+        "ShowLightBeams" => settings.ShowLightBeams ? 1 : 0,
+        "BeamIntensity" => settings.BeamIntensity,
         _ => throw new InvalidDataException($"The AR effect review cannot read '{parameter}'.")
     };
 
     private static string ReadChoice(PianoVisualSettings settings, string parameter) => parameter switch
     {
         "ImpactBurst" => settings.ImpactBurst,
+        "ImpactWave" => settings.ImpactWave,
+        "ImpactFlashStyle" => settings.ImpactFlashStyle,
+        "ImpactMorph" => settings.ImpactMorph,
+        "ReleaseEffect" => settings.ReleaseEffect,
         _ => throw new InvalidDataException($"The AR effect review cannot read the choice '{parameter}'.")
     };
 
@@ -587,7 +732,8 @@ internal static class ArEffectFamilyReview
                 {
                     Stage.Held => "two keys two octaves apart (C3 and C5) held for the whole run: two live bars under the fingers and one arc between the two active pitches; no song, no background, no other effect family",
                     Stage.Approach => "one song note (C4) in flight towards the keys, not yet sounding, so the pulse is applied; no keys, no background, no other effect family",
-                    Stage.Impact => "one strike on C4 at the hit line, with no note and no finger; the burst is the only content of the frame",
+                    Stage.Impact => "one strike on C4 at the hit line, with no note and no finger; the burst, the wave, the flash and the morph are the only content of the frame",
+                    Stage.Release => "one key (C4) held for 0.2 s and then lifted; the picture is taken 0.2 s after the lift, when the key is dark and only what the release left behind is on the keyboard",
                     _ => throw new ArgumentOutOfRangeException(nameof(group)),
                 },
             }),
@@ -595,6 +741,9 @@ internal static class ArEffectFamilyReview
             {
                 family.Id, scene = family.Stage.ToString(), family.On.Name, far = family.Far.Name,
                 farValue = family.Far.Kind == EffectParameterKind.Choice ? family.Far.Choice : family.Far.Label,
+                onValue = family.On.Kind == EffectParameterKind.Choice ? family.On.Choice : "on",
+                offValue = family.OffLabel,
+                pinned = family.Pinned.Select(setting => new { setting = setting.Name, value = setting.Label }),
                 unshot = family.Unshot,
             }),
             floorChangedPixels = MinimumChangedPixels,
@@ -628,11 +777,13 @@ internal static class ArEffectFamilyReview
             .Append($"<p>Cùng pose <code>{Encode(PoseId)}</code>, cùng camera, cùng seed; mỗi cột bật <strong>một</strong> family ")
             .Append("và mỗi khung chỉ đổi một thiết lập so với khung \"on\" của chính cột đó. Số là pixel đổi giữa hai khung. ")
             .Append($"Máy đo: {Encode(adapter)}.</p>")
-            .Append("<table><tr><th>Family</th><th>Cảnh</th><th>Công tắc</th><th>Thiết lập xa</th>")
-            .Append("<th>Không chụp ở đợt này</th></tr>");
+            .Append("<table><tr><th>Family</th><th>Cảnh</th><th>Công tắc (bật / tắt)</th><th>Thiết lập xa</th>")
+            .Append("<th>Ghim ở cả ba hàng</th><th>Không chụp ở đợt này</th></tr>");
         foreach (var family in families)
             body.Append($"<tr><td>{Encode(family.Id)}</td><td>{Encode(family.Stage.ToString())}</td>")
-                .Append($"<td>{Encode(family.On.Name)}</td><td>{Encode(family.Far.Name)} = {Encode(family.Far.Label)}</td>")
+                .Append($"<td>{Encode(family.On.Name)} {Encode(family.On.Label)} / {Encode(family.OffLabel)}</td>")
+                .Append($"<td>{Encode(family.Far.Name)} = {Encode(family.Far.Label)}</td>")
+                .Append($"<td>{Encode(family.Pinned.Count == 0 ? "—" : string.Join(", ", family.Pinned.Select(setting => $"{setting.Name} {setting.Label}")))}</td>")
                 .Append($"<td>{Encode(family.Unshot.Count == 0 ? "—" : string.Join(", ", family.Unshot))}</td></tr>");
         body.Append("</table>");
         foreach (var report in sheets)
