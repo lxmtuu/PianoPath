@@ -400,8 +400,8 @@ không? Không, với bất kỳ cảnh hợp lệ nào:
 vẽ**. Con số 480 **thấp hơn** 1 674 ở bảng trên, và lý do là cảnh Held chỉ giữ phím **0,4 s** (12 khung ở 1/30), nên nó
 chụp **trạng thái đang lên**, không phải trạng thái dừng: 2 phím × 600 hạt/s × 0,4 s = 480, khớp từng hạt. Bảng trên là
 tích phân tới vô cùng; con số 480 là thứ cảnh thật sự làm ra. Hai con số **không thay thế nhau** và không được trình bày
-như hai phép đo độc lập của cùng một đại lượng; điều chúng cùng nói là: **trần 192 nằm dưới cả hai**, nên cột này đo
-trần ở mọi cảnh giữ phím dài hơn 0,16 s.
+như hai phép đo độc lập của cùng một đại lượng; điều chúng cùng nói là: **trần 192 nằm dưới cả hai**, nên ở đầu xa cột này đo
+trần ở **mọi** cảnh giữ phím dài hơn 0,16 s (192 ÷ 1 200 hạt/giây) — ngắn hơn thế mới đo được `WispAmount`.
 
 **Từ đợt đóng sổ, trần đó được đo chứ không chỉ suy ra.** Review ghi, cho **từng khung**, số hạt **còn sống** trong
 mô phỏng ở khung cuối cạnh số hạt layer **thực vẽ** (`demand` / `quads` trong manifest, cột "Hạt sống / đã vẽ" trên
