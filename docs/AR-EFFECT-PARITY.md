@@ -111,7 +111,36 @@ thật hay khung hình phần cứng.
 
 ## 5. Kết quả
 
-<!-- N17:RESULTS -->
+Năm family, cùng một cảnh, cùng một lượt chạy. Số là **pixel đổi** so với khung `rest` của chính cột đó, dung sai
+2/255. Nguồn số: **đọc lại từ tờ ảnh đã commit** — `docs/evidence/ar-effect-sheets/hold.png`, 3 890 × 3 802 px, lưới
+3 cột × 5 hàng, mỗi hàng một family, mỗi ô là ảnh gốc 1280 × 720 **không hạ mẫu** (cùng cách N16 đã đọc số của nó).
+Manifest đầy đủ nằm trong artifact của lượt chạy, mà sandbox này không tải được; vì ô ảnh là bản sao 1:1 của khung
+chụp nên phép đếm trên tờ ảnh cho đúng con số manifest ghi.
+
+| Family | Công tắc **tắt** | Phần trăm ở **đầu trên** |
+|---|---:|---:|
+| `hold.bar` | 7 948 px | `HoldBarIntensity` 100 → **14 625 px** |
+| `hold.breath` | 6 915 px | `HoldBreathRate` 100 → **9 463 px** |
+| `hold.vibration` | 7 824 px | `HoldVibrationAmount` 100 → **8 357 px** |
+| `hold.color-cycle` | 11 469 px | `HoldColorCycleSpeed` 100 → **13 319 px** |
+| `hold.arc` | **124 px** | `HoldArcIntensity` 100 → **87 px** |
+
+**Đọc bảng:**
+
+1. **Bốn family thanh đều vượt ngưỡng rất xa.** Tắt family đổi 6 900–11 500 px, đẩy phần trăm lên đầu trên đổi
+   8 400–14 600 px. Mỗi thiết lập tới được quad AR, không phải chỉ tới shader trên giấy.
+2. **`hold.arc` đúng nhưng nhỏ — và nhỏ vì hình, không vì binding.** Cung là một sợi chỉ: hộp bao của phần đổi là
+   **295 × 64 px** nhưng chỉ **~130 px** thật sự đổi, vì dải ruy-băng mỏng cỡ một pixel và bị jitter làm thành nét
+   đứt. Con số 124 và 87 vì thế là *đúng* và vẫn trên ngưỡng 12 px, nhưng nó đo một sợi chỉ, không đo một khối sáng.
+   Phóng to ô đó lên ba lần (ngoài repo, chỉ để đọc) thì thấy đúng thứ đó: một **đường chấm** chạy từ thanh bar xanh
+   bên trái sang thanh bar hồng bên phải, mảnh tới mức mắt thường phải nhìn kỹ mới thấy.
+3. **Ba lượt đo để có một cột.** `ar-reference` + C4/E4: **18 px**; `ar-oblique` + C4/E4: **39 px**; `ar-oblique` +
+   C3/C5: **124 px**. Hai lần đầu không phải lỗi của sản phẩm mà là lỗi của phép đo — pose nhìn thẳng làm cung nằm
+   nghiêng theo cạnh, và bốn nửa cung thì không có sải tay. Cả hai con số được giữ lại ở đây vì chúng là lý do
+   `PoseId` và `HeldKeys` mang giá trị hiện tại.
+
+**Không có gì được lật.** Contract vẫn `Unverified` cho cả năm family, và bảng trên là lý do nó *có thể* được lật
+sau này — không phải lý do để lật bây giờ.
 
 ## 6. Việc tiếp theo
 
