@@ -65,8 +65,13 @@ internal static class ArEffectFamilyReview
     /// anything about the setting. Height needs an angle to be visible.
     /// </summary>
     private const string PoseId = "ar-oblique";
-    /// <summary>Two keys held for the whole run: two live bars, and one arc between the two active pitches.</summary>
-    private static readonly int[] HeldKeys = [60, 64];
+    /// <summary>
+    /// Two keys held for the whole run: two live bars, and one arc between the two active pitches. They are two
+    /// octaves apart on purpose. The first run held C4 and E4 — four semitones — and the arc between them was a
+    /// forty-six-pixel sliver, correct and useless: a ribbon that short cannot show what its intensity does. The
+    /// span is what the arc is made of, so the span has to be long.
+    /// </summary>
+    private static readonly int[] HeldKeys = [48, 72];
     private const int Frames = 12;
     private const double FrameSeconds = 1.0 / 30;
 
@@ -82,6 +87,9 @@ internal static class ArEffectFamilyReview
         /// <summary>Held only while the pair is compared; dropped before the manifest is written.</summary>
         internal byte[]? Pixels { get; set; }
     }
+
+    /// <summary>The per-family numbers, for the suite's PASS line: the manifest is the record, this is the summary.</summary>
+    internal static string Summary { get; private set; } = "";
 
     private sealed record Cell(string Family, string Parameter, string Row, double Value, string File,
         string PixelSha256, int ArChanged, int ArLit, int ArPainted, int Quads, string Reading, string Note);
@@ -180,6 +188,12 @@ internal static class ArEffectFamilyReview
                 rest.Pixels = null;
             }
 
+            Summary = string.Join("; ", pilot.Select((contract, column) =>
+            {
+                var toggle = cells[column * Columns + 1];
+                var amount = cells[column * Columns + 2];
+                return $"{contract.Id} {toggle.ArChanged} px off / {amount.Parameter} at {amount.Value:0} {amount.ArChanged} px";
+            }));
             var finished = sheet.Finish();
             var layout = sheet.Sheet;
             var sheetFile = "ar-effect/sheet.png";
