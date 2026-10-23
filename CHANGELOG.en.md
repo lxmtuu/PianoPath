@@ -32,21 +32,20 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 - Particle pacing is decoupled from the frame rate: one preset now moves the same at 60 Hz, 144 Hz and in an exported video, instead of speeding up with the refresh rate.
 
 ### Verification
-- **All ten AR effect families now have a review sheet, each shot in the scene its own lifecycle needs**
-  (`--verify-ar-effect-only`: three sheets, `held` / `approach` / `impact`, 30 frames). The five held-key families
-  plus `particles.wisps` and `particles.flames` are shot while two keys are held; `falling.pulse` on a note **still
-  falling and not yet sounding**; `impact.burst` and `particles.sparks` on exactly one strike at the keys. Each
-  column turns on **one** family at a time, and the review **refuses that column** instead of recording three
-  near-identical frames as a result: the family's own frame must repaint ≥ 500 px of the camera picture, the layer
-  must emit its own quads, and taking the family away must change ≥ 12 px. A family that declares more than two
-  settings carries its switch and **the first percentage the contract lists after it**; every setting the column
-  does not shoot is named in the manifest (`unshot`) and on the page. Read back from the sheets: the four bar
-  families change 6 915–11 469 px when off and 8 357–14 625 px at the far end, `hold.arc` **124 / 87 px**,
-  `particles.wisps` **52 / 85 px**, `particles.flames` **1 167 / 16 232 px**, `falling.pulse` **4 504 / 4 439 px**,
-  `impact.burst` **986 / 2 219 px**, `particles.sparks` **986 / 2 312 px**. `impact.burst` and `particles.sparks` sit
-  behind the same `ShowEmbers` switch, so their `rest` and `off` frames are the same picture to the pixel; the page
-  says so instead of presenting them as two independent measurements. This is a **sheet of pictures**, not a status
-  flip: the typed contract still lists all ten families as `Unverified`.
+- **All fifteen AR effect families now have a review sheet, each shot in the scene its own lifecycle needs**
+  (`--verify-ar-effect-only`: four sheets, `held` / `approach` / `impact` / `release`, 45 frames). **Release** is a new
+  scene: a key is held for 0.2 s and then **lifted**, because a release effect is spawned only by the note-off event. A
+  family with no boolean switch (`impact.morph`, `release.fx`) is switched off by **the choice the renderer itself
+  treats as off** (`None`, `Fade`), and its reference row is shot at the first value its own list declares — the
+  manifest records `onValue`/`offValue`/`pinned`, so the page cannot be read as the default look. The review now has a
+  **fourth gate**: the far row must differ from the switched-off row by ≥ 12 px; it caught a genuinely broken column on
+  its first run (`impact.flash` was shot at 0.30 s while a styled flash lives 0.26 s), so the Impact scene dropped to
+  0.20 s and that scene's three families were **re-measured**: `impact.burst` **904 / 1 714 px**, `particles.sparks`
+  **904 / 1 775 px**, `impact.wave` **566 / 556 px**. This round's numbers: `atmosphere.beams` **4 708 px**,
+  `impact.flash` **82 127 px** (13 551 px against the switched-off frame), `impact.morph` **14 px**, `release.fx`
+  **24 px** — the last two are the thinnest columns on the page and are recorded as such, with no sensitivity claim
+  drawn from them. The seven families from earlier rounds did not change by a single pixel. This is a **sheet of
+  pictures**, not a status flip: the typed contract still lists all fifteen families as `Unverified`.
 
 ## 2.2.0 — 2026-10-18
 

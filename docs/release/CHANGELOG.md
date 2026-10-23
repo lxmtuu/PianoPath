@@ -31,19 +31,19 @@ và không được lặp lại ở đây; tài liệu kế hoạch phát triể
 - Nhịp mô phỏng hạt tách khỏi nhịp khung hình: cùng một preset cho cùng một chuyển động ở 60 Hz, 144 Hz và khi xuất video, thay vì nhanh dần theo tần số quét.
 
 ### Kiểm chứng
-- **Mười family hiệu ứng AR có trang ảnh kiểm chứng, mỗi family chụp trong đúng cảnh mà vòng đời của nó cần**
-  (`--verify-ar-effect-only`: ba tờ `held` / `approach` / `impact`, 30 khung). Năm family giữ phím cùng
-  `particles.wisps` và `particles.flames` chụp khi hai phím đang giữ; `falling.pulse` chụp trên một nốt đang **bay,
-  chưa vang**; `impact.burst` và `particles.sparks` chụp đúng một cú đánh vào phím. Mỗi cột chỉ bật **một** family,
-  và review **từ chối** cột đó thay vì ghi ba khung gần giống nhau thành kết quả: khung gốc phải đè ≥ 500 px lên hình
-  camera, layer phải phát quad riêng, và lấy family ra khỏi ảnh phải đổi ≥ 12 px. Family khai nhiều hơn hai thiết lập
-  chỉ chụp công tắc và **phần trăm đầu tiên sau nó**; mọi thiết lập không chụp được ghi tên trong manifest (`unshot`)
-  và trên trang. Số đọc lại từ tờ ảnh: bốn family thanh giữ phím đổi 6 915–11 469 px khi tắt và 8 357–14 625 px ở
-  đầu trên, `hold.arc` **124 / 87 px**, `particles.wisps` **52 / 85 px**, `particles.flames` **1 167 / 16 232 px**,
-  `falling.pulse` **4 504 / 4 439 px**, `impact.burst` **986 / 2 219 px**, `particles.sparks` **986 / 2 312 px**.
-  `impact.burst` và `particles.sparks` nằm sau cùng công tắc `ShowEmbers` nên hai khung `rest`/`off` của chúng trùng
-  nhau từng pixel; trang nói rõ điều đó thay vì trình bày chúng như hai phép đo độc lập. Đây là **trang ảnh**, không
-  phải lật trạng thái: contract typed vẫn để cả mười family là `Unverified`.
+- **Mười lăm family hiệu ứng AR có trang ảnh kiểm chứng, mỗi family chụp trong đúng cảnh mà vòng đời của nó cần**
+  (`--verify-ar-effect-only`: bốn tờ `held` / `approach` / `impact` / `release`, 45 khung). Cảnh **Release** là cảnh
+  mới: một phím giữ 0,2 s rồi **nhấc lên**, vì hiệu ứng nhả chỉ sinh ra bởi sự kiện note-off. Family không có công tắc
+  boolean (`impact.morph`, `release.fx`) bị tắt bằng **choice mà chính renderer coi là tắt** (`None`, `Fade`), và hàng
+  tham chiếu của nó chụp ở giá trị đầu tiên danh sách của nó khai — manifest ghi `onValue`/`offValue`/`pinned` nên trang
+  không thể bị đọc thành look mặc định. Review có **cổng thứ tư**: hàng "đầu xa" phải khác hàng "tắt" ≥ 12 px; cổng này
+  bắt được một cột thật sự hỏng ngay lần đầu (`impact.flash` chụp ở 0,30 s trong khi flash có kiểu chỉ sống 0,26 s), nên
+  cảnh Impact rút xuống 0,20 s và ba family của cảnh đó được **đo lại**: `impact.burst` **904 / 1 714 px**,
+  `particles.sparks` **904 / 1 775 px**, `impact.wave` **566 / 556 px**. Số của đợt này: `atmosphere.beams`
+  **4 708 px**, `impact.flash` **82 127 px** (13 551 px khi so với khung tắt), `impact.morph` **14 px**, `release.fx`
+  **24 px** — hai cột cuối là hai cột mỏng nhất trang và được ghi đúng như vậy, không suy ra kết luận về độ nhạy. Bảy
+  family của các đợt trước không đổi một pixel. Đây là **trang ảnh**, không phải lật trạng thái: contract typed vẫn để
+  cả mười lăm family là `Unverified`.
 
 ## 2.2.0 — 2026-10-18
 

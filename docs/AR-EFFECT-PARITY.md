@@ -196,6 +196,10 @@ là ảnh gốc 1280 × 720 **không hạ mẫu**; cột 1 là family ở giá t
 | `falling.pulse` | Approach | `FallingPulse` off → **4 504 px** | `FallingPulseRate` 100 → **4 439 px** |
 | `impact.burst` | Impact | `ShowEmbers` off → **986 px** | `ImpactBurst` `Dust` → **2 219 px** |
 
+> **Đo lại ở đợt 4:** cảnh Impact rút từ 0,30 s xuống 0,20 s (§8.4), nên con số của `impact.burst` trên tờ ảnh hiện
+> hành là **904 / 1 714 px**. Số cũ giữ ở đây vì nó là kết quả của đúng cảnh lúc đó — không phải số sai, mà là số của
+> một cảnh đã đổi.
+
 **Đọc bảng:**
 
 1. **`falling.pulse` đo đúng thân nốt.** Hộp bao của phần đổi là **58 × 105 px**, đúng bằng thân một nốt C4 ở cỡ
@@ -279,6 +283,8 @@ của chính cột đó, dung sai 2/255, đọc lại từ tờ ảnh đã commi
 | `particles.wisps` | Held | `ShowWisps` off → **52 px** | `WispAmount` 150 → **85 px** |
 | `particles.flames` | Held | `ShowFlame` off → **1 167 px** | `FlameIntensity` 100 → **16 232 px** |
 | `particles.sparks` | Impact | `ShowEmbers` off → **986 px** | `ParticleAmount` 120 → **2 312 px** |
+
+> **Đo lại ở đợt 4:** cùng lý do §8.4, `particles.sparks` trên tờ ảnh hiện hành là **904 / 1 775 px**.
 
 **Đọc bảng:**
 
@@ -381,7 +387,42 @@ Hai thay đổi, cả hai đều để lại dấu:
 
 ### 8.5 Kết quả
 
-<!-- N17D:RESULTS -->
+Bốn tờ: `held.png` **3 890 × 6 058** (3 cột × **8 hàng**), `impact.png` **3 890 × 3 802** (3 cột × **5 hàng**),
+`approach.png` 3 890 × 794 và `release.png` **3 890 × 794** (3 cột × 1 hàng, tờ mới). 15 family × 3 khung = **45 ô**.
+
+| Family | Cảnh | `far` ↔ `rest` | `far` ↔ `off` (cổng mới) |
+|---|---|---:|---:|
+| `atmosphere.beams` | Held | `BeamIntensity` 100 → **4 708 px** | 4 763 px |
+| `impact.wave` | Impact | `ImpactWaveIntensity` 150 → **556 px** | **597 px** |
+| `impact.flash` | Impact | `ImpactFlashStyle` Plasma → **82 127 px** | **13 551 px** |
+| `impact.morph` | Impact | `ImpactMorphIntensity` 100 → **14 px** | **52 px** |
+| `release.fx` | Release | `ReleaseIntensity` 100 → **24 px** | **89 px** |
+
+**Đọc bảng:**
+
+1. **Ba family mới đứng ở ba mức rất khác nhau, và mức nào cũng đúng.** `impact.flash` là cột lớn nhất cả trang
+   (**82 127 px** khi so với khung có vệt loé, **13 551 px** khi so Plasma với "không có flash"): flare là một vùng
+   sáng rộng phủ cả cụm phím, Plasma là mấy vòng đồng tâm — hai bức ảnh khác hẳn nhau. `atmosphere.beams` đổi
+   **4 708 px**, hộp bao **354 × 151** — chùm sáng cao gấp rưỡi khi `BeamIntensity` lên 100.
+2. **`impact.morph` và `release.fx` là hai cột mỏng nhất trang (14 và 24 px so với `rest`)** — và đây là chỗ phải
+   nói thẳng: `Shatter` ở cảnh Impact bắn ra **vài mảnh nhỏ** (hộp bao 110 × 32; ảnh so phóng 8× cho thấy đúng vài vệt
+   sáng li ti trên phím), còn `Float Up` ở cảnh Release là **65 px** lúc bật và **24 px** khi `ReleaseIntensity` lên
+   100 — vì 100 không phải "nhiều hơn" mà là **một cú nhả mạnh hơn, ít hạt hơn, sống ngắn hơn**: `count =
+   clamp(6 × strength + 2, 0, 10)` cho 8 hạt ở strength 1, và hạt bay nhanh, tắt sớm nên khung chụp bắt được ít hơn.
+   Đó là hành vi của sản phẩm, không phải của phép đo — nhưng nhìn riêng cột này thì **không kết luận được gì về độ
+   nhạy của `ReleaseIntensity`**, và trang ghi đúng như vậy.
+3. **Cổng thứ tư đã bắt lỗi thật ngay lần đầu.** Trước khi rút cảnh Impact xuống 0,20 s, `impact.flash` có
+   `far` ↔ `off` = **0 px** (khung Plasma trùng từng byte với khung tắt) dù `far` ↔ `rest` = 32 453 px. Sau khi sửa:
+   **13 551 px**. Nếu chỉ có ba cổng cũ, cột đó đã được ghi vào manifest như một kết quả.
+4. **Ba family của cảnh Impact được đo lại, không chép lại.** Vì cảnh Impact đổi từ 0,30 s xuống 0,20 s, con số cũ
+   của `impact.burst` (986 / 2 219) và `particles.sparks` (986 / 2 312) **không còn dùng được**; trên tờ mới chúng là
+   **904 / 1 714** và **904 / 1 775**, còn `impact.wave` là **566 / 556**. §6.4 và §7.5 đã được ghi chú tương ứng
+   thay vì để hai bộ số mâu thuẫn nằm cạnh nhau.
+5. **Bảy family của các đợt trước không đổi một pixel** — năm family hold, `particles.wisps`, `particles.flames` và
+   `falling.pulse` cho lại đúng từng con số của đợt 1–3 (7 948 / 6 915 / 7 824 / 11 469 / 124; 52; 1 167 / 16 232;
+   4 504 / 4 439). Đổi cảnh Impact chỉ ảnh hưởng cảnh Impact.
+
+**Không có gì được lật.** Contract vẫn `Unverified` cho cả mười lăm family.
 
 ## 9. Việc tiếp theo
 
@@ -391,7 +432,7 @@ Hai thay đổi, cả hai đều để lại dấu:
 | ~~3~~ | ~~ba family `particles.*`~~ | **xong** (§7), kèm phần chưa phủ ghi trong `unshot` |
 | ~~4~~ | ~~`impact.wave/flash/morph`, `release.fx`, `atmosphere.beams`~~ | **mã + guard xong** (§8) |
 | 5 | hai family `falling.trail` / `falling.shimmer` | chúng đã có assertion riêng (> 20 px, shimmer nhân đôi quad) nên không phải chỗ trống; đưa vào đây là để trang phủ **đủ 17 family**, không phải để tìm ra điều mới |
-| 6 | đo `particles.wisps` dưới trần 192 hạt/khung | con số 52/85 px hiện đo **cái trần** nhiều hơn đo `WispAmount` |
+| 5b | đo lại `particles.wisps` dưới trần 192 hạt/khung | con số 52/85 px hiện đo **cái trần** nhiều hơn đo `WispAmount` |
 
 Không đợt nào trong bốn đợt trên được phép lật binding. Muốn lật thì phải phủ **giá trị và vòng đời**, không phải
 thêm một pose nữa — và đó là việc phải làm trên máy có GPU thật, không phải trong sandbox này.
