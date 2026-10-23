@@ -492,11 +492,14 @@ jobs:
           ar=docs/evidence/ar-material-sheets
           mkdir -p "$ar"
           cp -- "$review/ar-material/sheet.png" "$ar/material.png"
-          # N17 is the overlay's effect side: one column per hold family, one row per setting, so a reviewer
-          # reads a family across a single line instead of hunting for it in a grid of materials.
+          # N17 is the overlay's effect side: one sheet per scene, one row per family, one column per setting,
+          # so a reviewer reads a family across a single line instead of hunting for it in a grid of materials.
+          # Every sheet is required: a scene the suite did not write is a finding, not something to skip past.
           effect=docs/evidence/ar-effect-sheets
           mkdir -p "$effect"
-          cp -- "$review/ar-effect/sheet.png" "$effect/hold.png"
+          for sheet in held approach impact; do
+            cp -- "$review/ar-effect/sheet-$sheet.png" "$effect/$sheet.png"
+          done
           ls -l "$out" "$refraction" "$ar" "$effect"
 
       # Isolate deterministic P0 capture from realtime/device smoke tests. Both still block the build.

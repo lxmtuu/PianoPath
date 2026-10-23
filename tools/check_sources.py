@@ -1980,16 +1980,19 @@ def scan_ar_material_review():
 
 
 def scan_ar_effect_family_review():
-    """The AR hold-family page may only shoot what the typed contract says those families are.
+    """The AR effect-family page may only shoot families and settings the typed contract declares.
 
-    N17's first batch takes the five hold families the contract keeps at ``Unverified`` on the overlay and
-    measures them there. The page's value is that it walks the contract: the families come from
-    ``HoldFxPilot``, the two settings from each family's own parameters, and the range end from the
-    declared maximum. What the contract cannot say is which of the layer's counters proves a family drew
-    something, so that table is written by hand — and this check is what keeps it from drifting: it has to
-    name exactly the contract's families, every declared setting needs an ``Apply``/``Read`` case, and the
-    counters have to exist on the renderer. It also keeps the route, the call and the CI step, so a page
-    that stops running fails the fast lane instead of quietly leaving five families Unverified forever.
+    N17 measures the effect families the contract keeps at ``Unverified`` on the overlay. Its value is that it
+    walks the contract instead of a copy of it: the driven family ids and scenes are a table in the review,
+    but every setting it drives is read from that family's own parameters, and the far end of a percentage
+    comes from the declared maximum. What the contract cannot say is which of the layer's counters proves a
+    family drew something - or which scene a family's lifecycle needs - so those two tables are written by
+    hand, and this check keeps them from drifting: the witnesses have to name exactly the driven families,
+    every declared setting needs an ``Apply``/``Read`` case, the counters have to exist on the renderer, and
+    every driven id has to exist in the contract at all.
+
+    It also keeps the route, the call and the CI step, so a page that stops running fails the fast lane
+    instead of quietly leaving those families Unverified forever.
     """
     errors = []
     review_path = ROOT / "Diagnostics" / "ArEffectFamilyReview.cs"
@@ -1999,37 +2002,63 @@ def scan_ar_effect_family_review():
     workflow_path = ROOT / ".github" / "workflows" / "build.yml"
     for path in (review_path, contract_path, suite_path, renderer_path, workflow_path):
         if not path.exists():
-            return [f"{path.relative_to(ROOT).as_posix()} is missing; the N17 AR hold-family page needs it"]
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the N17 AR effect-family page needs it"]
     review = _code(review_path.read_text(encoding="utf-8"))
     contracts = _code(contract_path.read_text(encoding="utf-8"))
     suite = _code(suite_path.read_text(encoding="utf-8"))
     renderer = _code(renderer_path.read_text(encoding="utf-8"))
     workflow = workflow_path.read_text(encoding="utf-8")
 
-    if "EffectContractCatalog.HoldFxPilot" not in review:
-        errors.append("Diagnostics/ArEffectFamilyReview.cs no longer reads EffectContractCatalog.HoldFxPilot; "
-                      "a copied family list is how the page and the contract drift apart")
+    if "EffectContractCatalog.AllFamilies" not in review:
+        errors.append("Diagnostics/ArEffectFamilyReview.cs no longer resolves its families through "
+                      "EffectContractCatalog.AllFamilies; a copied list of parameters is how the page and the "
+                      "contract drift apart")
 
-    block = re.search(r"HoldFxPilot \{ get; \} = Array\.AsReadOnly\(new\[\]\s*\{(.*?)\n    \}\);", contracts, re.S)
-    if not block:
-        return errors + ["Stage/Effects/EffectContracts.cs no longer declares HoldFxPilot; the N17 page reads it"]
-    families = set(re.findall(r'new EffectFamilyContract\(\s*"([^"]+)"', block.group(1)))
-    settings = set(re.findall(r'ArProjected(?:Boolean|Percentage)\("([^"]+)"', block.group(1)))
-    if len(families) != 5:
-        errors.append(f"Stage/Effects/EffectContracts.cs declares {len(families)} hold families "
-                      f"({sorted(families)}); the N17 page pins five columns")
+    driven = re.findall(r'\("([a-z][a-z.\-]+)", Stage\.(\w+)\)', review)
+    if not driven:
+        return errors + ["Diagnostics/ArEffectFamilyReview.cs no longer declares which families it drives; the "
+                         "page would shoot nothing"]
+    driven_ids = {name for name, _ in driven}
+    scenes = {name: scene for name, scene in driven}
 
-    witnesses = set(re.findall(r'"([a-z][a-z-]*\.[a-z-]+)" => renderer\.', review))
-    if witnesses != families:
+    declared_settings = set()
+    for family in sorted(driven_ids):
+        anchor = contracts.find(f'"{family}"')
+        if anchor < 0:
+            errors.append(f"the AR effect review drives '{family}', which Stage/Effects/EffectContracts.cs does "
+                          "not declare; the page would shoot a family nobody owns")
+            continue
+        start = contracts.find("Array.AsReadOnly(new[]", anchor)
+        stop = contracts.find("}),", start) if start >= 0 else -1
+        if start < 0 or stop < 0:
+            errors.append(f"Stage/Effects/EffectContracts.cs declares '{family}' without a parameter list; the "
+                          "review reads its settings from there")
+            continue
+        declared_settings.update(re.findall(r'(?:ArProjected)?(?:Boolean|Percentage|Choice)\("([^"]+)"',
+                                            contracts[start:stop]))
+
+    witnesses = set(re.findall(r'"([a-z][a-z\-]*\.[a-z\-]+)" => renderer\.', review))
+    if witnesses != driven_ids:
         errors.append("Diagnostics/ArEffectFamilyReview.cs witnesses "
-                      f"{sorted(witnesses)} but the contract declares {sorted(families)}; a family without a "
-                      "witness counter is a column whose pictures nobody checked were drawn")
+                      f"{sorted(witnesses)} but drives {sorted(driven_ids)}; a family without a witness counter is "
+                      "a column whose pictures nobody checked were drawn")
 
     applied = set(re.findall(r'case "([^"]+)":', review))
-    missing = settings - applied
+    missing = declared_settings - applied
     if missing:
         errors.append(f"Diagnostics/ArEffectFamilyReview.cs has no Apply/Read case for {sorted(missing)}; the "
                       "setting would be shot at whatever the settings class keeps")
+
+    for family in sorted(driven_ids):
+        anchor = contracts.find(f'"{family}"')
+        start = contracts.find("Array.AsReadOnly(new[]", anchor) if anchor >= 0 else -1
+        stop = contracts.find("}),", start) if start >= 0 else -1
+        if start < 0 or stop < 0:
+            continue
+        for choice in re.findall(r'Choice\("([^"]+)"', contracts[start:stop]):
+            if f'"{choice}" => settings.' not in review:
+                errors.append(f"'{family}' declares the choice {choice}, but the review never reads it back; a "
+                              "value the settings class silently replaced would be shot under the wrong caption")
 
     for counter in set(re.findall(r"renderer\.(Ar[A-Za-z]+Count)", review)):
         if f"internal int {counter} =>" not in renderer:
@@ -2042,17 +2071,18 @@ def scan_ar_effect_family_review():
 
     for route in ("--verify-ar-effect-only", "VerifyArEffect(reviewOutput!);", "ArEffectFamilyReview.Render("):
         if route not in suite:
-            errors.append(f"Diagnostics/VerificationSuite.cs lost '{route}', so the AR hold-family review never runs")
-    if "Assert(cells == 15" not in suite:
-        errors.append("Diagnostics/VerificationSuite.cs no longer pins the fifteen AR hold-family cells; the page "
-                      "would pass with columns silently missing")
+            errors.append(f"Diagnostics/VerificationSuite.cs lost '{route}', so the AR effect-family review never runs")
+    expected_cells = len(driven) * 3
+    if f"Assert(cells == {expected_cells}" not in suite:
+        errors.append(f"Diagnostics/VerificationSuite.cs no longer pins the {expected_cells} AR effect-family "
+                      f"cells ({len(driven)} families x 3 rows); the page would pass with columns silently missing")
 
     if "AR hold-family review (N17)" not in workflow or "--verify-ar-effect-only" not in workflow:
-        errors.append(".github/workflows/build.yml no longer runs --verify-ar-effect-only, so a crash in the new "
+        errors.append(".github/workflows/build.yml no longer runs --verify-ar-effect-only, so a crash in the "
                       "review takes the whole suite down instead of naming itself")
     if "docs/evidence/ar-effect-sheets" not in workflow:
-        errors.append(".github/workflows/build.yml no longer stages docs/evidence/ar-effect-sheets; the page's one "
-                      "committed picture would never reach the repository")
+        errors.append(".github/workflows/build.yml no longer stages docs/evidence/ar-effect-sheets; the page's "
+                      "committed pictures would never reach the repository")
     return errors
 
 

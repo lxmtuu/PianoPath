@@ -1,7 +1,7 @@
 # Family hiệu ứng trong lớp AR: mười bảy family `Unverified` (N17)
 
-> **Trạng thái:** đợt 1 làm 2026-10-23 · **Mã:** `Diagnostics/ArEffectFamilyReview.cs` · **Chốt chặn:**
-> `tools/check_sources.py` (`scan_ar_effect_family_review`) · **Ảnh:** `docs/evidence/ar-effect-sheets/hold.png`
+> **Trạng thái:** đợt 1 + đợt 2, 2026-10-23 · **Mã:** `Diagnostics/ArEffectFamilyReview.cs` · **Chốt chặn:**
+> `tools/check_sources.py` (`scan_ar_effect_family_review`) · **Ảnh:** `docs/evidence/ar-effect-sheets/{held,approach,impact}.png`
 
 ## 1. Câu hỏi, và câu trả lời ngắn
 
@@ -109,10 +109,10 @@ tắt hẳn chỉ đổi **18 px** (và 39 px với cặp C4 + E4 ở chính pos
 Một giá trị mỗi thiết lập, một pose, một tier. **Không** phải duyệt mỹ thuật, không phủ mọi giá trị, không phải camera
 thật hay khung hình phần cứng.
 
-## 5. Kết quả
+## 5. Kết quả đợt 1: năm family hold
 
 Năm family, cùng một cảnh, cùng một lượt chạy. Số là **pixel đổi** so với khung `rest` của chính cột đó, dung sai
-2/255. Nguồn số: **đọc lại từ tờ ảnh đã commit** — `docs/evidence/ar-effect-sheets/hold.png`, 3 890 × 3 802 px, lưới
+2/255. Nguồn số: **đọc lại từ tờ ảnh đã commit** — `docs/evidence/ar-effect-sheets/held.png`, 3 890 × 3 802 px, lưới
 3 cột × 5 hàng, mỗi hàng một family, mỗi ô là ảnh gốc 1280 × 720 **không hạ mẫu** (cùng cách N16 đã đọc số của nó).
 Manifest đầy đủ nằm trong artifact của lượt chạy, mà sandbox này không tải được; vì ô ảnh là bản sao 1:1 của khung
 chụp nên phép đếm trên tờ ảnh cho đúng con số manifest ghi.
@@ -142,11 +142,56 @@ chụp nên phép đếm trên tờ ảnh cho đúng con số manifest ghi.
 **Không có gì được lật.** Contract vẫn `Unverified` cho cả năm family, và bảng trên là lý do nó *có thể* được lật
 sau này — không phải lý do để lật bây giờ.
 
-## 6. Việc tiếp theo
+## 6. Đợt 2: hai chỗ trống còn lại
+
+### 6.1 Vì sao đúng hai family này
+
+Đợt 1 chọn nhóm hold vì bốn family đã có phép đo và arc thì chưa. Rà lại toàn bộ 17 family (bảng §3) thì chỉ còn
+đúng hai chỗ mà **không** có phép đo riêng nào:
+
+| Family | Trước đợt 2 |
+|---|---|
+| `falling.pulse` | chỉ xuất hiện bên trong một look "busy" dùng để thử composite camera; không có assert nào cho riêng nó |
+| `hold.arc` | *(đã xong ở đợt 1)* |
+
+Còn `impact.burst` được đưa vào cùng đợt vì nó là family duy nhất trong nhóm impact **không** có assert riêng — nó
+chỉ nằm trong look Live Stage đặt sáu family cùng lúc, nên con số `effectPixels > 100` không quy được cho nó.
+
+### 6.2 Mỗi family một cảnh, vì vòng đời khác nhau
+
+Đây là điều đợt 1 chưa phải làm: cả năm family hold sống trên cùng một cặp phím đang giữ. Hai family này thì không.
+
+| Family | Cảnh | Vì sao không dùng cảnh khác |
+|---|---|---|
+| `falling.pulse` | **Approach** — một nốt C4 đang bay, chưa vang | `AddSongNote` chỉ nhân `pulse` vào alpha khi `!sounding`. Cảnh nốt rơi của N16 có nốt **đang vang** (start 0, duration 2, chụp ở 1,5 s) ⇒ pulse không bao giờ được áp. Cảnh ở đây: nốt `Start = 0,9 s`, `Duration = 0,5 s`, chụp ở `0,5 s` ⇒ đầu nốt còn cách phím 0,4 s, thân nốt 0,735 đơn vị (~18% tầm với AR). Review **assert** điều này trước khi render. |
+| `impact.burst` | **Impact** — một cú đánh vào C4 ở đường hit, không nốt, không ngón | Family là *burst tại điểm chạm*. Dùng cảnh giữ phím sẽ đo emitter sustain chứ không đo cú nổ; `feed.Impact(60, 1)` cho đúng cú nổ. |
+
+**Hệ quả cho trang:** mỗi cảnh một tờ ảnh riêng (`held`, `approach`, `impact`), vì hai khung từ hai camera-thời điểm
+khác nhau không so được với nhau, còn trên cùng một tờ thì người đọc buộc phải hiểu ngầm rằng chúng cùng cảnh. Ba tờ
+nhỏ cũng dễ đọc hơn một tờ 7 hàng × 1280 px.
+
+### 6.3 Thiết lập thứ hai có thể là một *choice*
+
+`impact.burst` không có phần trăm: nó có `ShowEmbers` (bool) và `ImpactBurst` (choice). Vì vậy trang định nghĩa
+"đầu xa" chung cho cả hai kiểu:
+
+- **Percentage** → `Maximum` mà contract khai báo;
+- **Choice** → **giá trị cuối cùng** trong danh sách mà chính settings model sở hữu (`PianoVisualSettings.ImpactBursts`)
+  khác với giá trị sản phẩm đang giữ. Với `ImpactBurst` mặc định `Embers` thì đầu xa là `Dust`.
+
+Danh sách giá trị hợp lệ vẫn thuộc về settings model — review chỉ đọc. Và vì `Clamp()` **âm thầm** đổi một giá trị
+không hợp lệ về mặc định, review đọc lại giá trị sau khi clamp và ném lỗi nếu nó khác giá trị định chụp; nếu không,
+tấm ảnh sẽ mang chú thích `Dust` trong khi thực chất là `Embers`.
+
+### 6.4 Kết quả
+
+<!-- N17B:RESULTS -->
+
+## 7. Việc tiếp theo
 
 | Đợt | Nội dung | Vì sao đứng ở thứ tự này |
 |---|---|---|
-| 2 | `falling.pulse` + `impact.burst` | hai chỗ trống thật còn lại; cùng một cảnh nốt rơi nên dùng lại được khung của N16 |
+| ~~2~~ | ~~`falling.pulse` + `impact.burst`~~ | **xong** (§6) |
 | 3 | ba family `particles.*` | phải tách khỏi nhau trước khi đo: hôm nay chúng chỉ có một con số chung |
 | 4 | `release.fx`, `atmosphere.beams`, `impact.wave/flash/morph` | đã có phép đo riêng; đợt này chỉ là đưa ảnh vào repo |
 

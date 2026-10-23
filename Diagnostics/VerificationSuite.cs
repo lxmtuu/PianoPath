@@ -6958,7 +6958,7 @@ internal static partial class VerificationSuite
     private static void VerifyArEffect(string outputDirectory)
     {
         var cells = ArEffectFamilyReview.Render(outputDirectory);
-        Assert(cells == 15, "The AR effect review must shoot five hold families at three rows each: the family at the product's values, the same family switched off, and its percentage at the top of its range.");
+        Assert(cells == 21, "The AR effect review must shoot seven effect families at three rows each: the family at the product's values, the same family switched off, and its second setting at the far end of the range the contract declares.");
         Results.Add($"PASS AR hold-family review (N17, batch 1): {cells} setting frames through the calibrated AR overlay at the leaned pose on GPU-WARP, with two keys two octaves apart held for the whole run — two held bars under the fingers and one long arc between the two active pitches — and one family switched on per column so a difference cannot come from a family the column is not about. Each row is compared with the same family at the product's own values at the same pose, camera and seed. A column is refused unless the layer's own quad counter for that family is non-zero and unless taking the whole family away moves the picture, so a scene that cannot show the family fails instead of recording three near-identical frames. Measured: {ArEffectFamilyReview.Summary}. Renderer-branching and uniform-delivery evidence for the five hold families whose binding stays Unverified, not art approval, not every value of every range, and no default change; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
     }
 
