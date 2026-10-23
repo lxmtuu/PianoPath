@@ -390,6 +390,13 @@ không? Không, với bất kỳ cảnh hợp lệ nào:
 - `WispAmount` 150 là **`Maximum` mà contract khai**; hạ nó xuống là tự đặt một ngưỡng không thuộc về contract, và
   khi đó cột không còn đo "đầu xa" nữa.
 
+**Từ đợt đóng sổ, trần đó được đo chứ không chỉ suy ra.** Review ghi, cho **từng khung**, số hạt **còn sống** trong
+mô phỏng ở khung cuối cạnh số hạt layer **thực vẽ** (`demand` / `quads` trong manifest, cột "Hạt sống / đã vẽ" trên
+trang HTML, và đuôi `(capped: N alive / M drawn)` trong dòng PASS). Nó là phép **quan sát** — hook
+`ObserveParticleStateForReview` đọc `simulation.ArParticleCount` mỗi khung rồi được đặt lại `null` trong `finally`,
+nên không đổi một pixel nào. Nhờ vậy một cột bị chặn trần **tự nói** nó bị chặn, thay vì để người đọc suy ra từ hằng
+số `MaxProjectedParticles = 192` ở một tệp khác.
+
 Nên đây **không phải lỗ hổng của trang**: muốn đo độ nhạy của `WispAmount` trong AR thì phải đổi **chính sách trần**
 (`MaxProjectedParticles`, ảnh hưởng hiệu năng thật) hoặc đo trên **renderer sân khấu** — nơi `KeyEmissionBudget` và
 trần sprite là chuyện khác. Cả hai là quyết định của sản phẩm, không phải của một trang ảnh. Trang ghi đúng như vậy
@@ -642,6 +649,10 @@ chối** in ra.
 3. **Máy có GPU thật** và ít nhất hai tier chất lượng, vì `ArQualityBudget` cắt bớt phần tử theo tier và một family có
    thể biến mất ở `Lite` mà không ai thấy trên WARP.
 4. **Người duyệt** — cậu. Bảng §1.1 là thứ để đọc trước khi quyết định, không phải thứ để tự động lật.
+
+Và một điều **không** nằm trong bốn mục trên: hạ `MaxProjectedParticles` hay nâng nó đều là thay đổi **hiệu năng thật**
+của sản phẩm, nên nó không phải việc của một trang kiểm chứng. Trang chỉ báo cáo rằng cột `particles.wisps` bị chặn
+trần (cột "Hạt sống / đã vẽ" ở §7.6) — quyết định nâng trần hay không là của cậu.
 
 Trang này dừng đúng ở ranh giới đó, và dừng ở đó **có chủ đích**: một tài liệu nói "đã phủ 17/17" mà không nói "phủ
 cái gì" sẽ bị đọc thành "17 family đã được xác nhận", trong khi điều đúng là "17 family đã **được nhìn thấy**".

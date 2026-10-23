@@ -298,7 +298,13 @@ internal static class ArEffectFamilyReview
                 var off = cells.Single(cell => cell.Row == "off");
                 var far = cells.Single(cell => cell.Row == "far");
                 var label = far.Choice.Length > 0 ? far.Choice : far.Value.ToString("0");
-                return $"{family.Id} {off.ArChanged} px off / {far.Parameter} {label} {far.ArChanged} px";
+                // When more particles were alive than the layer could draw, the counts above measure the layer's cap
+                // as much as the setting, and the line has to say so rather than leave the reader to work it out from
+                // 192 in another file. The manifest carries the same pair for every cell.
+                var cap = far.Demand > far.Quads
+                    ? $" (capped: {far.Demand} alive / {far.Quads} drawn)"
+                    : "";
+                return $"{family.Id} {off.ArChanged} px off / {far.Parameter} {label} {far.ArChanged} px{cap}";
             }));
             var total = reports.Sum(report => report.Cells.Count);
             WriteManifest(root, renderer.AdapterName, families, reports, total);
