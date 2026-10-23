@@ -57,9 +57,13 @@ nào trong bảng này lấy từ log hay từ manifest trong artifact. Cột cu
 2. **Hai cột dùng chung một công tắc.** `impact.burst` và `particles.sparks` cùng khai `ShowEmbers`, nên khung `rest`
    và `off` của chúng **trùng nhau từng byte** (904 px, cùng hộp bao 92 × 33). Chúng tách nhau chỉ ở hàng đầu xa —
    `ImpactBurst` = `Dust` đổi hình dạng cú nổ, `ParticleAmount` = 120 đổi mật độ. Đọc hai dòng 12 và 13 như hai phép
-   đo độc lập là đọc sai.
+   đo độc lập là đọc sai. Và hàng đầu xa của dòng 13 lại **chạm trần** (xem điều 4).
 3. **Dòng 6 đo cái trần, không đo `WispAmount`.** 52 / 85 px là con số của **trần 192 hạt mỗi khung**, và §7.6 chứng
    minh không cảnh AR hợp lệ nào hạ được dưới trần ở `Maximum` 150.
+4. **Hai dòng bị chặn trần, và trang nói ra chứ không để suy luận.** Từ đợt đóng sổ mỗi khung ghi **số hạt sống cạnh
+   số hạt đã vẽ**; hai cột vượt trần là `particles.wisps` (**480** sống / 192 vẽ ở đầu xa) và `particles.sparks`
+   (**264** / 192). Với hai dòng đó, cột `far↔off` đọc **trần của lớp AR** nhiều hơn đọc thiết lập — dòng 6 là
+   quyết định sản phẩm còn treo, dòng 13 là hạn chế đã biết của phép đo.
 
 **Còn ba family `note.material.*`** (Solid / Gem / Crystal Outline) cũng `Unverified` trên lớp AR, nhưng chúng đã có
 trang riêng từ **N16** — ma trận vật liệu × giá trị, không phải một family hiệu ứng. Trang này không tính chúng vào
@@ -350,8 +354,10 @@ của chính cột đó, dung sai 2/255, đọc lại từ tờ ảnh đã commi
 2. **`particles.wisps` chạm trần của lớp AR, và đó là lý do đầu xa không nổ to.** Wisp phát `WispAmount × 4`
    hạt/giây/phím và sống `0,35 + WispHeight × 1,9` giây; ở 45 là ~180 hạt/giây, ở 150 là 600. Nhưng lớp AR chỉ vẽ
    tối đa **192 hạt mỗi khung**, nên khi kéo `WispAmount` lên 150 khung hình đã **bão hoà**: con số 85 px là một
-   tập hạt khác trong cùng trần, không phải "gấp ba số wisp". Phép tính đầy đủ ở §7.6 — và nó cho thấy **không có
-   cảnh hợp lệ nào** đo được `WispAmount` dưới trần khi contract khai tối đa 150.
+   tập hạt khác trong cùng trần, không phải "gấp ba số wisp". Số đo ở đợt đóng sổ: **480 hạt sống, 192 hạt vẽ** —
+   trạng thái đang lên của cảnh giữ 0,4 s, không phải trạng thái dừng 1 674 hạt; §7.6 giữ cả hai con số và nói rõ
+   chúng khác nhau vì sao. Phép tính đầy đủ ở §7.6 — và nó cho thấy **không có cảnh hợp lệ nào** đo được
+   `WispAmount` dưới trần khi contract khai tối đa 150.
 3. **Dự đoán ở §7.3 đúng từng pixel.** `impact.burst` và `particles.sparks` nằm sau cùng công tắc `ShowEmbers`:
    hai khung `rest` và `off` của chúng **trùng nhau từng pixel** — cùng **986 px**, cùng hộp bao **128 × 43**, cùng
    delta lớn nhất **224**. Chỉ khung đầu xa tách hai cột ra: **2 219 px** cho `ImpactBurst` = `Dust` (đám mây, hộp
@@ -390,12 +396,24 @@ không? Không, với bất kỳ cảnh hợp lệ nào:
 - `WispAmount` 150 là **`Maximum` mà contract khai**; hạ nó xuống là tự đặt một ngưỡng không thuộc về contract, và
   khi đó cột không còn đo "đầu xa" nữa.
 
+Đo lại bằng chính con số của review (đợt đóng sổ): khung `far` của `particles.wisps` có **480 hạt sống, 192 hạt được
+vẽ**. Con số 480 **thấp hơn** 1 674 ở bảng trên, và lý do là cảnh Held chỉ giữ phím **0,4 s** (12 khung ở 1/30), nên nó
+chụp **trạng thái đang lên**, không phải trạng thái dừng: 2 phím × 600 hạt/s × 0,4 s = 480, khớp từng hạt. Bảng trên là
+tích phân tới vô cùng; con số 480 là thứ cảnh thật sự làm ra. Hai con số **không thay thế nhau** và không được trình bày
+như hai phép đo độc lập của cùng một đại lượng; điều chúng cùng nói là: **trần 192 nằm dưới cả hai**, nên cột này đo
+trần ở mọi cảnh giữ phím dài hơn 0,16 s.
+
 **Từ đợt đóng sổ, trần đó được đo chứ không chỉ suy ra.** Review ghi, cho **từng khung**, số hạt **còn sống** trong
 mô phỏng ở khung cuối cạnh số hạt layer **thực vẽ** (`demand` / `quads` trong manifest, cột "Hạt sống / đã vẽ" trên
 trang HTML, và đuôi `(capped: N alive / M drawn)` trong dòng PASS). Nó là phép **quan sát** — hook
 `ObserveParticleStateForReview` đọc `simulation.ArParticleCount` mỗi khung rồi được đặt lại `null` trong `finally`,
 nên không đổi một pixel nào. Nhờ vậy một cột bị chặn trần **tự nói** nó bị chặn, thay vì để người đọc suy ra từ hằng
 số `MaxProjectedParticles = 192` ở một tệp khác.
+
+Và nó **bắt được một cột thứ hai**: `particles.sparks` ở đầu xa trả về **264 hạt sống / 192 hạt vẽ**, tức là bốn đợt
+trước đã in "1 775 px" cho một khung cũng bị chặn trần mà không chỗ nào nói ra. Con số đó không sai, nhưng nó đọc
+**trần của lớp AR** nhiều hơn đọc `ParticleAmount` 120 — đúng cùng một căn bệnh với cột wisp, chỉ khác là không ai để ý
+cho tới khi cột "Hạt sống / đã vẽ" tồn tại.
 
 Nên đây **không phải lỗ hổng của trang**: muốn đo độ nhạy của `WispAmount` trong AR thì phải đổi **chính sách trần**
 (`MaxProjectedParticles`, ảnh hưởng hiệu năng thật) hoặc đo trên **renderer sân khấu** — nơi `KeyEmissionBudget` và
@@ -605,7 +623,7 @@ lại từ tờ ảnh đã commit.
 | ~~3~~ | ~~ba family `particles.*`~~ | **xong** (§7), kèm phần chưa phủ ghi trong `unshot` |
 | ~~4~~ | ~~`impact.wave/flash/morph`, `release.fx`, `atmosphere.beams`~~ | **xong** (§8) |
 | ~~5~~ | ~~`falling.trail` + `falling.shimmer`~~ | **mã + guard xong** (§9) — trang phủ **17/17 family** |
-| 6 | `particles.wisps`: đo **dưới** trần 192 hạt/khung | con số 52/85 px hiện đo **cái trần** nhiều hơn đo `WispAmount` (§7.6). §7.6 chứng minh không cảnh AR hợp lệ nào làm được điều này với `Maximum` 150 ⇒ đây là **quyết định sản phẩm** (nâng trần, ảnh hưởng hiệu năng) hoặc đo trên renderer sân khấu, **cần cậu gật** |
+| 6 | `particles.wisps` và `particles.sparks`: đo **dưới** trần 192 hạt/khung | wisp 52/85 px đo **cái trần** nhiều hơn đo `WispAmount` (§7.6, đo được **480 sống / 192 vẽ**); sparks 904/1 775 px cũng chạm trần (**264 / 192**), nên cột 13 đọc trần nhiều hơn đọc `ParticleAmount` 120. §7.6 chứng minh không cảnh AR hợp lệ nào hạ wisp xuống dưới trần ở `Maximum` 150 ⇒ đây là **quyết định sản phẩm** (nâng trần, ảnh hưởng hiệu năng) hoặc đo trên renderer sân khấu, **cần cậu gật** |
 
 Không đợt nào trong bốn đợt trên được phép lật binding. Muốn lật thì phải phủ **giá trị và vòng đời**, không phải
 thêm một pose nữa — và đó là việc phải làm trên máy có GPU thật, không phải trong sandbox này.

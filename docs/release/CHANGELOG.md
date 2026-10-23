@@ -45,6 +45,13 @@ và không được lặp lại ở đây; tài liệu kế hoạch phát triể
   thân nốt chứ không phải hình mới; shimmer có thêm counter riêng (`ArNoteShimmerQuadCount`, chỉ để chẩn đoán, không
   đổi pixel nào). Mười lăm family của các đợt trước không đổi một pixel. Đây là **trang ảnh**, không phải lật trạng
   thái: contract typed vẫn để cả 17 family là `Unverified`.
+- **Trần hạt của lớp AR giờ được đọc ra, và nó bắt được hai cột.** Mỗi khung của trang ghi thêm **số hạt còn sống
+  cạnh số hạt layer thực vẽ** (`demand` / `quads` trong manifest, cột "Hạt sống / đã vẽ" trên trang HTML, đuôi
+  `(capped: N alive / M drawn)` trong dòng PASS). Đây là phép **quan sát** thuần: hook chỉ đọc rồi được gỡ trong
+  `finally`, không đổi một pixel nào — 51 ô giữ nguyên từng con số. Nó tìm ra `particles.wisps` (**480** sống / **192**
+  vẽ) và cả `particles.sparks` (**264** / **192**), tức là cột sparks từ bốn đợt trước vẫn được in như một phép đo
+  `ParticleAmount` trong khi thực ra nó đọc trần của lớp AR. Wisp 480 chứ không phải 1 674 như tích phân trạng thái
+  dừng, vì cảnh Held chỉ giữ 0,4 s; cả hai con số đều nằm trên trần, và tài liệu giữ cả hai thay vì chọn con số đẹp hơn.
 
 ## 2.2.0 — 2026-10-18
 

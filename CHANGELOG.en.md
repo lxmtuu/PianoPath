@@ -47,6 +47,15 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
   rather than a new shape; the shimmer also gains a counter of its own (`ArNoteShimmerQuadCount`, diagnostics only, no
   pixel changes). The fifteen families from earlier rounds did not change by a single pixel. This is a **sheet of
   pictures**, not a status flip: the typed contract still lists all seventeen families as `Unverified`.
+- **The AR layer's particle ceiling is now read out, and it caught two columns.** Every frame of the sheet now also
+  records **how many particles were alive against how many the layer actually drew** (`demand` / `quads` in the
+  manifest, an "alive / drawn" column on the HTML index, a `(capped: N alive / M drawn)` tail in the PASS line). This
+  is pure **observation**: the hook only reads and is removed in a `finally`, so no pixel moved — all 51 cells keep
+  their exact numbers. It found `particles.wisps` (**480** alive / **192** drawn) and `particles.sparks` (**264** /
+  **192**), which means the sparks column has been printed for four rounds as a measurement of `ParticleAmount` while
+  it was really reading the AR layer's cap. Wisps report 480 rather than the 1 674 of the steady-state integral
+  because the Held scene only holds for 0.4 s; both numbers sit above the cap, and the document keeps both instead of
+  choosing the prettier one.
 
 ## 2.2.0 — 2026-10-18
 
