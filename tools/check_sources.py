@@ -2083,6 +2083,27 @@ def scan_ar_effect_family_review():
     if "docs/evidence/ar-effect-sheets" not in workflow:
         errors.append(".github/workflows/build.yml no longer stages docs/evidence/ar-effect-sheets; the page's "
                       "committed pictures would never reach the repository")
+
+    # The summary table is the only place a reader can see all the families at once, so it is also the easiest place
+    # for the document to drift away from the code: a family added to the review, or dropped from it, would leave a
+    # table that still looks complete. The table's family column has to name exactly the driven set, once each.
+    parity_path = ROOT / "docs" / "AR-EFFECT-PARITY.md"
+    if not parity_path.exists():
+        errors.append("docs/AR-EFFECT-PARITY.md is missing; the N17 review's summary table lives there")
+        return errors
+    parity = parity_path.read_text(encoding="utf-8")
+    table = {}
+    for line in parity.splitlines():
+        match = re.match(r"^\|\s*(\d+)\s*\|\s*`([a-z][a-z.\-]+)`\s*\|", line)
+        if match:
+            table[match.group(2)] = int(match.group(1))
+    if set(table) != driven_ids:
+        errors.append("docs/AR-EFFECT-PARITY.md's summary table lists "
+                      f"{sorted(table)} but the review drives {sorted(driven_ids)}; a reader would see a table that "
+                      "looks complete while a family is missing from it")
+    elif sorted(table.values()) != list(range(1, len(table) + 1)):
+        errors.append("docs/AR-EFFECT-PARITY.md's summary table is numbered "
+                      f"{sorted(table.values())}; the rows have to stay 1..{len(table)} so a reader can count them")
     return errors
 
 

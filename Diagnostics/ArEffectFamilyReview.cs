@@ -173,12 +173,15 @@ internal static class ArEffectFamilyReview
         internal required int Painted { get; init; }
         /// <summary>The family's own quad counter after this capture, the witness that the scene carried it.</summary>
         internal required int Quads { get; init; }
+        /// <summary>Live particles in the simulation at the last frame, before the layer's own draw cap.</summary>
+        internal required int Demand { get; init; }
         /// <summary>Held only while the pair is compared; dropped before the manifest is written.</summary>
         internal byte[]? Pixels { get; set; }
     }
 
     private sealed record Cell(string Family, Stage Stage, string Parameter, string Row, double Value, string Choice,
-        string File, string PixelSha256, int ArChanged, int ArLit, int ArPainted, int Quads, string Reading, string Note);
+        string File, string PixelSha256, int ArChanged, int ArLit, int ArPainted, int Quads, int Demand,
+        string Reading, string Note);
 
     private sealed record SheetReport(string File, string Sha, int Columns, int Rows, IReadOnlyList<Cell> Cells);
 
@@ -231,7 +234,7 @@ internal static class ArEffectFamilyReview
                     shots.Add(rest);
                     sheet.Blit(column * Columns, captions[column * Columns], rest.Pixels!, Width, Height, premultiplied: false);
                     cells.Add(new Cell(family.Id, family.Stage, family.Id, "rest", 0, "", rest.File, rest.PixelSha256, 0,
-                        rest.Lit, rest.Painted, rest.Quads, "Reference", "The family at the product's own values."));
+                        rest.Lit, rest.Painted, rest.Quads, rest.Demand, "Reference", "The family at the product's own values."));
 
                     // The switch, off: the only row that takes the whole family out of the picture.
                     var off = CaptureAr(root, renderer, pose, camera, Settings(family, family.Off), family, "off");
@@ -248,7 +251,7 @@ internal static class ArEffectFamilyReview
                             $"in the {family.Stage} scene at the pose '{PoseId}', so this column would measure a family the " +
                             "camera cannot see.");
                     cells.Add(new Cell(family.Id, family.Stage, family.On.Name, "off", 0, "", off.File, off.PixelSha256,
-                        footprint, off.Lit, off.Painted, off.Quads, Read(footprint),
+                        footprint, off.Lit, off.Painted, off.Quads, off.Demand, Read(footprint),
                         "The switch off; every other frame of this column has the family on."));
 
                     // The far end: top of a percentage range, or the last declared value of a choice list.
@@ -272,7 +275,7 @@ internal static class ArEffectFamilyReview
                             $"against the same family switched off (floor {MinimumChangedPixels}), so the third picture " +
                             "is the middle one under another caption.");
                     cells.Add(new Cell(family.Id, family.Stage, family.Far.Name, "far", family.Far.Number, family.Far.Choice,
-                        far.File, far.PixelSha256, changed, far.Lit, far.Painted, far.Quads, Read(changed),
+                        far.File, far.PixelSha256, changed, far.Lit, far.Painted, far.Quads, far.Demand, Read(changed),
                         $"The contract's far end, against the product's own value; {againstOff} px against the family switched off."));
 
                     off.Pixels = null;
@@ -499,7 +502,7 @@ internal static class ArEffectFamilyReview
     private static Shot CaptureAr(string root, GpuStageRenderer renderer, HeldParticleControlPlan.View pose, byte[] camera,
         PianoVisualSettings settings, Family family, string label)
     {
-        var pixels = RenderAr(renderer, pose, camera, settings, family.Stage);
+        var (pixels, demand) = RenderAr(renderer, pose, camera, settings, family.Stage);
         if (pixels.Length != Width * Height * 4)
             throw new InvalidDataException(
                 $"AR returned {pixels.Length} bytes for {family.Id}/{label}; expected {Width}×{Height} BGRA pixels.");
@@ -509,7 +512,7 @@ internal static class ArEffectFamilyReview
         return new Shot
         {
             File = relative.Replace('\\', '/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels),
-            Painted = OptionMatrixPlan.ChangedPixels(pixels, camera), Quads = quads, Pixels = pixels
+            Painted = OptionMatrixPlan.ChangedPixels(pixels, camera), Quads = quads, Demand = demand, Pixels = pixels
         };
     }
 
@@ -536,7 +539,7 @@ internal static class ArEffectFamilyReview
     /// One frame of the AR overlay: the calibrated pose, the scene's own state, and the family's look. The camera, the
     /// ring, the palette and the calibration are shared, so two captures of a column differ only in the settings.
     /// </summary>
-    private static byte[] RenderAr(GpuStageRenderer renderer, HeldParticleControlPlan.View pose, byte[] camera,
+    private static (byte[] Pixels, int Demand) RenderAr(GpuStageRenderer renderer, HeldParticleControlPlan.View pose, byte[] camera,
         PianoVisualSettings settings, Stage stage)
     {
         // A stage that is never drawn: only its colour pipeline and keyboard fraction feed the look, exactly as the
@@ -602,8 +605,18 @@ internal static class ArEffectFamilyReview
                     break;
             }
         }
-        return GpuRenderLoop.RenderFrames(renderer, feed, Width, Height, frames - 1, dt, false, out _,
-            BeforeFrame, OptionMatrixPlan.Seed);
+        // The layer draws at most ArLayer.maxProjectedParticles quads a frame and picks them out of every live
+        // particle, so the picture alone cannot say whether a column measured its setting or the cap. This reads the
+        // live count at each frame - observation only, no pixels change - so a saturated column can say so itself.
+        var demand = 0;
+        renderer.ObserveParticleStateForReview = (simulation, _) => demand = Math.Max(demand, simulation.ArParticleCount);
+        try
+        {
+            var pixels = GpuRenderLoop.RenderFrames(renderer, feed, Width, Height, frames - 1, dt, false, out _,
+                BeforeFrame, OptionMatrixPlan.Seed);
+            return (pixels, demand);
+        }
+        finally { renderer.ObserveParticleStateForReview = null; }
     }
 
     /// <summary>
@@ -826,7 +839,7 @@ internal static class ArEffectFamilyReview
                 {
                     cell.Family, scene = cell.Stage.ToString(), cell.Parameter, cell.Row, Value = Math.Round(cell.Value, 3),
                     cell.Choice, cell.File, cell.PixelSha256, cell.ArChanged, cell.ArLit, cell.ArPainted, cell.Quads,
-                    cell.Reading, cell.Note
+                    cell.Demand, Capped = cell.Demand > cell.Quads, cell.Reading, cell.Note
                 })
             })
         }, new JsonSerializerOptions { WriteIndented = true }));
@@ -859,14 +872,18 @@ internal static class ArEffectFamilyReview
         foreach (var report in sheets)
         {
             body.Append($"<h2>Tờ ảnh — {Encode(report.File)}</h2>")
-                .Append("<table><tr><th>Family</th><th>Thiết lập</th><th>Hàng</th><th>Giá trị</th><th>AR</th><th>Quad</th><th>Đọc</th></tr>");
+                .Append("<table><tr><th>Family</th><th>Thiết lập</th><th>Hàng</th><th>Giá trị</th><th>AR</th><th>Quad</th>")
+                .Append("<th>Hạt sống / đã vẽ</th><th>Đọc</th></tr>");
             foreach (var cell in report.Cells)
             {
                 var value = cell.Choice.Length > 0 ? cell.Choice : cell.Value.ToString("0.###");
+                var cappedClass = cell.Demand > cell.Quads ? " class=\"n\"" : "";
                 body.Append($"<tr><td>{Encode(cell.Family)}</td><td>{Encode(cell.Parameter)}</td><td>{Encode(cell.Row)}</td>")
                     .Append($"<td>{Encode(value)}</td>")
                     .Append($"<td class=\"{(cell.ArChanged >= MinimumChangedPixels ? "y" : "n")}\">{cell.ArChanged:N0} px</td>")
-                    .Append($"<td>{cell.Quads:N0}</td><td>{Encode(cell.Reading)}</td></tr>");
+                    .Append($"<td>{cell.Quads:N0}</td>")
+                    .Append($"<td{cappedClass}>{cell.Demand:N0} / {cell.Quads:N0}</td>")
+                    .Append($"<td>{Encode(cell.Reading)}</td></tr>");
             }
             body.Append("</table>");
             body.Append("<p>Ba cột: family đang bật ở giá trị của sản phẩm, cùng family bị tắt, và thiết lập thứ hai bị đẩy tới ")

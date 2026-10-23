@@ -1,7 +1,8 @@
 # Family hiệu ứng trong lớp AR: mười bảy family `Unverified` (N17)
 
-> **Trạng thái:** đợt 1–5, 2026-10-23 · **Ảnh:** `docs/evidence/ar-effect-sheets/{held,approach,impact,release}.png` · **Mã:** `Diagnostics/ArEffectFamilyReview.cs` · **Chốt chặn:**
-> `tools/check_sources.py` (`scan_ar_effect_family_review`)
+> **Trạng thái:** **đã phủ 17/17 family**, đợt 1–5, đóng sổ 2026-10-24 · **Ảnh:**
+> `docs/evidence/ar-effect-sheets/{held,approach,impact,release}.png` · **Mã:** `Diagnostics/ArEffectFamilyReview.cs` ·
+> **Chốt chặn:** `tools/check_sources.py` (`scan_ar_effect_family_review`)
 
 ## 1. Câu hỏi, và câu trả lời ngắn
 
@@ -18,6 +19,52 @@ mà người đọc nhìn được.
 
 Nói cách khác: N17 không phải một tuyên bố mới. Nó là **cùng phép đo, lần đầu có ảnh**.
 
+### 1.1 Bảng tổng hợp: 17 family, một bảng
+
+Mỗi dòng là **một cột trên tờ ảnh**: ba khung (giá trị của sản phẩm, family bị tắt, thiết lập thứ hai ở đầu xa).
+Số là pixel đổi so với khung tham chiếu của chính cột đó, dung sai 2/255, đọc lại từ tờ ảnh đã commit — không có số
+nào trong bảng này lấy từ log hay từ manifest trong artifact. Cột cuối là phép so **`far` ↔ `off`**, tức cổng thứ tư
+(§8.4): nó trả lời "khung thứ ba có phải một bức ảnh khác khung thứ hai không".
+
+| # | Family | Tờ · hàng | Cảnh | Công tắc **tắt** | Đầu xa | `far`↔`off` | Đợt |
+|---:|---|---|---|---|---:|---:|---:|
+| 1 | `hold.bar` | held · 1 | Held | `HoldBar` off | `HoldBarIntensity` 100 | 19 827 | 1 |
+| 2 | `hold.breath` | held · 2 | Held | `HoldBreath` off | `HoldBreathRate` 100 | 13 583 | 1 |
+| 3 | `hold.vibration` | held · 3 | Held | `HoldVibration` off | `HoldVibrationAmount` 100 | 9 126 | 1 |
+| 4 | `hold.color-cycle` | held · 4 | Held | `HoldColorCycle` off | `HoldColorCycleSpeed` 100 | 16 673 | 1 |
+| 5 | `hold.arc` | held · 5 | Held | `HoldElectricArc` off | `HoldArcIntensity` 100 | 124 | 1 |
+| 6 | `particles.wisps` | held · 6 | Held | `ShowWisps` off | `WispAmount` 150 | 70 | 3 |
+| 7 | `particles.flames` | held · 7 | Held | `ShowFlame` off | `FlameIntensity` 100 | 16 501 | 3 |
+| 8 | `atmosphere.beams` | held · 8 | Held | `ShowLightBeams` off | `BeamIntensity` 100 | 4 763 | 4 |
+| 9 | `falling.trail` | approach · 1 | Approach | `FallingTrail` `None` | `FallingTrailLength` 100 | 2 358 | 5 |
+| 10 | `falling.shimmer` | approach · 2 | Approach | `NoteShimmer` off | `NoteShimmerAmount` 100 | 1 440 | 5 |
+| 11 | `falling.pulse` | approach · 3 | Approach | `FallingPulse` off | `FallingPulseRate` 100 | 4 871 | 2 |
+| 12 | `impact.burst` | impact · 1 | Impact | `ShowEmbers` off | `ImpactBurst` `Dust` | 1 179 | 2 |
+| 13 | `particles.sparks` | impact · 2 | Impact | `ShowEmbers` off | `ParticleAmount` 120 | 1 588 | 3 |
+| 14 | `impact.wave` | impact · 3 | Impact | `ImpactWave` `None` | `ImpactWaveIntensity` 150 | 597 | 4 |
+| 15 | `impact.flash` | impact · 4 | Impact | `ShowImpactFlash` off | `ImpactFlashStyle` `Plasma` | 13 551 | 4 |
+| 16 | `impact.morph` | impact · 5 | Impact | `ImpactMorph` `None` | `ImpactMorphIntensity` 100 | 52 | 4 |
+| 17 | `release.fx` | release · 1 | Release | `ReleaseEffect` `Fade` | `ReleaseIntensity` 100 | 89 | 4 |
+
+**Ba điều phải đọc kèm bảng này, nếu không nó sẽ bị đọc sai:**
+
+1. **Cột `far` không phải "nhiều hơn" ở mọi family.** Bốn cột có số `far` **nhỏ hơn** `off`: `hold.arc` (87 so với
+   124), `impact.wave` (556 so với 566), `impact.morph` (14 so với 38), `release.fx` (24 so với 65). Đó không phải
+   lỗi đo: một cung sáng hơn thì **mảnh hơn** nhưng lệch nhiều điểm ảnh hơn trên cùng diện tích; một cú nhả mạnh hơn
+   phát **ít hạt hơn nhưng nhanh hơn** (`count = clamp(6 × strength + 2, 0, 10)`); một morph ở 100 so với 70 phủ
+   cùng một vùng với độ sáng cao hơn. Ở cả bốn, phép so `far` ↔ `off` vẫn trên ngưỡng 12 px — đó là thứ cổng thứ tư
+   kiểm, và là lý do nó tồn tại.
+2. **Hai cột dùng chung một công tắc.** `impact.burst` và `particles.sparks` cùng khai `ShowEmbers`, nên khung `rest`
+   và `off` của chúng **trùng nhau từng byte** (904 px, cùng hộp bao 92 × 33). Chúng tách nhau chỉ ở hàng đầu xa —
+   `ImpactBurst` = `Dust` đổi hình dạng cú nổ, `ParticleAmount` = 120 đổi mật độ. Đọc hai dòng 12 và 13 như hai phép
+   đo độc lập là đọc sai.
+3. **Dòng 6 đo cái trần, không đo `WispAmount`.** 52 / 85 px là con số của **trần 192 hạt mỗi khung**, và §7.6 chứng
+   minh không cảnh AR hợp lệ nào hạ được dưới trần ở `Maximum` 150.
+
+**Còn ba family `note.material.*`** (Solid / Gem / Crystal Outline) cũng `Unverified` trên lớp AR, nhưng chúng đã có
+trang riêng từ **N16** — ma trận vật liệu × giá trị, không phải một family hiệu ứng. Trang này không tính chúng vào
+17 dòng trên, và không có ý định thay trang N16.
+
 ## 2. Vì sao contract vẫn `Unverified` dù đã đo
 
 `VerificationSuite.Ar.cs` ghi lý do ngay trong assert: *"Sampled S5 WARP checks do not justify Native family support
@@ -28,7 +75,12 @@ giá trị/vòng đời mà một claim `Applied` đòi. Vì vậy trang này **
 Điều đó khác N16: ở đó contract tự viết *"remain Unverified until an AR-specific style/value matrix is reviewed"*,
 nên một ma trận là đủ để lật binding. Ở đây câu đó không tồn tại, nên lật binding sẽ là nói quá.
 
-## 3. Hiện trạng: mỗi family đang có bằng chứng gì
+## 3. Hiện trạng trước N17: mỗi family đang có bằng chứng gì
+
+> **Đọc phần này như một ảnh chụp lịch sử.** Nó ghi tình trạng **trước** khi N17 bắt đầu, trên tip `869ab68`, và được
+> giữ lại vì hai lý do: nó giải thích **vì sao** thứ tự các đợt lại như vậy (§10), và ba dòng trong đây — `hold.arc`
+> "chỉ đếm", `falling.pulse` "không có assert riêng", nhóm "cùng lúc" không quy được cho từng family — chính là
+> những chỗ mà năm đợt sau lấp. Bảng đầy đủ của trạng thái **hiện tại** nằm ở §1.1.
 
 Đọc `Diagnostics/VerificationSuite.Ar.cs` trên tip `869ab68`:
 
@@ -550,3 +602,46 @@ lại từ tờ ảnh đã commit.
 
 Không đợt nào trong bốn đợt trên được phép lật binding. Muốn lật thì phải phủ **giá trị và vòng đời**, không phải
 thêm một pose nữa — và đó là việc phải làm trên máy có GPU thật, không phải trong sandbox này.
+
+## 11. Đóng sổ
+
+### 11.1 Trang này đã chứng minh gì
+
+Mười bảy family mà contract để `Unverified` trên lớp phủ AR **đều tới được lớp phủ đó và đều đổi ảnh**, ở cả hai đầu
+thiết lập, trong **đúng cảnh mà vòng đời của chúng cần**. Bằng chứng là bốn tờ ảnh đã commit, một manifest có sha
+từng khung, và **năm cổng** mà một cột phải qua trước khi được ghi thành kết quả:
+
+| Cổng | Câu hỏi nó trả lời | Bắt được lỗi gì (nếu có) |
+|---|---|---|
+| `rest.Painted ≥ 500` | khung tham chiếu có thật sự có family trong đó không | một khung trống sẽ khiến mọi phép so sau đó vô nghĩa |
+| `rest.Quads > 0` | layer có phát quad **của chính family** không | counter khác 0 không chứng minh quad đã rơi vào đâu |
+| `off ↔ rest ≥ 12` | lấy family ra có đổi ảnh không | family vô hình ở pose đã chọn (arc ở pose nhìn thẳng: 18 px) |
+| `far ↔ off ≥ 12` | hàng thứ ba có phải ảnh khác hàng thứ hai không | `impact.flash` chụp ngoài đời sống 0,26 s của flash có kiểu: **0 px** (§8.4) |
+| `far ↔ rest ≥ 12` | hàng thứ ba có phải ảnh khác hàng thứ nhất không | `FallingTrailIntensity` đã ở 100 trong look xuất phát (§9.3) |
+
+Hai cổng cuối được **thêm sau khi đã có ảnh**, mỗi cái vì một cột cụ thể đã qua các cổng cũ mà vẫn không đo được cái
+nó tên. Đó là lý do chúng nằm trong mã chứ không chỉ trong tài liệu: một trang ảnh chỉ đáng tin bằng thứ nó **từ
+chối** in ra.
+
+### 11.2 Trang này **không** chứng minh gì
+
+- **Không phải độ phủ giá trị.** Mỗi family một pose, một camera, một seed, một giá trị cho mỗi thiết lập. Contract
+  khai 3–6 thiết lập mỗi family; trang chụp **hai** (công tắc + một thiết lập thứ hai) và ghi tên phần còn lại vào
+  `unshot`. Đó là lý do contract vẫn `Unverified`: lật nó cần ma trận giá trị/vòng đời, không phải một cột.
+- **Không phải độ phủ vòng đời.** Mỗi family một khung ở một thời điểm. `hold.*` sống liên tục, `impact.*` tàn trong
+  0,26–0,55 s; trang chỉ chứng minh family **được vẽ** ở thời điểm đã chọn, không chứng minh nó tàn đúng cách.
+- **Không phải duyệt mỹ thuật, không phải khung hình phần cứng.** Tất cả chạy trên **WARP** (kiểm tra `renderer.IsWarp`
+  và ném lỗi nếu không phải). Không có GPU thật, không có camera thật, không có tay che phím, không có tier chất lượng
+  nào khác `Ultra`.
+- **Không đổi một binding, một mặc định, hay một preset nào.**
+
+### 11.3 Muốn lật `Unverified` → `Applied` thì cần gì
+
+1. **Ma trận giá trị**: mỗi thiết lập contract khai, ít nhất hai đầu + giữa, không chỉ đầu xa.
+2. **Ma trận vòng đời**: cùng một family ở 2–3 mốc thời gian trong vòng đời của nó (mới sinh, giữa, sắp tàn).
+3. **Máy có GPU thật** và ít nhất hai tier chất lượng, vì `ArQualityBudget` cắt bớt phần tử theo tier và một family có
+   thể biến mất ở `Lite` mà không ai thấy trên WARP.
+4. **Người duyệt** — cậu. Bảng §1.1 là thứ để đọc trước khi quyết định, không phải thứ để tự động lật.
+
+Trang này dừng đúng ở ranh giới đó, và dừng ở đó **có chủ đích**: một tài liệu nói "đã phủ 17/17" mà không nói "phủ
+cái gì" sẽ bị đọc thành "17 family đã được xác nhận", trong khi điều đúng là "17 family đã **được nhìn thấy**".
