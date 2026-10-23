@@ -243,8 +243,10 @@ ba** thiết lập, nên lý do đó phải được trả lời chứ không ph
 | `particles.flames` | `ShowFlame`, `FlameIntensity`, `FlameHeight` | `ShowFlame` + `FlameIntensity` 100 | `FlameHeight` |
 
 Quy tắc chọn thiết lập thứ hai là **máy đọc từ contract**, không phải người chọn: công tắc là tham số boolean đầu
-tiên, đầu xa là **phần trăm đầu tiên sau công tắc** theo đúng thứ tự contract khai báo, lấy `Maximum` mà contract
-ghi. Mọi thiết lập còn lại được ghi vào manifest dưới khoá `unshot` và hiện thành một cột **"Không chụp ở đợt
+tiên. Family khai **đúng hai** thiết lập thì giữ nguyên luật cũ — thiết lập còn lại là đầu xa, bất kể loại, nên
+`impact.burst` vẫn đẩy `ImpactBurst` tới giá trị cuối trong danh sách. Family khai **nhiều hơn hai** thì đầu xa là
+**phần trăm đầu tiên sau công tắc** theo đúng thứ tự contract khai báo, lấy `Maximum` mà contract ghi. Mọi thiết lập
+còn lại được ghi vào manifest dưới khoá `unshot` và hiện thành một cột **"Không chụp ở đợt
 này"** ngay trên trang HTML. Như vậy cột này không thể bị đọc thành "cả family đã được phủ": nó nói rõ nó phủ cái
 gì, và phần còn lại là việc của một đợt sau.
 

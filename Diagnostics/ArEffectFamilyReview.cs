@@ -270,15 +270,20 @@ internal static class ArEffectFamilyReview
                     ? contract.Parameters[1]
                     : throw new InvalidDataException($"{id} declares no boolean switch for the review to turn off.");
             // A family may declare more than two settings - the particles pilot declares six, five and three - and
-            // one column still holds exactly one switch and one second setting. The second setting is the first
-            // percentage the contract lists after the switch, never a hand-picked one, and every setting left over
-            // is written into the manifest as unshot. A page that quietly shot one of six settings and called the
-            // column the whole family would be claiming coverage it does not have, which is the one thing this
-            // review exists to prevent; saying which settings it did not shoot costs nothing.
+            // one column still holds exactly one switch and one second setting. A family with exactly two keeps the
+            // behaviour it always had: the other setting is the far row whatever kind it is, which is how
+            // impact.burst pushes a choice to its last declared value. A family with more than two has no single
+            // "other" setting, so the contract's own order decides: the first percentage after the switch, at the
+            // number the contract declares. Every setting left over is written into the manifest as unshot. A page
+            // that quietly shot one of six settings and called the column the whole family would be claiming
+            // coverage it does not have, which is the one thing this review exists to prevent; saying which
+            // settings it did not shoot costs nothing.
             var others = contract.Parameters.Where(parameter => parameter.SettingName != toggle.SettingName).ToArray();
-            var second = others.FirstOrDefault(parameter => parameter.Kind == EffectParameterKind.Percentage)
-                ?? throw new InvalidDataException(
-                    $"{id} declares no percentage after its switch, so the far row has no declared maximum to shoot.");
+            var second = others.Length == 1
+                ? others[0]
+                : others.FirstOrDefault(parameter => parameter.Kind == EffectParameterKind.Percentage)
+                    ?? throw new InvalidDataException(
+                        $"{id} declares no percentage after its switch, so the far row has no declared maximum to shoot.");
             var unshot = others.Where(parameter => parameter.SettingName != second.SettingName)
                 .Select(parameter => parameter.SettingName).ToArray();
             var far = second.Kind switch
