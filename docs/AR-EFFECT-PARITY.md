@@ -507,7 +507,36 @@ Tổng: **17 family × 3 khung = 51 ảnh**, bốn tờ.
 
 ### 9.6 Kết quả
 
-<!-- N17E:RESULTS -->
+Bốn tờ, **51 ô**: `held.png` 3 890 × 6 058 (8 hàng), `approach.png` **3 890 × 2 298** (**3 hàng**), `impact.png`
+3 890 × 3 802 (5 hàng), `release.png` 3 890 × 794 (1 hàng). Số là pixel đổi so với khung `rest`, dung sai 2/255, đọc
+lại từ tờ ảnh đã commit.
+
+| Family | Cảnh | Công tắc **tắt** | Đầu xa | `far` ↔ `off` |
+|---|---|---:|---:|---:|
+| `falling.trail` | Approach | `FallingTrail` `None` → **1 300 px** | `FallingTrailLength` 100 → **2 267 px** | 2 358 px |
+| `falling.shimmer` | Approach | `NoteShimmer` off → **659 px** | `NoteShimmerAmount` 100 → **973 px** | 1 440 px |
+
+**Đọc bảng:**
+
+1. **`falling.trail` đo đúng thứ một trail làm.** Hộp bao vùng đổi là **32 × 61 px** khi tắt và **40 × 106 px** khi
+   `FallingTrailLength` = 100 — tức **cùng một bề rộng, dài gần gấp đôi**: đây là vệt dài ra chứ không phải thứ khác
+   xuất hiện. Ảnh cắt cạnh nhau cho thấy đúng vậy: khung `rest` có một vệt ngắn phía trên thân nốt, khung `off` không
+   có, khung `far` có vệt dài chạy khỏi khung hình.
+2. **`falling.shimmer` là cột mỏng nhất trong ba family của cảnh Approach (659 px khi tắt) và đó là bản chất.** Sheen
+   là một dải sáng **nằm bên trong** thân nốt chứ không phải một hình mới: ảnh so phóng 6× cho thấy phần đổi là một
+   **đường mảnh chạy dọc thân**, không phải quầng. Con số nhỏ vì shimmer đổi *độ sáng bên trong* một hình đã có, và
+   counter mới (`ArNoteShimmerQuadCount`) xác nhận nó có vẽ quad — 659 px là một dải mảnh, không phải một lỗi.
+3. **Cả hai đều qua cổng thứ năm, và cổng thứ năm là thứ đã cứu cột `falling.trail`.** Nếu hàng xa vẫn là
+   `FallingTrailIntensity` như luật cũ, con số `far` sẽ là **0 px** (giá trị 100 đã nằm trong khung tham chiếu); cổng
+   thứ tư (`far` ↔ `off`) **không** bắt được vì khung đó vẫn khác `off`. Chỉ cổng `far` ↔ `rest` bắt được. Trên tờ ảnh
+   hiện hành, `falling.trail` có **2 267 px** ở `FallingTrailLength` 100.
+4. **Mười lăm family của các đợt trước không đổi một pixel.** Toàn bộ 13 con số còn lại (5 hold, 2 particles giữ phím,
+   `atmosphere.beams`, `falling.pulse`, 2 particles cảnh impact, `impact.wave`, `impact.flash`, `impact.morph`,
+   `release.fx`) trùng khớp với lượt đo đợt 4 — thêm hai family vào cảnh Approach không làm xê dịch nốt nào.
+5. **Cả 51 ô đều qua năm cổng.** Ô nhỏ nhất vẫn là `impact.morph` (**14 px** so với `rest`, 52 px so với `off`), ô lớn
+   nhất `impact.flash` (**82 127 px**).
+
+**Trang đã phủ đủ 17/17 family** mà contract để `Unverified` trên lớp phủ AR. **Không có gì được lật.**
 
 ## 10. Việc tiếp theo
 

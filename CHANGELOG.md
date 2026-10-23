@@ -31,19 +31,20 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
 - Nhịp mô phỏng hạt tách khỏi nhịp khung hình: cùng một preset cho cùng một chuyển động ở 60 Hz, 144 Hz và khi xuất video, thay vì nhanh dần theo tần số quét.
 
 ### Kiểm chứng
-- **Mười lăm family hiệu ứng AR có trang ảnh kiểm chứng, mỗi family chụp trong đúng cảnh mà vòng đời của nó cần**
-  (`--verify-ar-effect-only`: bốn tờ `held` / `approach` / `impact` / `release`, 45 khung). Cảnh **Release** là cảnh
-  mới: một phím giữ 0,2 s rồi **nhấc lên**, vì hiệu ứng nhả chỉ sinh ra bởi sự kiện note-off. Family không có công tắc
-  boolean (`impact.morph`, `release.fx`) bị tắt bằng **choice mà chính renderer coi là tắt** (`None`, `Fade`), và hàng
-  tham chiếu của nó chụp ở giá trị đầu tiên danh sách của nó khai — manifest ghi `onValue`/`offValue`/`pinned` nên trang
-  không thể bị đọc thành look mặc định. Review có **cổng thứ tư**: hàng "đầu xa" phải khác hàng "tắt" ≥ 12 px; cổng này
-  bắt được một cột thật sự hỏng ngay lần đầu (`impact.flash` chụp ở 0,30 s trong khi flash có kiểu chỉ sống 0,26 s), nên
-  cảnh Impact rút xuống 0,20 s và ba family của cảnh đó được **đo lại**: `impact.burst` **904 / 1 714 px**,
-  `particles.sparks` **904 / 1 775 px**, `impact.wave` **566 / 556 px**. Số của đợt này: `atmosphere.beams`
-  **4 708 px**, `impact.flash` **82 127 px** (13 551 px khi so với khung tắt), `impact.morph` **14 px**, `release.fx`
-  **24 px** — hai cột cuối là hai cột mỏng nhất trang và được ghi đúng như vậy, không suy ra kết luận về độ nhạy. Bảy
-  family của các đợt trước không đổi một pixel. Đây là **trang ảnh**, không phải lật trạng thái: contract typed vẫn để
-  cả mười lăm family là `Unverified`.
+- **Toàn bộ 17 family hiệu ứng AR có trang ảnh kiểm chứng** (`--verify-ar-effect-only`: bốn tờ `held` / `approach` /
+  `impact` / `release`, **51 khung**, mỗi family chụp trong đúng cảnh mà vòng đời của nó cần). Đợt này thêm
+  `falling.trail` và `falling.shimmer` vào cảnh Approach; cả hai đã có assertion riêng từ trước, nên đây là việc **đóng
+  trang** chứ không phải tìm ra điều mới. Ba chỗ trong chính cái trang phải sửa để chứa được chúng: family không có
+  công tắc boolean thì bị tắt bằng **choice mà renderer coi là tắt** (`FallingTrail` None); boolean không phải công tắc
+  của family chỉ được ghim **bật** khi family không vẽ được nếu thiếu nó (hôm nay đúng một trường hợp, `ShowImpactRings`),
+  còn lại ghim **tắt** — nếu ghim `FallingGhost` bật thì khung sẽ có cả bóng nốt tương lai; và hàng "đầu xa" **không
+  được trùng khung tham chiếu**, nên `falling.trail` đo `FallingTrailLength` 100 (so với 55) thay vì
+  `FallingTrailIntensity` — vốn đã ở 100 trong look xuất phát. Cổng thứ năm bắt đúng trường hợp đó: `far` ↔ `rest` phải
+  ≥ 12 px. Số của đợt này: `falling.trail` **1 300 / 2 267 px** (hộp bao 32 × 61 → 40 × 106, cùng bề rộng, dài gần gấp
+  đôi), `falling.shimmer` **659 / 973 px** — cột mỏng nhất của cảnh Approach, vì sheen là một dải sáng nằm **bên trong**
+  thân nốt chứ không phải hình mới; shimmer có thêm counter riêng (`ArNoteShimmerQuadCount`, chỉ để chẩn đoán, không
+  đổi pixel nào). Mười lăm family của các đợt trước không đổi một pixel. Đây là **trang ảnh**, không phải lật trạng
+  thái: contract typed vẫn để cả 17 family là `Unverified`.
 
 ## 2.2.0 — 2026-10-18
 

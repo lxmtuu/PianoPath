@@ -32,20 +32,21 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 - Particle pacing is decoupled from the frame rate: one preset now moves the same at 60 Hz, 144 Hz and in an exported video, instead of speeding up with the refresh rate.
 
 ### Verification
-- **All fifteen AR effect families now have a review sheet, each shot in the scene its own lifecycle needs**
-  (`--verify-ar-effect-only`: four sheets, `held` / `approach` / `impact` / `release`, 45 frames). **Release** is a new
-  scene: a key is held for 0.2 s and then **lifted**, because a release effect is spawned only by the note-off event. A
-  family with no boolean switch (`impact.morph`, `release.fx`) is switched off by **the choice the renderer itself
-  treats as off** (`None`, `Fade`), and its reference row is shot at the first value its own list declares — the
-  manifest records `onValue`/`offValue`/`pinned`, so the page cannot be read as the default look. The review now has a
-  **fourth gate**: the far row must differ from the switched-off row by ≥ 12 px; it caught a genuinely broken column on
-  its first run (`impact.flash` was shot at 0.30 s while a styled flash lives 0.26 s), so the Impact scene dropped to
-  0.20 s and that scene's three families were **re-measured**: `impact.burst` **904 / 1 714 px**, `particles.sparks`
-  **904 / 1 775 px**, `impact.wave` **566 / 556 px**. This round's numbers: `atmosphere.beams` **4 708 px**,
-  `impact.flash` **82 127 px** (13 551 px against the switched-off frame), `impact.morph` **14 px**, `release.fx`
-  **24 px** — the last two are the thinnest columns on the page and are recorded as such, with no sensitivity claim
-  drawn from them. The seven families from earlier rounds did not change by a single pixel. This is a **sheet of
-  pictures**, not a status flip: the typed contract still lists all fifteen families as `Unverified`.
+- **All seventeen AR effect families now have a review sheet** (`--verify-ar-effect-only`: four sheets, `held` /
+  `approach` / `impact` / `release`, **51 frames**, each family shot in the scene its own lifecycle needs). This round
+  adds `falling.trail` and `falling.shimmer` to the Approach scene; both were already asserted on their own, so this
+  closes the page rather than finding something new. Three things in the page itself had to be fixed to hold them:
+  a family with no boolean switch is switched off by **the choice the renderer treats as off** (`FallingTrail` None);
+  a boolean that is not the family's switch is pinned **on** only when the family cannot be drawn without it (today
+  exactly one, `ShowImpactRings`) and **off** otherwise — pinning `FallingGhost` on would have put future-note echoes
+  in the frame; and a far row **may not repeat the reference frame**, so `falling.trail` measures
+  `FallingTrailLength` 100 (against 55) instead of `FallingTrailIntensity`, which the starting look already holds at
+  100. A fifth gate catches exactly that: `far` against `rest` must move ≥ 12 px. This round's numbers:
+  `falling.trail` **1 300 / 2 267 px** (box 32 × 61 → 40 × 106 — same width, nearly twice as long), `falling.shimmer`
+  **659 / 973 px**, the thinnest column of the Approach scene, because its sheen is a band **inside** the note body
+  rather than a new shape; the shimmer also gains a counter of its own (`ArNoteShimmerQuadCount`, diagnostics only, no
+  pixel changes). The fifteen families from earlier rounds did not change by a single pixel. This is a **sheet of
+  pictures**, not a status flip: the typed contract still lists all seventeen families as `Unverified`.
 
 ## 2.2.0 — 2026-10-18
 
