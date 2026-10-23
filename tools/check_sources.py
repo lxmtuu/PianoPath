@@ -2077,7 +2077,7 @@ def scan_ar_effect_family_review():
         errors.append(f"Diagnostics/VerificationSuite.cs no longer pins the {expected_cells} AR effect-family "
                       f"cells ({len(driven)} families x 3 rows); the page would pass with columns silently missing")
 
-    if "AR hold-family review (N17)" not in workflow or "--verify-ar-effect-only" not in workflow:
+    if "AR effect-family review (N17)" not in workflow or "--verify-ar-effect-only" not in workflow:
         errors.append(".github/workflows/build.yml no longer runs --verify-ar-effect-only, so a crash in the "
                       "review takes the whole suite down instead of naming itself")
     if "docs/evidence/ar-effect-sheets" not in workflow:

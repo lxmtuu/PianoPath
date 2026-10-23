@@ -1,6 +1,6 @@
 # Family hiệu ứng trong lớp AR: mười bảy family `Unverified` (N17)
 
-> **Trạng thái:** đợt 1 + đợt 2, 2026-10-23 · **Mã:** `Diagnostics/ArEffectFamilyReview.cs` · **Chốt chặn:**
+> **Trạng thái:** đợt 1 + đợt 2 + đợt 3, 2026-10-23 · **Mã:** `Diagnostics/ArEffectFamilyReview.cs` · **Chốt chặn:**
 > `tools/check_sources.py` (`scan_ar_effect_family_review`) · **Ảnh:** `docs/evidence/ar-effect-sheets/{held,approach,impact}.png`
 
 ## 1. Câu hỏi, và câu trả lời ngắn
@@ -221,12 +221,58 @@ là ảnh gốc 1280 × 720 **không hạ mẫu**; cột 1 là family ở giá t
 **tới được** lớp phủ AR và **đổi ảnh** ở cả hai đầu thiết lập; việc lật trạng thái là một bước riêng, cần ảnh
 chứng minh **và** người duyệt.
 
-## 7. Việc tiếp theo
+## 7. Đợt 3: ba family `particles.*`
+
+### 7.1 "Tách" nghĩa là gì ở đây
+
+Ba family này không thiếu ảnh vì khó chụp, mà vì **một con số không quy được cho cái nào**. Suite hôm nay đặt cả ba
+cùng lúc rồi đòi `effectPixels > 100`; nếu phép đo đó đổi thì không biết family nào đổi. Cách tách đã dùng cho nhóm
+hold ở đợt 1 — mỗi cột chỉ đổi **một** thiết lập so với khung của chính nó — vẫn đúng ở đây, nhưng có hai chỗ mới
+phải xử lý mà hai đợt trước không gặp.
+
+### 7.2 Family khai nhiều hơn hai thiết lập
+
+Đợt 1 và đợt 2 chỉ chụp những family khai **đúng hai** thiết lập, và trang **từ chối chạy** nếu một family khai
+nhiều hơn — với lý do "cái thứ ba sẽ rơi khỏi trang mà không ai thấy". Ba family `particles.*` khai **sáu, năm và
+ba** thiết lập, nên lý do đó phải được trả lời chứ không phải nới ra:
+
+| Family | Thiết lập contract khai | Cột chụp | Không chụp ở đợt này |
+|---|---|---|---|
+| `particles.sparks` | `ShowEmbers`, `ParticleAmount`, `ParticleSpeed`, `ParticleSize`, `ParticleGlow`, `ParticleLife` | `ShowEmbers` + `ParticleAmount` 120 | 4 thiết lập còn lại |
+| `particles.wisps` | `ShowWisps`, `WispAmount`, `WispSpeed`, `WispTurbulence`, `WispGlow` | `ShowWisps` + `WispAmount` 150 | 3 thiết lập còn lại |
+| `particles.flames` | `ShowFlame`, `FlameIntensity`, `FlameHeight` | `ShowFlame` + `FlameIntensity` 100 | `FlameHeight` |
+
+Quy tắc chọn thiết lập thứ hai là **máy đọc từ contract**, không phải người chọn: công tắc là tham số boolean đầu
+tiên, đầu xa là **phần trăm đầu tiên sau công tắc** theo đúng thứ tự contract khai báo, lấy `Maximum` mà contract
+ghi. Mọi thiết lập còn lại được ghi vào manifest dưới khoá `unshot` và hiện thành một cột **"Không chụp ở đợt
+này"** ngay trên trang HTML. Như vậy cột này không thể bị đọc thành "cả family đã được phủ": nó nói rõ nó phủ cái
+gì, và phần còn lại là việc của một đợt sau.
+
+### 7.3 Hai family nằm sau cùng một công tắc
+
+`impact.burst` và `particles.sparks` cùng khai `ShowEmbers` làm công tắc, cùng cảnh *impact*. Đó không phải lỗi của
+trang mà là cấu trúc của contract: **hình dạng cú nổ** (`ImpactBurst`: Embers/Splash/Fireworks/Confetti/Dust) và
+**mật độ hạt** (`ParticleAmount`) là hai thiết lập khác nhau nằm sau cùng một công tắc. Hệ quả đo được, và phải nói
+trước: hai cột này **trùng nhau từng pixel ở hai trong ba khung** (khung `rest` và khung `off`), chỉ khác ở khung
+đầu xa. Nếu tấm ảnh trình bày hai cột đó như hai phép đo độc lập thì nó đang nói quá — nên trang ghi đúng như vậy.
+
+### 7.4 Cảnh
+
+`particles.wisps` và `particles.flames` là family **giữ phím** (`NoteHeld`, `WhileNoteHeld`) nên chụp trong cảnh
+*Held* đã có: hai phím C3 và C5 đang giữ. Tờ `held.png` vì thế thành **7 hàng**. `particles.sparks` là family
+**impact** (`NoteOn`, `FixedDuration`, neo `HitPoint`) nên chụp trong cảnh *Impact* đã có, cạnh `impact.burst`;
+tờ `impact.png` thành **2 hàng**. Tổng: **10 family × 3 khung = 30 ảnh**. Tờ `approach.png` không đổi.
+
+### 7.5 Kết quả
+
+<!-- N17C:RESULTS -->
+
+## 8. Việc tiếp theo
 
 | Đợt | Nội dung | Vì sao đứng ở thứ tự này |
 |---|---|---|
 | ~~2~~ | ~~`falling.pulse` + `impact.burst`~~ | **xong** (§6) |
-| 3 | ba family `particles.*` | phải tách khỏi nhau trước khi đo: hôm nay chúng chỉ có một con số chung |
+| ~~3~~ | ~~ba family `particles.*`~~ | **mã + guard xong**; §7.2 ghi rõ phần chưa phủ |
 | 4 | `release.fx`, `atmosphere.beams`, `impact.wave/flash/morph` | đã có phép đo riêng; đợt này chỉ là đưa ảnh vào repo |
 
 Không đợt nào trong bốn đợt trên được phép lật binding. Muốn lật thì phải phủ **giá trị và vòng đời**, không phải

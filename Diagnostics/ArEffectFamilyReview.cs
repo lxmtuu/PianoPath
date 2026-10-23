@@ -101,8 +101,11 @@ internal static class ArEffectFamilyReview
         ("hold.vibration", Stage.Held),
         ("hold.color-cycle", Stage.Held),
         ("hold.arc", Stage.Held),
+        ("particles.wisps", Stage.Held),
+        ("particles.flames", Stage.Held),
         ("falling.pulse", Stage.Approach),
         ("impact.burst", Stage.Impact),
+        ("particles.sparks", Stage.Impact),
     ];
 
     /// <summary>One setting the page drives: its contract name, its kind, and the value the row shoots.</summary>
@@ -113,7 +116,8 @@ internal static class ArEffectFamilyReview
     }
 
     /// <summary>One family as the page draws it: where it is shot, its switch, and the setting the far row pushes.</summary>
-    private sealed record Family(string Id, Stage Stage, DrivenSetting On, DrivenSetting Far)
+    private sealed record Family(string Id, Stage Stage, DrivenSetting On, DrivenSetting Far,
+        IReadOnlyList<string> Unshot)
     {
         internal string Sheet => $"ar-effect/sheet-{this.Stage.ToString().ToLowerInvariant()}.png";
     }
@@ -260,16 +264,23 @@ internal static class ArEffectFamilyReview
             var (id, stage) = Driven[index];
             var contract = all.SingleOrDefault(candidate => candidate.Id == id)
                 ?? throw new InvalidDataException($"The AR effect review drives '{id}', which the contract does not declare.");
-            if (contract.Parameters.Count != 2)
-                throw new InvalidDataException(
-                    $"{id} declares {contract.Parameters.Count} settings; the review drives one switch and one second " +
-                    "setting, so a third would fall off the page without anyone noticing.");
             var toggle = contract.Parameters[0].Kind == EffectParameterKind.Boolean
                 ? contract.Parameters[0]
                 : contract.Parameters[1].Kind == EffectParameterKind.Boolean
                     ? contract.Parameters[1]
                     : throw new InvalidDataException($"{id} declares no boolean switch for the review to turn off.");
-            var second = contract.Parameters.Single(parameter => parameter.SettingName != toggle.SettingName);
+            // A family may declare more than two settings - the particles pilot declares six, five and three - and
+            // one column still holds exactly one switch and one second setting. The second setting is the first
+            // percentage the contract lists after the switch, never a hand-picked one, and every setting left over
+            // is written into the manifest as unshot. A page that quietly shot one of six settings and called the
+            // column the whole family would be claiming coverage it does not have, which is the one thing this
+            // review exists to prevent; saying which settings it did not shoot costs nothing.
+            var others = contract.Parameters.Where(parameter => parameter.SettingName != toggle.SettingName).ToArray();
+            var second = others.FirstOrDefault(parameter => parameter.Kind == EffectParameterKind.Percentage)
+                ?? throw new InvalidDataException(
+                    $"{id} declares no percentage after its switch, so the far row has no declared maximum to shoot.");
+            var unshot = others.Where(parameter => parameter.SettingName != second.SettingName)
+                .Select(parameter => parameter.SettingName).ToArray();
             var far = second.Kind switch
             {
                 EffectParameterKind.Percentage => new DrivenSetting(second.SettingName, second.Kind,
@@ -277,7 +288,7 @@ internal static class ArEffectFamilyReview
                 EffectParameterKind.Choice => new DrivenSetting(second.SettingName, second.Kind, 0, FarChoice(second.SettingName)),
                 _ => throw new InvalidDataException($"{id}: the review cannot drive a {second.Kind} setting."),
             };
-            built[index] = new Family(id, stage, DrivenSetting.Switch(toggle.SettingName, true), far);
+            built[index] = new Family(id, stage, DrivenSetting.Switch(toggle.SettingName, true), far, unshot);
         }
         return built;
     }
@@ -449,6 +460,9 @@ internal static class ArEffectFamilyReview
         "hold.arc" => renderer.ArHoldArcCount,
         "falling.pulse" => renderer.ArShapeCount,
         "impact.burst" => renderer.ArParticleFxCount,
+        "particles.wisps" => renderer.ArParticleFxCount,
+        "particles.flames" => renderer.ArParticleFxCount,
+        "particles.sparks" => renderer.ArParticleFxCount,
         _ => throw new InvalidDataException(
             $"The AR effect review has no witness counter for '{family}'; teach Probe() about it before the page " +
             "claims to have shot it.")
@@ -474,6 +488,19 @@ internal static class ArEffectFamilyReview
             case "FallingPulse": settings.FallingPulse = setting.Number >= 0.5; break;
             case "FallingPulseRate": settings.FallingPulseRate = setting.Number; break;
             case "ShowEmbers": settings.ShowEmbers = setting.Number >= 0.5; break;
+            case "ParticleAmount": settings.ParticleAmount = setting.Number; break;
+            case "ParticleSpeed": settings.ParticleSpeed = setting.Number; break;
+            case "ParticleSize": settings.ParticleSize = setting.Number; break;
+            case "ParticleGlow": settings.ParticleGlow = setting.Number; break;
+            case "ParticleLife": settings.ParticleLife = setting.Number; break;
+            case "ShowWisps": settings.ShowWisps = setting.Number >= 0.5; break;
+            case "WispAmount": settings.WispAmount = setting.Number; break;
+            case "WispSpeed": settings.WispSpeed = setting.Number; break;
+            case "WispTurbulence": settings.WispTurbulence = setting.Number; break;
+            case "WispGlow": settings.WispGlow = setting.Number; break;
+            case "ShowFlame": settings.ShowFlame = setting.Number >= 0.5; break;
+            case "FlameIntensity": settings.FlameIntensity = setting.Number; break;
+            case "FlameHeight": settings.FlameHeight = setting.Number; break;
             case "ImpactBurst": settings.ImpactBurst = setting.Choice; break;
             default:
                 throw new InvalidDataException(
@@ -496,6 +523,19 @@ internal static class ArEffectFamilyReview
         "FallingPulse" => settings.FallingPulse ? 1 : 0,
         "FallingPulseRate" => settings.FallingPulseRate,
         "ShowEmbers" => settings.ShowEmbers ? 1 : 0,
+        "ParticleAmount" => settings.ParticleAmount,
+        "ParticleSpeed" => settings.ParticleSpeed,
+        "ParticleSize" => settings.ParticleSize,
+        "ParticleGlow" => settings.ParticleGlow,
+        "ParticleLife" => settings.ParticleLife,
+        "ShowWisps" => settings.ShowWisps ? 1 : 0,
+        "WispAmount" => settings.WispAmount,
+        "WispSpeed" => settings.WispSpeed,
+        "WispTurbulence" => settings.WispTurbulence,
+        "WispGlow" => settings.WispGlow,
+        "ShowFlame" => settings.ShowFlame ? 1 : 0,
+        "FlameIntensity" => settings.FlameIntensity,
+        "FlameHeight" => settings.FlameHeight,
         _ => throw new InvalidDataException($"The AR effect review cannot read '{parameter}'.")
     };
 
@@ -550,6 +590,7 @@ internal static class ArEffectFamilyReview
             {
                 family.Id, scene = family.Stage.ToString(), family.On.Name, far = family.Far.Name,
                 farValue = family.Far.Kind == EffectParameterKind.Choice ? family.Far.Choice : family.Far.Label,
+                unshot = family.Unshot,
             }),
             floorChangedPixels = MinimumChangedPixels,
             floorOverlayPixels = MinimumOverlayPixels,
@@ -582,10 +623,12 @@ internal static class ArEffectFamilyReview
             .Append($"<p>Cùng pose <code>{Encode(PoseId)}</code>, cùng camera, cùng seed; mỗi cột bật <strong>một</strong> family ")
             .Append("và mỗi khung chỉ đổi một thiết lập so với khung \"on\" của chính cột đó. Số là pixel đổi giữa hai khung. ")
             .Append($"Máy đo: {Encode(adapter)}.</p>")
-            .Append("<table><tr><th>Family</th><th>Cảnh</th><th>Công tắc</th><th>Thiết lập xa</th></tr>");
+            .Append("<table><tr><th>Family</th><th>Cảnh</th><th>Công tắc</th><th>Thiết lập xa</th>")
+            .Append("<th>Không chụp ở đợt này</th></tr>");
         foreach (var family in families)
             body.Append($"<tr><td>{Encode(family.Id)}</td><td>{Encode(family.Stage.ToString())}</td>")
-                .Append($"<td>{Encode(family.On.Name)}</td><td>{Encode(family.Far.Name)} = {Encode(family.Far.Label)}</td></tr>");
+                .Append($"<td>{Encode(family.On.Name)}</td><td>{Encode(family.Far.Name)} = {Encode(family.Far.Label)}</td>")
+                .Append($"<td>{Encode(family.Unshot.Count == 0 ? "—" : string.Join(", ", family.Unshot))}</td></tr>");
         body.Append("</table>");
         foreach (var report in sheets)
         {

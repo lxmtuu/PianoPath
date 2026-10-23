@@ -393,7 +393,7 @@ jobs:
       # a crash in the new review should name itself in ten minutes instead of taking the whole suite down
       # forty minutes in and leaving the failure to be guessed from a truncated log. It writes the same
       # folder the suite writes later, byte for byte, so the two runs do not disagree.
-      - name: AR hold-family review (N17)
+      - name: AR effect-family review (N17)
         shell: pwsh
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'keyflow-ar-effect.log'
@@ -403,9 +403,9 @@ jobs:
           if (Test-Path $log) {
             Get-Content $log | ForEach-Object {
               Write-Output $_
-              if ($_ -like 'FAIL*') { "::error title=N17 AR hold families::$_" } elseif ($_ -like 'PASS AR hold-family review*') { "::notice title=N17 AR hold families::$_" }
+              if ($_ -like 'FAIL*') { "::error title=N17 AR effect families::$_" } elseif ($_ -like 'PASS AR hold-family review*') { "::notice title=N17 AR effect families::$_" }
             }
-          } else { "::error title=N17 AR hold families::No verification log was written" }
+          } else { "::error title=N17 AR effect families::No verification log was written" }
           exit $proc.ExitCode
 
       # Fail fast on functional/native/WPF regressions before expensive art-review recaptures.
