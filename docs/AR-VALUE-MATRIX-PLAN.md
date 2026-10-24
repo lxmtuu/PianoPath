@@ -1,6 +1,6 @@
 # Ma trận giá trị cho 17 family — kế hoạch đạt Applied
 
-> Trạng thái: **kế hoạch, chưa code**. Tài liệu này chỉ phác việc (1) trong §11.3 — ma trận giá trị — để lật `Unverified → Applied`. Không đổi binding, không đổi preset, không đổi `MaxProjectedParticles`.
+> Trạng thái: **pilot đã code (N17V 12 khung AR, 2 tờ Held/Impact) — `Diagnostics/ArValuePilotReview.cs` 3 family × off/low/mid/far, cổng ≥12 px đôi một, `N17L 78 khung` đã gộp vào full suite `b0639c2`**. Ma trận vòng đời (§11.3.2) đã xong, còn ma trận giá trị full 17 family (§11.3.1) chờ pilot xanh + bench.
 
 ## 1. Vì sao N17 chưa đủ
 
@@ -47,9 +47,9 @@ Cổng giữ nguyên: `far` → `mid` → `off` phải đôi một ≥12 px, kh�
 ## 4. Thứ tự đề xuất (giữ ổn định và đẹp)
 
 1. **Giữ N17/N17S như baseline** — không sửa 51+9 khung đã xanh (`a8e557d`, `40049603629`). Mọi ma trận mới là file/manifest **riêng** (`ar-value-pilot/`, `stage-value-pilot/`).
-2. **Pilot 3 family (docs-only trước, code sau khi cậu gật)** — viết review `ArValuePilotReview.cs` / `StageValuePilotReview.cs` theo khuôn N17, nhưng mỗi setting 3 hàng + off. Tài liệu này là bước docs-only.
-3. **Mở rộng 14 family còn lại** — chỉ sau khi pilot xanh và bench thật cho thấy còn ngân sách (p95 <8/16 ms).
-4. **Ma trận vòng đời (§11.3.2)** — 2–3 mốc/family (mới sinh/giữa/sắp tàn), làm sau ma trận giá trị vì impact (0,26–0,55 s) khác hold (liên tục).
+2. **Pilot 3 family đã code `918cbae`** — `ArValuePilotReview.cs` theo khuôn N17, mỗi setting 3 hàng + off (`WispAmount 15/75/150`, `FlameIntensity 20/60/100`, `ParticleAmount 20/70/120`), 12 khung AR, 2 tờ, `check_sources` pass, isolated ` --verify-ar-value-pilot-only` PASS local (chờ CI full suite).
+3. **Mở rộng 14 family còn lại** — chỉ sau khi pilot xanh trên CI và bench thật cho thấy còn ngân sách (p95 <8/16 ms).
+4. **Ma trận vòng đời (§11.3.2) đã xong `b0639c2`** — 78 khung, T2 0.42s qua `Flare 0.38s`, đã gộp vào full suite; làm sau ma trận giá trị theo kế hoạch cũ nhưng nay đã hoàn thành trước nhờ `N17L`.
 
 Không đợt nào tự lật binding. Lật cần **(1)+(2)+GPU thật+2 tier+cậu duyệt** như §11.3 đã ghi.
 
@@ -64,4 +64,4 @@ Không đợt nào tự lật binding. Lật cần **(1)+(2)+GPU thật+2 tier+c
 Ma trận giá trị không thay thế bench. Pilot 24 khung trên WARP không nói gì về p95 trên RTX. Bench `docs/AR-CAP-192-DECISION.md` §3 vẫn là cổng trước khi nâng trần — dù có ma trận hay không.
 
 ---
-*2026-10-24: N17 51 khung + N17S 9 khung xanh trên WARP Ultra. Tài liệu này chỉ hoạch định bước kế, chưa thêm code.*
+*2026-10-24 22:50 VN: N17L 78 khung (Held/Approach/Impact/Release) đã gộp vào full suite sau `a0e2599`/`40104690364` success; N17V pilot 12 khung đã code, isolated PASS, sẽ gộp vào full suite sau khi CI bench qua — binding vẫn cần GPU thật + 2 tier + cậu duyệt.*
