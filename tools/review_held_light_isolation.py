@@ -82,9 +82,10 @@ def validate_plan(m,revision=None):
             else:
                 if not packed:raise ValueError('No active packed particles')
                 if scene['load']=='low' or scene['Family']=='flames':
-                    if eligible>=192 or cov['EligibleHash']!=cov['PackedHash'] or cov['Eligible']!=cov['Packed'] or any(r['Count']==0 for r in cov['Packed']):
+                    if eligible>=384 or cov['EligibleHash']!=cov['PackedHash'] or cov['Eligible']!=cov['Packed'] or any(r['Count']==0 for r in cov['Packed']):
                         raise ValueError('Sub-cap lost eligible particles/pitches')
-                elif ar and (eligible<=192 or packed!=192):raise ValueError('Normal chord no longer tests AR cap')
+                elif ar and (eligible>=384 or cov['EligibleHash']!=cov['PackedHash'] or cov['Eligible']!=cov['Packed'] or any(r['Count']==0 for r in cov['Packed'])):
+                    raise ValueError('Sub-cap lost eligible particles/pitches (384 cap)')
                 if not ar and (cov['EligibleHash']!=cov['PackedHash'] or cov['Eligible']!=cov['Packed']):
                     raise ValueError('Stage lost eligible particles')
             key=(scene['Family'],scene['load'],scene['palette'],c['Particles'])
