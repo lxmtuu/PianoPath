@@ -1,6 +1,6 @@
 # Ma trận vòng đời cho 17 family — kế hoạch đạt Applied
 
-> Trạng thái: **full matrix đã code (N17L 78 khung, 9 tờ) — pilot 6 khung xanh, local `a0e2599` PASS 78 khung 2026-10-24 (Held 0.40/1.00 s, Approach 0.25/0.50 s, Impact 0.05/0.20/0.42 s, Release 0.40/0.60 s) trên WARP `ar-oblique`; CI `40104690364` đang build**. Defer `VerifyArLifecyclePilot` + `VerifyArLifecycle` khỏi full suite do tràn ngăn xếp trước `7a43e49`, chạy riêng `--verify-ar-lifecycle-pilot-only` / `--verify-ar-lifecycle-only`.
+> Trạng thái: **full matrix đã gộp vào full suite từ `d2936fa` — pilot 6 khung xanh, N17L 78 khung PASS cả local `a0e2599` lẫn CI `40104690364` (43m, p95 bench qua) với T2 0.42s/25f qua `Flare 0.38s`/`StyledFlash 0.26s`**. Trước `7a43e49` từng defer `VerifyArLifecycle` do tràn `Shot.Paint` tự đệ quy; từ `7a43e49` hết tràn, từ `d2936fa` hết `FAIL T2`, `CI success` nên đã gộp — vẫn giữ isolated `--verify-ar-lifecycle-only` cho chạy nhanh local.
 
 ## 1. Vì sao N17 chưa đủ
 
@@ -33,7 +33,7 @@ Vì vậy làm **pilot 1 family Impact** (`impact.flash` — từng có bug 0 px
 
 > **2026-10-24 2cb8197**: pilot `Diagnostics/ArLifecyclePilotReview.cs` đã code — 3 mốc T0 0.05s/ T1 0.20s/ T2 0.35s × off/Plasma = **6 khung** `ar-lifecycle-pilot/`, WARP `ar-oblique`, cổng `≥12 px` (T0/T1) + `<12 px` (T2 hết hạn). `check_sources` + `test` + `build` (verification suite) xanh sau khi defer pilot khỏi full suite (tràn ngăn xếp khi chạy 51+9+9+12+6 cùng lúc). Chạy riêng `dotnet run -- --verify-ar-lifecycle-pilot-only --verify-review-out=...` để lấy `manifest.json`/`index.html`; chưa bench RTX 4050 (cần p95 < 16 ms để duyệt full ma trận).
 
-> **2026-10-24 full**: `Diagnostics/ArLifecycleReview.cs` đã code — **78 khung** `ar-lifecycle/` (9 tờ, mỗi tờ một mốc): Held 8×2 (0.40 s/1.00 s), Approach 3×2 (0.25 s/0.50 s), Impact 5×3 (0.05 s/0.20 s/0.42 s), Release 1×2 (0.40 s/0.60 s), mỗi mốc `off↔on` cùng pose/camera/seed `ar-oblique` WARP, cổng `≥12 px` (T0/T1) và `<12 px` cho `impact.flash` T2 hết hạn (qua `Flare 0,38 s` + `StyledFlash 0,26 s`, sửa từ 0,35 s vì `Flash` còn `22510 px` ở 0,35 s — xem `EffectBudget.cs`). Local `a0e2599` PASS `78 frames` + `manifest.json`/`index.html`; CI `40104690364` đang bench, gate gộp vào full suite là `p95 <16 ms`.
+> **2026-10-24 full**: `Diagnostics/ArLifecycleReview.cs` đã code — **78 khung** `ar-lifecycle/` (9 tờ, mỗi tờ một mốc): Held 8×2 (0.40 s/1.00 s), Approach 3×2 (0.25 s/0.50 s), Impact 5×3 (0.05 s/0.20 s/0.42 s), Release 1×2 (0.40 s/0.60 s), mỗi mốc `off↔on` cùng pose/camera/seed `ar-oblique` WARP, cổng `≥12 px` (T0/T1) và `<12 px` cho `impact.flash` T2 hết hạn (qua `Flare 0,38 s` + `StyledFlash 0,26 s`, sửa từ 0,35 s vì `Flash` còn `22510 px` ở 0,35 s — xem `EffectBudget.cs`). Local `a0e2599` PASS `78 frames` + `manifest.json`/`index.html`; CI `40104690364` **success 43m** nên đã gộp vào full suite (`VerificationSuite.cs` gọi `VerifyArLifecycle` trong `reviewOutputOption != null`), gate `p95 <16 ms` đã qua.
 
 ## 3. Pilot `impact.flash` — con số để cậu hình dung
 
@@ -55,4 +55,4 @@ Pilot 1 family × 3 mốc × 3 hàng = **9 khung**, 1 tờ. Chạy xong là có 
 Không đợt nào tự lật binding. Lật cần **ma trận giá trị + vòng đời + GPU thật + 2 tier + cậu duyệt** như §11.3.4.
 
 ---
-*2026-10-24 21:51 VN: N17/N17S xanh; pilot N17L 6 khung xanh; N17L full 78 khung local PASS `a0e2599` (`78 frames`, `manifest.json` đủ, `Shot` bỏ `Painted` hết tràn, T2 0,42 s qua Flare/StyledFlash), CI `40104690364` đang bench — bước kế gộp vào full suite nếu `p95 <16 ms` rồi mới đổi binding.*
+*2026-10-24 21:51 VN → 22:49 VN: N17/N17S xanh; pilot 6 khung xanh; N17L full 78 khung local PASS `a0e2599` + CI `40104690364` success (static/test/build success, 43m) sau khi sửa `Shot` hết tràn + T2 0,42 s qua Flare/StyledFlash; đã gộp vào full suite từ `d2936fa` — isolated `--verify-ar-lifecycle-only` vẫn giữ cho chạy nhanh local, binding vẫn cần ma trận giá trị + GPU thật + 2 tier + cậu duyệt mới đổi.*
