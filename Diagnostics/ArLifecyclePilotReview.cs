@@ -33,9 +33,15 @@ internal static class ArLifecyclePilotReview
         new("T2 0.35s", 21, 21.0/60), // flash StyledFlash 0.26s already dead, only flare 0.38s remains
     ];
 
-    private sealed class Shot(string file, string pixelSha256, int lit, int painted, int quads, int demand, byte[]? pixels)
+    private sealed class Shot
     {
-        public string File => file; public string PixelSha256 => pixelSha256; public int Lit => lit; public int Painted => painted; public int Quads => quads; public int Demand => demand; public byte[]? Pixels { get; set; } = pixels;
+        internal required string File { get; init; }
+        internal required string PixelSha256 { get; init; }
+        internal required int Lit { get; init; }
+        internal required int Painted { get; init; }
+        internal required int Quads { get; init; }
+        internal required int Demand { get; init; }
+        internal byte[]? Pixels { get; set; }
     }
     private sealed record Cell(string Family, string Milestone, string Parameter, string Row, double Seconds, string Choice,
         string File, string PixelSha256, int ArChanged, int ArLit, int ArPainted, int Quads, int Demand, string Reading, string Note);
@@ -125,7 +131,7 @@ internal static class ArLifecyclePilotReview
         var quads = renderer.ArFlashCount;
         var relative = Path.Combine("ar-lifecycle-pilot", $"impact.flash-{m.Frames}f-{label}.png");
         var sha = ReviewPng.Write(Path.Combine(root, relative), pixels, Width, Height, $"impact.flash/{m.Label}/{label} pilot AR");
-        return new Shot(relative.Replace('\\','/'), sha, OptionMatrixPlan.NonBlackPixels(pixels), OptionMatrixPlan.ChangedPixels(pixels, camera), quads, demand, pixels);
+        return new Shot { File = relative.Replace('\\','/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels), Painted = OptionMatrixPlan.ChangedPixels(pixels, camera), Quads = quads, Demand = demand, Pixels = pixels };
     }
 
     private static (byte[] Pixels, int Demand) RenderAr(GpuStageRenderer renderer, HeldParticleControlPlan.View pose, byte[] camera, PianoVisualSettings settings, Milestone m)

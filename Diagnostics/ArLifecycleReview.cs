@@ -95,9 +95,15 @@ internal static class ArLifecycleReview
         internal static DrivenSetting Switch(string name, bool on) => new(name, EffectParameterKind.Boolean, on ? 1 : 0, "");
     }
     private sealed record Family(string Id, Stage Stage, DrivenSetting On, DrivenSetting Off, DrivenSetting Far, string OffLabel, IReadOnlyList<DrivenSetting> Pinned, IReadOnlyList<string> Unshot);
-    private sealed class Shot(string file, string pixelSha256, int lit, int painted, int quads, int demand, byte[]? pixels)
+    private sealed class Shot
     {
-        public string File => file; public string PixelSha256 => pixelSha256; public int Lit => lit; public int Painted => painted; public int Quads => quads; public int Demand => demand; public byte[]? Pixels { get; set; } = pixels;
+        internal required string File { get; init; }
+        internal required string PixelSha256 { get; init; }
+        internal required int Lit { get; init; }
+        internal required int Painted { get; init; }
+        internal required int Quads { get; init; }
+        internal required int Demand { get; init; }
+        internal byte[]? Pixels { get; set; }
     }
     private sealed record Cell(string Family, Stage Stage, string Milestone, string Parameter, string Row, double Seconds, string Choice, string File, string PixelSha256, int ArChanged, int ArLit, int ArPainted, int Quads, int Demand, string Reading, string Note);
     private sealed record SheetReport(string File, string Sha, int Columns, int Rows, IReadOnlyList<Cell> Cells);
@@ -295,7 +301,7 @@ internal static class ArLifecycleReview
         var quads = Probe(renderer, family.Id);
         var relative = Path.Combine("ar-lifecycle", $"{OptionMatrixPlan.Slug(family.Id)}-{m.Frames}f-{label}.png");
         var sha = ReviewPng.Write(Path.Combine(root, relative), pixels, Width, Height, $"{family.Id}/{m.Label}/{label} lifecycle AR");
-        return new Shot(relative.Replace('\\', '/'), sha, OptionMatrixPlan.NonBlackPixels(pixels), OptionMatrixPlan.ChangedPixels(pixels, camera), quads, demand, pixels);
+        return new Shot { File = relative.Replace('\\', '/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels), Painted = OptionMatrixPlan.ChangedPixels(pixels, camera), Quads = quads, Demand = demand, Pixels = pixels };
     }
 
     private static (int Frames, double Seconds) Timing(Stage stage) => stage switch
