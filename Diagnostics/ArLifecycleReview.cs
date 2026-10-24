@@ -45,7 +45,7 @@ internal static class ArLifecycleReview
         {
             new Milestone("T0 0.05s", 3, 3.0/60, 1.0/60),
             new Milestone("T1 0.20s", 12, 12.0/60, 1.0/60),
-            new Milestone("T2 0.35s", 21, 21.0/60, 1.0/60),
+            new Milestone("T2 0.42s", 25, 25.0/60, 1.0/60),
         },
         [Stage.Release] = new[]
         {
@@ -153,7 +153,7 @@ internal static class ArLifecycleReview
                         var off = CaptureAr(root, renderer, pose, camera, Settings(family, family.Off), family, milestone, "off");
                         var on = CaptureAr(root, renderer, pose, camera, Settings(family, null), family, milestone, "on");
                         var isLastMilestone = milestone == stageMilestones.Last();
-                        var isImpactT2 = stage == Stage.Impact && milestone.Label == "T2 0.35s";
+                        var isImpactT2 = stage == Stage.Impact && milestone.Label == "T2 0.42s";
 
                         // For non-expired milestones, require alive
                         if (!isImpactT2 || family.Id != "impact.flash")

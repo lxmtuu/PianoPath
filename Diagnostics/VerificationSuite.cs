@@ -7042,7 +7042,7 @@ internal static partial class VerificationSuite
     {
         var cells = ArLifecycleReview.Render(outputDirectory);
         Assert(cells == 78, "The AR lifecycle matrix must shoot 17 families at 2+3+2 milestones (off vs on) on AR: Held 8×2, Approach 3×2, Impact 5×3, Release 1×2.");
-        Results.Add($"PASS AR lifecycle matrix (N17L full): {cells} frames through the calibrated AR overlay at the leaned pose on GPU-WARP — Held 8 families ×2 milestones (0.4/1.0 s), Approach 3×2 (0.25/0.50 s), Impact 5×3 (0.05/0.20/0.35 s), Release 1×2 (0.40/0.60 s): off vs on at each milestone, same pose/camera/seed. Short-lived impact.flash expired at T2, others persist. Measured: {ArLifecycleReview.Summary}. Lifecycle coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-lifecycle")}.");
+        Results.Add($"PASS AR lifecycle matrix (N17L full): {cells} frames through the calibrated AR overlay at the leaned pose on GPU-WARP — Held 8 families ×2 milestones (0.4/1.0 s), Approach 3×2 (0.25/0.50 s), Impact 5×3 (0.05/0.20/0.42 s), Release 1×2 (0.40/0.60 s): off vs on at each milestone, same pose/camera/seed. Short-lived impact.flash expired at T2, others persist. Measured: {ArLifecycleReview.Summary}. Lifecycle coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-lifecycle")}.");
     }
 
     private static void VerifyRefraction(string outputDirectory)
