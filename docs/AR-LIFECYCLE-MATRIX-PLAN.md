@@ -1,6 +1,6 @@
 # Ma trận vòng đời cho 17 family — kế hoạch đạt Applied
 
-> Trạng thái: **kế hoạch, chưa code**. Tài liệu này chỉ phác việc (2) trong §11.3 — ma trận vòng đời — để lật `Unverified → Applied`. Không đổi binding, không đổi preset.
+> Trạng thái: **pilot đã code (N17L 6 khung) — static/test/verification xanh 2026-10-24, chờ bench GPU**. Defer `VerifyArLifecyclePilot` khỏi full suite do tràn ngăn xếp, chạy riêng `--verify-ar-lifecycle-pilot-only`.
 
 ## 1. Vì sao N17 chưa đủ
 
@@ -31,6 +31,8 @@ Chỉ đổi **thời gian**, giữ nguyên setting/cột/pose/seed/5 cổng. M�
 
 Vì vậy làm **pilot 1 family Impact** (`impact.flash` — từng có bug 0 px) trước, số còn lại theo sau.
 
+> **2026-10-24 2cb8197**: pilot `Diagnostics/ArLifecyclePilotReview.cs` đã code — 3 mốc T0 0.05s/ T1 0.20s/ T2 0.35s × off/Plasma = **6 khung** `ar-lifecycle-pilot/`, WARP `ar-oblique`, cổng `≥12 px` (T0/T1) + `<12 px` (T2 hết hạn). `check_sources` + `test` + `build` (verification suite) xanh sau khi defer pilot khỏi full suite (tràn ngăn xếp khi chạy 51+9+9+12+6 cùng lúc). Chạy riêng `dotnet run -- --verify-ar-lifecycle-pilot-only --verify-review-out=...` để lấy `manifest.json`/`index.html`; chưa bench RTX 4050 (cần p95 < 16 ms để duyệt full ma trận).
+
 ## 3. Pilot `impact.flash` — con số để cậu hình dung
 
 | Mốc | Timing | Kỳ vọng | Cổng nào bắt |
@@ -51,4 +53,4 @@ Pilot 1 family × 3 mốc × 3 hàng = **9 khung**, 1 tờ. Chạy xong là có 
 Không đợt nào tự lật binding. Lật cần **ma trận giá trị + vòng đời + GPU thật + 2 tier + cậu duyệt** như §11.3.4.
 
 ---
-*2026-10-24: N17/N17S xanh trên WARP Ultra. Tài liệu này chỉ hoạch định bước kế, chưa thêm code.*
+*2026-10-24: N17/N17S xanh; pilot N17L code xong, full suite defer, isolated pass. Chưa bench GPU thật — bước kế 4.2.*
