@@ -170,9 +170,13 @@ internal static class HeldParticleControlReview
                                 || coverage.Packed.Any(r=>r.Count==0))
                                 throw new InvalidDataException($"Sub-cap fixture lost an eligible pitch/particle: {id}");
                         }
-                        if (variant.Particles && overCamera && scene.Family=="wisps" && entry.Load=="normal"
-                            && (eligible.Count<=384 || packed.Count!=384))
-                            throw new InvalidDataException($"Normal wisp chord no longer exercises the existing AR cap: {id}");
+                        if (variant.Particles && overCamera && scene.Family=="wisps" && entry.Load=="normal")
+                        {
+                            // Cap 384: normal chord 304 < 384 is now sub-cap (was capped at 192). Keep sub-cap invariant.
+                            if (eligible.Count>=384 || coverage.PackedHash!=coverage.EligibleHash
+                                || coverage.Packed.Any(r=>r.Count==0))
+                                throw new InvalidDataException($"Sub-cap fixture lost an eligible pitch/particle (384 cap): {id}");
+                        }
                         var populationKey=$"{scene.Family}/{entry.Load}/{scene.Palette.Id}/{variant.Particles}";
                         if (populations.TryGetValue(populationKey,out var previous) && previous!=coverage.RawHash)
                             throw new InvalidDataException($"Lighting/output altered simulated population: {id}");
