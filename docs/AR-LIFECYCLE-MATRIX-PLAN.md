@@ -1,6 +1,6 @@
 # Ma trận vòng đời cho 17 family — kế hoạch đạt Applied
 
-> Trạng thái: **pilot đã code (N17L 6 khung) — static/test/verification xanh 2026-10-24, chờ bench GPU**. Defer `VerifyArLifecyclePilot` khỏi full suite do tràn ngăn xếp, chạy riêng `--verify-ar-lifecycle-pilot-only`.
+> Trạng thái: **full matrix đã code (N17L 78 khung, 9 tờ) — static pass 2026-10-24, pilot 6 khung đã xanh, chờ bench GPU**. Defer `VerifyArLifecyclePilot` + `VerifyArLifecycle` khỏi full suite do tràn ngăn xếp, chạy riêng `--verify-ar-lifecycle-pilot-only` / `--verify-ar-lifecycle-only`.
 
 ## 1. Vì sao N17 chưa đủ
 
@@ -33,6 +33,8 @@ Vì vậy làm **pilot 1 family Impact** (`impact.flash` — từng có bug 0 px
 
 > **2026-10-24 2cb8197**: pilot `Diagnostics/ArLifecyclePilotReview.cs` đã code — 3 mốc T0 0.05s/ T1 0.20s/ T2 0.35s × off/Plasma = **6 khung** `ar-lifecycle-pilot/`, WARP `ar-oblique`, cổng `≥12 px` (T0/T1) + `<12 px` (T2 hết hạn). `check_sources` + `test` + `build` (verification suite) xanh sau khi defer pilot khỏi full suite (tràn ngăn xếp khi chạy 51+9+9+12+6 cùng lúc). Chạy riêng `dotnet run -- --verify-ar-lifecycle-pilot-only --verify-review-out=...` để lấy `manifest.json`/`index.html`; chưa bench RTX 4050 (cần p95 < 16 ms để duyệt full ma trận).
 
+> **2026-10-24 full**: `Diagnostics/ArLifecycleReview.cs` đã code — **78 khung** `ar-lifecycle/` (9 tờ, mỗi tờ một mốc): Held 8×2 (0.40 s/1.00 s), Approach 3×2 (0.25 s/0.50 s), Impact 5×3 (0.05 s/0.20 s/0.35 s), Release 1×2 (0.40 s/0.60 s), mỗi mốc `off↔on` cùng pose/camera/seed `ar-oblique` WARP, cổng `≥12 px` (T0/T1) và `<12 px` cho `impact.flash` T2 hết hạn. `check_sources` pass; full suite vẫn defer (tràn ngăn xếp), chạy riêng `--verify-ar-lifecycle-only` (bench GPU vẫn là gate trước khi gộp vào full suite/đổi binding).
+
 ## 3. Pilot `impact.flash` — con số để cậu hình dung
 
 | Mốc | Timing | Kỳ vọng | Cổng nào bắt |
@@ -53,4 +55,4 @@ Pilot 1 family × 3 mốc × 3 hàng = **9 khung**, 1 tờ. Chạy xong là có 
 Không đợt nào tự lật binding. Lật cần **ma trận giá trị + vòng đời + GPU thật + 2 tier + cậu duyệt** như §11.3.4.
 
 ---
-*2026-10-24: N17/N17S xanh; pilot N17L code xong, full suite defer, isolated pass. Chưa bench GPU thật — bước kế 4.2.*
+*2026-10-24: N17/N17S xanh; pilot N17L code xong, full suite defer, isolated pass. Full 78 khung đã code, static pass, isolated gate `--verify-ar-lifecycle-only`. Chưa bench GPU thật — bước kế 4.2 trước khi gộp/binding.*

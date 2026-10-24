@@ -220,6 +220,19 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
+        if (args.Contains("--verify-ar-lifecycle-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("AR lifecycle review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated lifecycle matrix review; this does not run or certify the full regression suite.");
+                VerifyArLifecycle(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
         if (args.Contains("--verify-refraction-only"))
         {
             try
@@ -7023,6 +7036,13 @@ internal static partial class VerificationSuite
         var cells = ArLifecyclePilotReview.Render(outputDirectory);
         Assert(cells == 6, "The AR lifecycle pilot must shoot impact.flash at three lifetimes (two captures per milestone, off vs on) on AR.");
         Results.Add($"PASS AR lifecycle pilot (N17L): {cells} frames through the calibrated AR overlay at the leaned pose on GPU-WARP (Impact impact.flash T0 0.05 s/T1 0.20 s/T2 0.35 s): off vs Plasma at each milestone. T0 and T1 move pixels (≥12 px), T2 shows no impact plume (expired). Measured: {ArLifecyclePilotReview.Summary}. Pilot for lifecycle coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-lifecycle-pilot")}.");
+    }
+
+    private static void VerifyArLifecycle(string outputDirectory)
+    {
+        var cells = ArLifecycleReview.Render(outputDirectory);
+        Assert(cells == 78, "The AR lifecycle matrix must shoot 17 families at 2+3+2 milestones (off vs on) on AR: Held 8×2, Approach 3×2, Impact 5×3, Release 1×2.");
+        Results.Add($"PASS AR lifecycle matrix (N17L full): {cells} frames through the calibrated AR overlay at the leaned pose on GPU-WARP — Held 8 families ×2 milestones (0.4/1.0 s), Approach 3×2 (0.25/0.50 s), Impact 5×3 (0.05/0.20/0.35 s), Release 1×2 (0.40/0.60 s): off vs on at each milestone, same pose/camera/seed. Short-lived impact.flash expired at T2, others persist. Measured: {ArLifecycleReview.Summary}. Lifecycle coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-lifecycle")}.");
     }
 
     private static void VerifyRefraction(string outputDirectory)
