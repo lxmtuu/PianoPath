@@ -88,5 +88,18 @@ Camera `ar`: 126 frames, age mean **1.67 ms**, worst **6.20 ms**. `--bench-adapt
 
 **Đọc:** cả 3 cảnh đều **dư 2.3–6.3×** so với budget (8→3.2, 16→2.4–2.9). Nâng 192→384 quad ước +0.3–0.6 ms theo N9 detail (60 nốt trail on/off), vẫn trong 8/16 ms trên RTX 4050. WARP không tính — đã có số GPU thật để quyết B.
 
+#### 3.2 Kiểm lại sau nâng 384 (2026-10-24, `716be67`)
+
+| Lệnh | Cảnh | p95 (384) | p95 (192) | Budget | Verdict |
+|------|------|-----------|-----------|--------|---------|
+| `--bench=240` | default | **3.14 ms** | 3.21 ms | 8 ms | Pass |
+| `--bench=240` | heavy | **2.74 ms** | 2.52 ms | 16 ms | Pass |
+| `--bench=240 --bench-ar` | default | **3.06 ms** | 2.93 ms | 8 ms | Pass |
+| `--bench=240 --bench-ar` | heavy | **2.48 ms** | 2.41 ms | 16 ms | Pass |
+| `--bench=240 --bench-ar` | ar | **2.74 ms** | 2.96 ms | 16 ms | Pass |
+
+Delta +0.22 ms (heavy) / -0.07 ms (default) — trong nhiễu đo. Vẫn **Pass** hết, đủ khẳng định 384 không vượt budget trên RTX 4050.
+
+
 *Cập nhật 2026-10-24: N17 51 khung + N17S 9 khung xanh trên CI `40045263020`/`40049603629`, stage sheets đã commit `3748194`. Không có cảnh nào dưới trần ở Maximum. Bench RTX 4050 Pass hết — đủ điều kiện bàn B (nâng có điều kiện).*
 
