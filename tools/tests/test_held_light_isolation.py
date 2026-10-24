@@ -20,10 +20,10 @@ def plan():
         id_=f'{family}-{load}-{palette}-{view}';shots=[]
         for name,on,tint,spill in r.VARIANTS:
             normal=family=='wisps' and load=='normal';ar=view!='live-stage'
-            eligible=76 if normal else 19;raw=80 if normal else 20;packed=48 if ar and normal else eligible
+            eligible=76 if normal else 19;raw=80 if normal else 20;packed=eligible
             cov=dict(Raw=rows(raw if on else 0),Eligible=rows(eligible if on else 0),Packed=rows(packed if on else 0),
                      RawHash='A'*64 if on else '0'*64,EligibleHash='B'*64 if on else '0'*64,
-                     PackedHash=('C' if ar and normal else 'B')*64 if on else '0'*64)
+                     PackedHash='B'*64 if on else '0'*64)
             shots.append(dict(Variant=name,Particles=on,Tint=tint,Spill=spill,File=f'frames/{id_}/{name}.png',
                               PixelSha256='A'*64,StageKeys=0 if ar else 88,StageSprites=packed*4 if on and not ar else 0,
                               ArKeys=7 if ar and tint else 0,ArLights=22 if ar and spill else 0,
