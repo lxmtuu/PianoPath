@@ -207,6 +207,19 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
+        if (args.Contains("--verify-ar-lifecycle-pilot-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("AR lifecycle pilot review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated lifecycle pilot review; this does not run or certify the full regression suite.");
+                VerifyArLifecyclePilot(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
         if (args.Contains("--verify-refraction-only"))
         {
             try
@@ -220,7 +233,7 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); VerifyStageEffect(reviewOutput!); VerifyArValuePilot(reviewOutput!); } }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); VerifyStageEffect(reviewOutput!); VerifyArValuePilot(reviewOutput!); VerifyArLifecyclePilot(reviewOutput!); } }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -7003,6 +7016,13 @@ internal static partial class VerificationSuite
         var cells = ArValuePilotReview.Render(outputDirectory);
         Assert(cells == 12, "The AR value pilot must shoot three particle families at four rows each: off, low, mid, far.");
         Results.Add($"PASS AR value pilot (N17V): {cells} setting frames through the calibrated AR overlay at the leaned pose on GPU-WARP (Held 0.4 s, Impact 0.2 s): off→low→mid→far per family (wisps 15/75/150, flames 20/60/100, sparks 20/70/120). Each step moves pixels (≥12 px), far not capped on flame but capped on wisps/sparks. Measured: {ArValuePilotReview.Summary}. Pilot for value-matrix coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-value-pilot")}.");
+    }
+
+    private static void VerifyArLifecyclePilot(string outputDirectory)
+    {
+        var cells = ArLifecyclePilotReview.Render(outputDirectory);
+        Assert(cells == 6, "The AR lifecycle pilot must shoot impact.flash at three lifetimes (two captures per milestone, off vs on) on AR.");
+        Results.Add($"PASS AR lifecycle pilot (N17L): {cells} frames through the calibrated AR overlay at the leaned pose on GPU-WARP (Impact impact.flash T0 0.05 s/T1 0.20 s/T2 0.35 s): off vs Plasma at each milestone. T0 and T1 move pixels (≥12 px), T2 shows no impact plume (expired). Measured: {ArLifecyclePilotReview.Summary}. Pilot for lifecycle coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-lifecycle-pilot")}.");
     }
 
     private static void VerifyRefraction(string outputDirectory)
