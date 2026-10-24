@@ -95,9 +95,9 @@ internal static class ArLifecycleReview
         internal static DrivenSetting Switch(string name, bool on) => new(name, EffectParameterKind.Boolean, on ? 1 : 0, "");
     }
     private sealed record Family(string Id, Stage Stage, DrivenSetting On, DrivenSetting Off, DrivenSetting Far, string OffLabel, IReadOnlyList<DrivenSetting> Pinned, IReadOnlyList<string> Unshot);
-    private sealed class Shot(string File, string PixelSha256, int Lit, int Painted, int Quads, int Demand, byte[]? Pixels)
+    private sealed class Shot(string file, string pixelSha256, int lit, int painted, int quads, int demand, byte[]? pixels)
     {
-        public string File => File; public string PixelSha256 => PixelSha256; public int Lit => Lit; public int Painted => Painted; public int Quads => Quads; public int Demand => Demand; public byte[]? Pixels { get; set; } = Pixels;
+        public string File => file; public string PixelSha256 => pixelSha256; public int Lit => lit; public int Painted => painted; public int Quads => quads; public int Demand => demand; public byte[]? Pixels { get; set; } = pixels;
     }
     private sealed record Cell(string Family, Stage Stage, string Milestone, string Parameter, string Row, double Seconds, string Choice, string File, string PixelSha256, int ArChanged, int ArLit, int ArPainted, int Quads, int Demand, string Reading, string Note);
     private sealed record SheetReport(string File, string Sha, int Columns, int Rows, IReadOnlyList<Cell> Cells);

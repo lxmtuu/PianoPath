@@ -33,9 +33,9 @@ internal static class ArLifecyclePilotReview
         new("T2 0.35s", 21, 21.0/60), // flash StyledFlash 0.26s already dead, only flare 0.38s remains
     ];
 
-    private sealed class Shot(string File, string PixelSha256, int Lit, int Painted, int Quads, int Demand, byte[]? Pixels)
+    private sealed class Shot(string file, string pixelSha256, int lit, int painted, int quads, int demand, byte[]? pixels)
     {
-        public string File => File; public string PixelSha256 => PixelSha256; public int Lit => Lit; public int Painted => Painted; public int Quads => Quads; public int Demand => Demand; public byte[]? Pixels { get; set; } = Pixels;
+        public string File => file; public string PixelSha256 => pixelSha256; public int Lit => lit; public int Painted => painted; public int Quads => quads; public int Demand => demand; public byte[]? Pixels { get; set; } = pixels;
     }
     private sealed record Cell(string Family, string Milestone, string Parameter, string Row, double Seconds, string Choice,
         string File, string PixelSha256, int ArChanged, int ArLit, int ArPainted, int Quads, int Demand, string Reading, string Note);
