@@ -67,4 +67,24 @@ Nâng trần **không** thay thế ma trận giá trị/vòng đời. Dù chọn
 Vì vậy tài liệu này dừng ở **phân tích**, không đề xuất lật.
 
 ---
-*Cập nhật 2026-10-24: N17 51 khung + N17S 9 khung xanh trên CI `40045263020`/`40049603629`, stage sheets đã commit `3748194`. Không có cảnh nào dưới trần ở Maximum.*
+### 3.1 Kết quả bench RTX 4050 Laptop GPU (2026-10-24, app 2.2.0, 1920×1080, WARP=false)
+
+> Nguồn: cậu chạy `bc3ff65..f73adb5` trên `NVIDIA GeForce RTX 4050 Laptop GPU` (shader 1.76–2.48 s, `softwareAdapter=false`). Exit 0 cả 4 lệnh.
+
+| Lệnh | Cảnh | Preset | p95 | Budget | Verdict |
+|------|------|--------|-----|--------|---------|
+| `--bench=240` | default | Concert Gold | **3.21 ms** | 8 ms | Pass |
+| `--bench=240` | heavy | Galaxy Voyage | **2.52 ms** | 16 ms | Pass |
+| `--bench=240 --bench-ar` | default | Concert Gold | **2.93 ms** | 8 ms | Pass |
+| `--bench=240 --bench-ar` | heavy | Galaxy Voyage | **2.41 ms** | 16 ms | Pass |
+| `--bench=240 --bench-ar` | ar | Concert Gold + camera 1280×720@60 | **2.96 ms** | 16 ms | Pass |
+| `--bench=240 --bench-adapter="RTX 4050"` | default | Concert Gold | **3.36 ms** | 8 ms | Pass |
+| `--bench=240 --bench-adapter="RTX 4050"` | heavy | Galaxy Voyage | **2.86 ms** | 16 ms | Pass |
+| `--bench-detail --bench=120` | default (matrix) | Concert Gold | **3.06 ms** | 8 ms | Pass |
+
+Camera `ar`: 126 frames, age mean **1.67 ms**, worst **6.20 ms**. `--bench-adapter` ghim đúng 1 adapter duy nhất, không fallback.
+
+**Đọc:** cả 3 cảnh đều **dư 2.3–6.3×** so với budget (8→3.2, 16→2.4–2.9). Nâng 192→384 quad ước +0.3–0.6 ms theo N9 detail (60 nốt trail on/off), vẫn trong 8/16 ms trên RTX 4050. WARP không tính — đã có số GPU thật để quyết B.
+
+*Cập nhật 2026-10-24: N17 51 khung + N17S 9 khung xanh trên CI `40045263020`/`40049603629`, stage sheets đã commit `3748194`. Không có cảnh nào dưới trần ở Maximum. Bench RTX 4050 Pass hết — đủ điều kiện bàn B (nâng có điều kiện).*
+
