@@ -39,9 +39,9 @@ internal static class ArValuePilotReview
             "FlameIntensity", EffectParameterKind.Percentage, [20, 60, 100], [], ""),
         new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
             "ParticleAmount", EffectParameterKind.Percentage, [20, 70, 120], [], ""),
-        new("hold.bar", Stage.Held, "ShowHoldBar", EffectParameterKind.Boolean, "off",
+        new("hold.bar", Stage.Held, "HoldBar", EffectParameterKind.Boolean, "off",
             "HoldBarIntensity", EffectParameterKind.Percentage, [20, 60, 100], [], ""),
-        new("hold.breath", Stage.Held, "ShowHoldBreath", EffectParameterKind.Boolean, "off",
+        new("hold.breath", Stage.Held, "HoldBreath", EffectParameterKind.Boolean, "off",
             "HoldBreathRate", EffectParameterKind.Percentage, [20, 60, 100], [], ""),
         new("impact.wave", Stage.Impact, "ShowImpactRings", EffectParameterKind.Boolean, "off",
             "ImpactWaveIntensity", EffectParameterKind.Percentage, [20, 75, 150], [], ""),
@@ -178,9 +178,9 @@ internal static class ArValuePilotReview
             case "FlameIntensity": settings.FlameIntensity = setting.Number; break;
             case "ShowEmbers": settings.ShowEmbers = setting.Number >= 0.5; break;
             case "ParticleAmount": settings.ParticleAmount = setting.Number; break;
-            case "ShowHoldBar": settings.ShowHoldBar = setting.Number >= 0.5; break;
+            case "HoldBar": settings.HoldBar = setting.Number >= 0.5; break;
             case "HoldBarIntensity": settings.HoldBarIntensity = setting.Number; break;
-            case "ShowHoldBreath": settings.ShowHoldBreath = setting.Number >= 0.5; break;
+            case "HoldBreath": settings.HoldBreath = setting.Number >= 0.5; break;
             case "HoldBreathRate": settings.HoldBreathRate = setting.Number; break;
             case "ShowImpactRings": settings.ShowImpactRings = setting.Number >= 0.5; break;
             case "ImpactWaveIntensity": settings.ImpactWaveIntensity = setting.Number; break;
