@@ -644,9 +644,9 @@ lại từ tờ ảnh đã commit.
 | ~~3~~ | ~~ba family `particles.*`~~ | **xong** (§7), kèm phần chưa phủ ghi trong `unshot` |
 | ~~4~~ | ~~`impact.wave/flash/morph`, `release.fx`, `atmosphere.beams`~~ | **xong** (§8) |
 | ~~5~~ | ~~`falling.trail` + `falling.shimmer`~~ | **mã + guard xong** (§9) — trang phủ **17/17 family** |
-| 6 | `particles.wisps` và `particles.sparks`: đo **dưới** trần 192 hạt/khung | wisp 52/85 px đo **cái trần** nhiều hơn đo `WispAmount` (§7.6, đo được **480 sống / 192 vẽ**); sparks 904/1 775 px cũng chạm trần (**264 / 192**), nên cột 13 đọc trần nhiều hơn đọc `ParticleAmount` 120. §7.6 chứng minh không cảnh AR hợp lệ nào hạ wisp xuống dưới trần ở `Maximum` 150 ⇒ đây là **quyết định sản phẩm** (nâng trần, ảnh hưởng hiệu năng) hoặc đo trên renderer sân khấu, **cần cậu gật** |
+| ~~6~~ | ~~`particles.wisps` và `particles.sparks`: đo **dưới** trần 192 hạt/khung~~ | **xong (N17S)** — cùng 3 cột nhưng vẽ bằng **Live Stage** (cap **24 000**, §7.6): `particles.wisps` **1 725→22 085 px** (`WispAmount` 150, 480/480), `particles.sparks` **31 540→103 323 px** (`ParticleAmount` 120, 264/264), `particles.flames` **3 770→19 329 px** làm mốc không capped; `demand == quads` nên con số là của slider, AR giữ nguyên "đo trần" (480/192, 264/192) |
 
-Không đợt nào trong bốn đợt trên được phép lật binding. Muốn lật thì phải phủ **giá trị và vòng đời**, không phải
+Không đợt nào trong **sáu** đợt trên được phép lật binding. Muốn lật thì phải phủ **giá trị và vòng đời**, không phải
 thêm một pose nữa — và đó là việc phải làm trên máy có GPU thật, không phải trong sandbox này.
 
 ## 11. Đóng sổ
