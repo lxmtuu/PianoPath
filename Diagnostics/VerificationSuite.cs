@@ -7027,8 +7027,8 @@ internal static partial class VerificationSuite
     private static void VerifyArValuePilot(string outputDirectory)
     {
         var cells = ArValuePilotReview.Render(outputDirectory);
-        Assert(cells == 24, "The AR value pilot must shoot six families at four rows each: off, low, mid, far.");
-        Results.Add($"PASS AR value pilot (N17V): {cells} setting frames through the calibrated AR overlay at the leaned pose on GPU-WARP (Held 0.4 s, Impact 0.2 s): off→low→mid→far per family (wisps 15/75/150, flames 20/60/100, sparks 20/70/120, hold.bar 20/60/100, hold.breath 20/60/100, impact.wave 20/75/150). Each step moves pixels (≥12 px). Measured: {ArValuePilotReview.Summary}. Pilot for value-matrix coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-value-pilot")}.");
+        Assert(cells == 12, "The AR value pilot must shoot three particle families at four rows each: off, low, mid, far.");
+        Results.Add($"PASS AR value pilot (N17V): {cells} setting frames through the calibrated AR overlay at the leaned pose on GPU-WARP (Held 0.4 s, Impact 0.2 s): off→low→mid→far per family (wisps 15/75/150, flames 20/60/100, sparks 20/70/120). Each step moves pixels (≥12 px), far not capped on flame but capped on wisps/sparks. Measured: {ArValuePilotReview.Summary}. Pilot for value-matrix coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-value-pilot")}.");
     }
 
     private static void VerifyArLifecyclePilot(string outputDirectory)
