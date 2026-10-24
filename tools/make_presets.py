@@ -149,7 +149,7 @@ for _name, _burst, _held, _morph, _release in (
 ):
     PRESETS.append({
         "name": _name,
-        "description": "Approved held/release materials for GPU Live Stage and AR, with balanced AR cap 192. Other burst/morph artwork stays classic; software rendering stays classic.",
+        "description": "Approved held/release materials for GPU Live Stage and AR, with balanced AR cap 384. Other burst/morph artwork stays classic; software rendering stays classic.",
         "settings": {
             **PRESETS[0]["settings"],
             "UpgradedParticleEffects": True,

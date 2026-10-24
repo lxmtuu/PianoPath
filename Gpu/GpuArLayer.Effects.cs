@@ -4,7 +4,7 @@ namespace PianoPath;
 
 internal sealed partial class GpuArLayer
 {
-    private const int MaxProjectedParticles = 192;
+    private const int MaxProjectedParticles = 384;
     // Null in production. Observes only particles that really packed; never participates in selection.
     internal Action<GpuArParticle>? ObservePackedParticleForReview { get; set; }
     private const byte ParticleStreak = 1, ParticleConfetti = 2, ParticleDust = 3,

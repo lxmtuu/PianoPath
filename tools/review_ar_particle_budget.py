@@ -15,7 +15,7 @@ SOURCES={'Gpu/ArParticleBudget.cs','Gpu/GpuLook.cs','Gpu/GpuArLayer.cs','Gpu/Gpu
  'Diagnostics/KeyParticleFixtures.cs','Diagnostics/HeldParticleControlPlan.cs','Diagnostics/KeyParticleEnsemblePlan.cs',
  'Diagnostics/KeyParticleEnsembleReview.cs','Diagnostics/ArParticleBudgetReview.cs','docs/samples/ar-keyboard-topdown.png'}
 
-def select(keys,cap=192):
+def select(keys,cap=384):
     if type(cap) is not int or cap<0 or any(type(k) is not int or not 0<=k<384 for k in keys):raise ValueError('Invalid budget candidates')
     if len(keys)<=cap:return list(range(len(keys)))
     roles=[]
@@ -37,7 +37,7 @@ def identifier(k):return f'{k[0]}-{k[1]}-{k[2]}-{k[3]}-f{k[4]}-{k[5]}'
 def plan():
     return set(itertools.product([r['Id'] for r in RECIPES],['prism','indigo'],VIEWS,CHECKPOINTS.items(),MODES))
 def validate(m,revision=None):
-    if (m['schema'],m['family'],m['reviewOnly'],m['defaultEnabled'],m['cap'],m['width'],m['height'],m['fps'],m['seed'])!=(1,'ar-particle-budget',True,False,192,640,360,30,20261016):raise ValueError('Wrong budget recipe')
+    if (m['schema'],m['family'],m['reviewOnly'],m['defaultEnabled'],m['cap'],m['width'],m['height'],m['fps'],m['seed'])!=(1,'ar-particle-budget',True,False,384,640,360,30,20261016):raise ValueError('Wrong budget recipe')
     if revision and m['sourceRevision']!=revision:raise ValueError('Wrong native source')
     if m['baselineRevision']!=BASELINE or m['policy']!=POLICY or m['recipes']!=RECIPES or m['palettes']!=['prism','indigo'] or m['notes']!=NOTES or m['checkpoints']!=[dict(Id=p,Frame=f) for p,f in CHECKPOINTS.items()] or (m['pedalOnFrame'],m['pedalOffFrame'])!=(24,54):raise ValueError('Wrong budget timeline/policy')
     if set(m['sourceHashes'])!=SOURCES or not all(sha(h) for h in m['sourceHashes'].values()):raise ValueError('Missing source guards')
@@ -53,14 +53,14 @@ def validate(m,revision=None):
         keys=c['EligibleKeys'];s=c['Selected'];traced=c['View']!='live-stage' and c['Mode']!='fast'
         if traced:
             if len(keys)>c['RawParticles'] or len(keys)>8192 or any(type(x) is not int or x%128 not in range(21,109) or x//128 not in (0,1,2) for x in keys):raise ValueError('Bad eligibility')
-            wanted=select(keys) if c['Mode']=='fair' else list(range(min(192,len(keys))))
+            wanted=select(keys) if c['Mode']=='fair' else list(range(min(384,len(keys))))
             if s!=wanted:raise ValueError('Cap/order/role-pitch allocation violated')
             if c['InventoryFile']!=c['Id']+'.json.gz' or not sha(c['InventoryHash']):raise ValueError('Missing native inventory')
         elif keys or s or c['InventoryFile'] is not None or c['InventoryHash'] is not None:raise ValueError('Unexpected inventory')
         if c['Mode']=='fair':
             a=rows[k[:-1]+('legacy',)]
             if any(c[f]!=a[f] for f in ('RawHash','RawParticles','KeyHash','Packets','NonParticleHash','EligibleHash','EligibleKeys')):raise ValueError('Trial changed more than selection')
-            if c['View']=='live-stage' or len(keys)<=192:
+            if c['View']=='live-stage' or len(keys)<=384:
                 if any(c[f]!=a[f] for f in ('PixelSha256','PacketHash')):raise ValueError('Stage/under-cap output changed')
         if c['Mode']=='fast':
             a=rows[k[:-1]+('legacy',)]

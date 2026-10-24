@@ -58,11 +58,11 @@ nào trong bảng này lấy từ log hay từ manifest trong artifact. Cột cu
    và `off` của chúng **trùng nhau từng byte** (904 px, cùng hộp bao 92 × 33). Chúng tách nhau chỉ ở hàng đầu xa —
    `ImpactBurst` = `Dust` đổi hình dạng cú nổ, `ParticleAmount` = 120 đổi mật độ. Đọc hai dòng 12 và 13 như hai phép
    đo độc lập là đọc sai. Và hàng đầu xa của dòng 13 lại **chạm trần** (xem điều 4).
-3. **Dòng 6 đo cái trần, không đo `WispAmount`.** 52 / 85 px là con số của **trần 192 hạt mỗi khung**, và §7.6 chứng
+3. **Dòng 6 đo cái trần, không đo `WispAmount`.** 52 / 85 px là con số của **trần 384 hạt mỗi khung** (từ `db7f9dd` trở đi; trước đó 192), và §7.6 chứng
    minh không cảnh AR hợp lệ nào hạ được dưới trần ở `Maximum` 150.
 4. **Hai dòng bị chặn trần, và trang nói ra chứ không để suy luận.** Từ đợt đóng sổ mỗi khung ghi **số hạt sống cạnh
-   số hạt đã vẽ**; hai cột vượt trần là `particles.wisps` (**480** sống / 192 vẽ ở đầu xa) và `particles.sparks`
-   (**264** / 192). Với hai dòng đó, cột `far↔off` đọc **trần của lớp AR** nhiều hơn đọc thiết lập — dòng 6 là
+   số hạt đã vẽ**; ở trần 192 cũ hai cột vượt trần là `particles.wisps` (**480** / 192) và `particles.sparks` (**264** / 192); ở trần 384 chỉ còn **wisps 480/384** vượt, sparks 264/384 đã dưới trần
+   (**264** / 192). Với hai dòng đó, cột `far↔off` trước `db7f9dd` đọc **trần của lớp AR** nhiều hơn đọc thiết lập — dòng 6 là
    quyết định sản phẩm còn treo, dòng 13 là hạn chế đã biết của phép đo.
 
 **Còn ba family `note.material.*`** (Solid / Gem / Crystal Outline) cũng `Unverified` trên lớp AR, nhưng chúng đã có
@@ -353,11 +353,11 @@ của chính cột đó, dung sai 2/255, đọc lại từ tờ ảnh đã commi
    ghi đúng như vậy thay vì được mô tả là một family nổi bật.
 2. **`particles.wisps` chạm trần của lớp AR, và đó là lý do đầu xa không nổ to.** Wisp phát `WispAmount × 4`
    hạt/giây/phím và sống `0,35 + WispHeight × 1,9` giây; ở 45 là ~180 hạt/giây, ở 150 là 600. Nhưng lớp AR chỉ vẽ
-   tối đa **192 hạt mỗi khung**, nên khi kéo `WispAmount` lên 150 khung hình đã **bão hoà**: con số 85 px là một
-   tập hạt khác trong cùng trần, không phải "gấp ba số wisp". Số đo ở đợt đóng sổ: **480 hạt sống, 192 hạt vẽ** —
+   tối đa **384 hạt mỗi khung** (192 trước `db7f9dd`), nên khi kéo `WispAmount` lên 150 khung hình đã **bão hoà**: con số 85 px là một
+   tập hạt khác trong cùng trần, không phải "gấp ba số wisp". Số đo ở đợt đóng sổ (trần 192): **480 hạt sống, 192 hạt vẽ** —
    trạng thái đang lên của cảnh giữ 0,4 s, không phải trạng thái dừng 1 674 hạt; §7.6 giữ cả hai con số và nói rõ
    chúng khác nhau vì sao. Phép tính đầy đủ ở §7.6 — và nó cho thấy **không có cảnh hợp lệ nào** đo được
-   `WispAmount` dưới trần khi contract khai tối đa 150.
+   `WispAmount` dưới trần 192 khi contract khai tối đa 150 (ở 384 thì sparks đã dưới trần, wisps vẫn trên).
 3. **Dự đoán ở §7.3 đúng từng pixel.** `impact.burst` và `particles.sparks` nằm sau cùng công tắc `ShowEmbers`:
    hai khung `rest` và `off` của chúng **trùng nhau từng pixel** — cùng **986 px**, cùng hộp bao **128 × 43**, cùng
    delta lớn nhất **224**. Chỉ khung đầu xa tách hai cột ra: **2 219 px** cho `ImpactBurst` = `Dust` (đám mây, hộp
@@ -385,37 +385,32 @@ sẽ bị đọc thành "wisp gần như không đổi khi tăng gấp ba".
 | Đời sống trung bình | `life = .35 + WispHeight × 1.9`, mỗi hạt nhân thêm hệ số trung bình 1,0; `WispHeight` mặc định 55 ⇒ 1,395 s | 1,395 s | 1,395 s |
 | Hạt còn sống, mỗi phím | tích hai dòng trên | ≈ **251** | ≈ **837** |
 | Hạt còn sống, hai phím đang giữ | × 2 | ≈ **502** | ≈ **1 674** |
-| Trần vẽ của lớp AR | `MaxProjectedParticles = 192` (`GpuArLayer.Effects.cs`) | **192** | **192** |
+| Trần vẽ của lớp AR | `MaxProjectedParticles = 384` (`GpuArLayer.Effects.cs`, 192 trước `db7f9dd`) | **384** (192 cũ) | **384** (192 cũ) |
 
 **Kết luận, và nó là kết luận về sản phẩm chứ không về trang:** ở cả hai đầu thiết lập, số hạt sống đều **vượt trần
-192 từ 2,6 đến 8,7 lần**, nên khung chụp chỉ chứa một **tập con 192 hạt**. Có thể làm cả hai đầu xuống dưới trần
+192 từ 2,6 đến 8,7 lần** (384 từ 1,3 đến 4,4 lần), nên khung chụp ở 192 chỉ chứa một **tập con 192 hạt**. Có thể làm cả hai đầu xuống dưới trần 192
 không? Không, với bất kỳ cảnh hợp lệ nào:
 
-- Hạ `WispHeight` xuống **tối thiểu 5** ⇒ đời sống 0,445 s ⇒ ở 150 vẫn còn **267 hạt/phím**; một phím vẫn vượt 192.
-- Bỏ một phím (chỉ giữ một) ⇒ 267 > 192 ở đầu xa.
+- Hạ `WispHeight` xuống **tối thiểu 5** ⇒ đời sống 0,445 s ⇒ ở 150 vẫn còn **267 hạt/phím**; một phím vượt 192 cũ nhưng **dưới 384 mới** (267 < 384).
+- Bỏ một phím (chỉ giữ một) ⇒ 267 > 192 cũ, 267 < 384 mới ở đầu xa.
 - `WispAmount` 150 là **`Maximum` mà contract khai**; hạ nó xuống là tự đặt một ngưỡng không thuộc về contract, và
   khi đó cột không còn đo "đầu xa" nữa.
 
-Đo lại bằng chính con số của review (đợt đóng sổ): khung `far` của `particles.wisps` có **480 hạt sống, 192 hạt được
+Đo lại bằng chính con số của review (đợt đóng sổ, trần 192): khung `far` của `particles.wisps` có **480 hạt sống, 192 hạt được
 vẽ**. Con số 480 **thấp hơn** 1 674 ở bảng trên, và lý do là cảnh Held chỉ giữ phím **0,4 s** (12 khung ở 1/30), nên nó
 chụp **trạng thái đang lên**, không phải trạng thái dừng: 2 phím × 600 hạt/s × 0,4 s = 480, khớp từng hạt. Bảng trên là
 tích phân tới vô cùng; con số 480 là thứ cảnh thật sự làm ra. Hai con số **không thay thế nhau** và không được trình bày
 như hai phép đo độc lập của cùng một đại lượng; điều chúng cùng nói là: **trần 192 nằm dưới cả hai**, nên ở đầu xa cột này đo
-trần ở **mọi** cảnh giữ phím dài hơn 0,16 s (192 ÷ 1 200 hạt/giây) — ngắn hơn thế mới đo được `WispAmount`.
+trần ở **mọi** cảnh giữ phím dài hơn 0,16 s (192 ÷ 1 200) — với trần 384 thì ngưỡng là **0,32 s** (384 ÷ 1 200) và wisps 480/384 vẫn trên trần còn sparks 264/384 đã dưới.
 
 **Từ đợt đóng sổ, trần đó được đo chứ không chỉ suy ra.** Review ghi, cho **từng khung**, số hạt **còn sống** trong
 mô phỏng ở khung cuối cạnh số hạt layer **thực vẽ** (`demand` / `quads` trong manifest, cột "Hạt sống / đã vẽ" trên
 trang HTML, và đuôi `(capped: N alive / M drawn)` trong dòng PASS). Nó là phép **quan sát** — hook
 `ObserveParticleStateForReview` đọc `simulation.ArParticleCount` mỗi khung rồi được đặt lại `null` trong `finally`,
 nên không đổi một pixel nào. Nhờ vậy một cột bị chặn trần **tự nói** nó bị chặn, thay vì để người đọc suy ra từ hằng
-số `MaxProjectedParticles = 192` ở một tệp khác.
+số `MaxProjectedParticles = 384` (192 cũ) ở một tệp khác.
 
-Và nó **bắt được một cột thứ hai**: `particles.sparks` ở đầu xa trả về **264 hạt sống / 192 hạt vẽ**, tức là bốn đợt
-trước đã in "1 775 px" cho một khung cũng bị chặn trần mà không chỗ nào nói ra. Con số đó không sai, nhưng nó đọc
-**trần của lớp AR** nhiều hơn đọc `ParticleAmount` 120 — đúng cùng một căn bệnh với cột wisp, chỉ khác là không ai để ý
-cho tới khi cột "Hạt sống / đã vẽ" tồn tại.
-
-Và nó **bắt được một cột thứ hai**: `particles.sparks` ở đầu xa trả về **264 hạt sống / 192 hạt vẽ**, tức là bốn đợt
+Và nó **bắt được một cột thứ hai** (ở trần 192 cũ): `particles.sparks` ở đầu xa trả về **264 hạt sống / 192 hạt vẽ**, tức là bốn đợt
 trước đã in "1 775 px" cho một khung cũng bị chặn trần mà không chỗ nào nói ra. Con số đó không sai, nhưng nó đọc
 **trần của lớp AR** nhiều hơn đọc `ParticleAmount` 120 — đúng cùng một căn bệnh với cột wisp, chỉ khác là không ai để ý
 cho tới khi cột "Hạt sống / đã vẽ" tồn tại.
@@ -426,14 +421,14 @@ seed, chỉ đổi renderer (`GpuStageRenderer` stage path, không qua `GpuArLay
 trần. Kết quả (đo thật trên WARP, `stage-effect/sheet-*.png`):
 
 - `particles.wisps` — stage: **1 725 px off → 22 085 px far** (`WispAmount` 150), `demand == quads == 480` ở far
-  (0/0 ở off), chứng tỏ hiệu ứng **còn sống** phía sau trần 192; AR chỉ còn 85 px vì bị cắt — **260× ít hơn**.
+  (0/0 ở off), chứng tỏ hiệu ứng **còn sống** phía sau trần 192; AR (192) chỉ còn 85 px vì bị cắt — **260× ít hơn** (ở 384 thì 480/384 vẫn cắt nhưng 1.25×).
 - `particles.flames` — stage: **3 770 px off → 19 329 px far** (`FlameIntensity` 100), **không capped ở cả hai
   renderer**, làm mốc đối chiếu rằng pipeline hạt không chết.
 - `particles.sparks` — stage: **31 540 px off → 103 323 px far** (`ParticleAmount` 120), `demand == quads == 264`,
-  trong khi AR chỉ 1 775 px nhưng gắn `capped: 264/192` — **58× ít hơn**.
+  trong khi AR (192) chỉ 1 775 px nhưng gắn `capped: 264/192` — **58× ít hơn** (ở 384 thì sparks 264 đã dưới trần).
 
 Ba cột stage tồn tại để trả lời đúng câu hỏi mà hai cột AR bị chặn đã che đi — "kéo slider có đổi hình không?" — mà
-không đề xuất nâng trần AR. Trần AR 192 vs stage 24 000 là hai ngân sách khác nhau do `EffectBudget` định, không phải
+không đề xuất nâng trần AR lúc đó. Trần AR 192 (nay 384) vs stage 24 000 là hai ngân sách khác nhau do `EffectBudget` định, không phải
 lỗi hiển thị; trang AR ghi "đo trần", trang stage ghi "đo slider khi không có trần", và cả hai cùng đúng.
 
 Nên đây **không phải lỗ hổng của trang**: muốn đo độ nhạy của `WispAmount` trong AR thì phải đổi **chính sách trần**
@@ -644,7 +639,7 @@ lại từ tờ ảnh đã commit.
 | ~~3~~ | ~~ba family `particles.*`~~ | **xong** (§7), kèm phần chưa phủ ghi trong `unshot` |
 | ~~4~~ | ~~`impact.wave/flash/morph`, `release.fx`, `atmosphere.beams`~~ | **xong** (§8) |
 | ~~5~~ | ~~`falling.trail` + `falling.shimmer`~~ | **mã + guard xong** (§9) — trang phủ **17/17 family** |
-| ~~6~~ | ~~`particles.wisps` và `particles.sparks`: đo **dưới** trần 192 hạt/khung~~ | **xong (N17S)** — cùng 3 cột nhưng vẽ bằng **Live Stage** (cap **24 000**, §7.6): `particles.wisps` **1 725→22 085 px** (`WispAmount` 150, 480/480), `particles.sparks` **31 540→103 323 px** (`ParticleAmount` 120, 264/264), `particles.flames` **3 770→19 329 px** làm mốc không capped; `demand == quads` nên con số là của slider, AR giữ nguyên "đo trần" (480/192, 264/192) |
+| ~~6~~ | ~~`particles.wisps` và `particles.sparks`: đo **dưới** trần 192 hạt/khung~~ | **xong (N17S)** — cùng 3 cột nhưng vẽ bằng **Live Stage** (cap **24 000**, §7.6): `particles.wisps` **1 725→22 085 px** (`WispAmount` 150, 480/480), `particles.sparks` **31 540→103 323 px** (`ParticleAmount` 120, 264/264), `particles.flames` **3 770→19 329 px** làm mốc không capped; `demand == quads` nên con số là của slider, AR 192 ghi "đo trần" (480/192, 264/192) — ở 384 thì sparks đã đo được trên AR |
 
 Không đợt nào trong **sáu** đợt trên được phép lật binding. Muốn lật thì phải phủ **giá trị và vòng đời**, không phải
 thêm một pose nữa — và đó là việc phải làm trên máy có GPU thật, không phải trong sandbox này.

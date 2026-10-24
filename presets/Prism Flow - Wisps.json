@@ -1,7 +1,7 @@
 {
   "Version": 1,
   "Thumbnail": "",
-  "Description": "Approved held/release materials for GPU Live Stage and AR, with balanced AR cap 192. Other burst/morph artwork stays classic; software rendering stays classic.",
+  "Description": "Approved held/release materials for GPU Live Stage and AR, with balanced AR cap 384. Other burst/morph artwork stays classic; software rendering stays classic.",
   "Settings": {
     "ShowBackground": true,
     "ShowNotes": true,
