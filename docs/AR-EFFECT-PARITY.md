@@ -425,12 +425,12 @@ seed, chỉ đổi renderer (`GpuStageRenderer` stage path, không qua `GpuArLay
 `Gopnik`-list của simulation rồi đẩy thẳng vào `sprites`, trần 24 000 nên cả 480 wisp lẫn 264 spark đều nằm **dưới**
 trần. Kết quả (đo thật trên WARP, `stage-effect/sheet-*.png`):
 
-- `particles.wisps` — stage: **off→far tăng hàng nghìn px** (cùng `WispAmount` 45 → 150), `demand == quads` (480/480
-  ở far, 0/0 ở off), chứng tỏ hiệu ứng **còn sống** phía sau trần 192; AR chỉ còn 85 px vì bị cắt.
-- `particles.flames` — stage: tăng tương tự, **không capped ở cả hai renderer**, làm mốc đối chiếu rằng pipeline hạt
-  không chết.
-- `particles.sparks` — stage: `ParticleAmount` 120 tăng hàng nghìn px, `demand == quads` (264/264), trong khi AR chỉ
-  1 775 px nhưng gắn `capped: 264/192`.
+- `particles.wisps` — stage: **1 725 px off → 22 085 px far** (`WispAmount` 150), `demand == quads == 480` ở far
+  (0/0 ở off), chứng tỏ hiệu ứng **còn sống** phía sau trần 192; AR chỉ còn 85 px vì bị cắt — **260× ít hơn**.
+- `particles.flames` — stage: **3 770 px off → 19 329 px far** (`FlameIntensity` 100), **không capped ở cả hai
+  renderer**, làm mốc đối chiếu rằng pipeline hạt không chết.
+- `particles.sparks` — stage: **31 540 px off → 103 323 px far** (`ParticleAmount` 120), `demand == quads == 264`,
+  trong khi AR chỉ 1 775 px nhưng gắn `capped: 264/192` — **58× ít hơn**.
 
 Ba cột stage tồn tại để trả lời đúng câu hỏi mà hai cột AR bị chặn đã che đi — "kéo slider có đổi hình không?" — mà
 không đề xuất nâng trần AR. Trần AR 192 vs stage 24 000 là hai ngân sách khác nhau do `EffectBudget` định, không phải
