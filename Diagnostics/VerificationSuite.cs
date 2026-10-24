@@ -181,6 +181,19 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
+        if (args.Contains("--verify-stage-effect-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Stage effect review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N17S stage particle sensitivity review; this does not run or certify the full regression suite.");
+                VerifyStageEffect(outputDirectory: reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
         if (args.Contains("--verify-refraction-only"))
         {
             try
@@ -194,7 +207,7 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); } }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); VerifyStageEffect(reviewOutput!); } }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -6960,6 +6973,16 @@ internal static partial class VerificationSuite
         var cells = ArEffectFamilyReview.Render(outputDirectory);
         Assert(cells == 51, "The AR effect review must shoot seventeen effect families at three rows each: the family at the product's values, the same family switched off, and its second setting at the far end of the range the contract declares.");
         Results.Add($"PASS AR effect-family review (N17): {cells} setting frames through the calibrated AR overlay at the leaned pose on GPU-WARP over four scenes, one per lifecycle: two keys two octaves apart held for the whole run (the five hold families, the two held particle families and the light beams), one song note in flight and not yet sounding (its trail, its shimmer and the pulse), one strike at the key (the burst, the spark stream, the wave, the flash and the morph), and one key lifted after 0.2 s (the release effect). One family is switched on per column, so a difference cannot come from a family the column is not about, and each row is compared with the same family at the product's own values at the same pose, camera and seed. A family whose switch is a choice carries the value the renderer treats as off (ImpactWave None, ImpactMorph None, ReleaseEffect Fade) in its middle row; a family that declares more than two settings carries its switch and the first percentage the contract lists after it, and every other boolean is pinned off unless the family cannot be drawn without it, while any other choice is pinned at a value the product draws; a far value that equals what the reference frame already shows is skipped, so a column can never carry three pictures where two are the same; every setting the column does not shoot is named in the manifest under \"unshot\" instead of being dropped silently. A column is refused unless the layer's own quad counter for that family is non-zero and unless taking the whole family away moves the picture, so a scene that cannot show the family fails instead of recording three near-identical frames. Measured: {ArEffectFamilyReview.Summary}. Renderer-branching and uniform-delivery evidence for the effect families whose binding stays Unverified, not art approval, not every value of every range, and no default change; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+        var stageCells = StageEffectSensitivityReview.Render(outputDirectory);
+        Assert(stageCells == 9, "The stage sensitivity review must shoot the three particle families that share the capped question on the Live Stage renderer, at three rows each.");
+        Results.Add($"PASS stage particle sensitivity review (N17S): {stageCells} setting frames on the Live Stage renderer at the same scene and timing as the AR page, but without its 192-quad cap — the three particle families the AR page reports as capped or its nearest neighbour, one family per column at the same switch and far values. Measured: {StageEffectSensitivityReview.Summary}. The columns exist to answer the question the AR cap silenced (does the setting reach the picture when the cap is not in the way), not to raise the cap; stage cap 24000, AR cap 192, manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "stage-effect")}.");
+    }
+
+    private static void VerifyStageEffect(string outputDirectory)
+    {
+        var cells = StageEffectSensitivityReview.Render(outputDirectory);
+        Assert(cells == 9, "The stage sensitivity review must shoot the three particle families that share the capped question on the Live Stage renderer, at three rows each.");
+        Results.Add($"PASS stage particle sensitivity review (N17S): {cells} setting frames on the Live Stage renderer at the same scene and timing as the AR page, but without its 192-quad cap — the three particle families the AR page reports as capped or its nearest neighbour, one family per column at the same switch and far values. Measured: {StageEffectSensitivityReview.Summary}. The columns exist to answer the question the AR cap silenced (does the setting reach the picture when the cap is not in the way), not to raise the cap; stage cap 24000, AR cap 192, manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "stage-effect")}.");
     }
 
     private static void VerifyRefraction(string outputDirectory)

@@ -403,7 +403,7 @@ jobs:
           if (Test-Path $log) {
             Get-Content $log | ForEach-Object {
               Write-Output $_
-              if ($_ -like 'FAIL*') { "::error title=N17 AR effect families::$_" } elseif ($_ -like 'PASS AR effect-family review*') { "::notice title=N17 AR effect families::$_" }
+              if ($_ -like 'FAIL*') { "::error title=N17 AR effect families::$_" } elseif ($_ -like 'PASS AR effect-family review*') { "::notice title=N17 AR effect families::$_" } elseif ($_ -like 'PASS stage particle sensitivity review*') { "::notice title=N17S Stage particle sensitivity::$_" }
             }
           } else { "::error title=N17 AR effect families::No verification log was written" }
           exit $proc.ExitCode
@@ -501,6 +501,12 @@ jobs:
             cp -- "$review/ar-effect/sheet-$sheet.png" "$effect/$sheet.png"
           done
           ls -l "$out" "$refraction" "$ar" "$effect"
+          stageEffect=docs/evidence/stage-effect-sheets
+          mkdir -p "$stageEffect"
+          for sheet in held impact; do
+            cp -- "$review/stage-effect/sheet-$sheet.png" "$stageEffect/$sheet.png"
+          done
+          ls -l "$stageEffect"
 
       # Isolate deterministic P0 capture from realtime/device smoke tests. Both still block the build.
       - name: Prism Flow baseline and candidate verification

@@ -56,6 +56,7 @@ section and are not repeated here; the internal development roadmap is not part 
   it was really reading the AR layer's cap. Wisps report 480 rather than the 1 674 of the steady-state integral
   because the Held scene only holds for 0.4 s; both numbers sit above the cap, and the document keeps both instead of
   choosing the prettier one.
+- **Three stage columns for the same question, but without the 192 cap.** `--verify-stage-effect-only` re-shoots `particles.wisps` / `particles.flames` / `particles.sparks` on the **Live Stage** (same timing/seed/one-family-per-column, but drawn through the `GpuStageRenderer` stage path, cap **24,000** so `demand == quads` at both ends). On stage, `WispAmount` 150 yields **480/480** alive/drawn and `ParticleAmount` 120 yields **264/264**, and the off-to-far pixel deltas grow into the **thousands** (no longer clipped at the AR 85 px / 1,775 px). Both measurements are true: AR reports **cap**, stage reports **slider still alive**, and neither proposes raising the AR cap.
 
 ## 2.2.0 — 2026-10-18
 

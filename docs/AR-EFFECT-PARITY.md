@@ -415,10 +415,31 @@ trước đã in "1 775 px" cho một khung cũng bị chặn trần mà không 
 **trần của lớp AR** nhiều hơn đọc `ParticleAmount` 120 — đúng cùng một căn bệnh với cột wisp, chỉ khác là không ai để ý
 cho tới khi cột "Hạt sống / đã vẽ" tồn tại.
 
+Và nó **bắt được một cột thứ hai**: `particles.sparks` ở đầu xa trả về **264 hạt sống / 192 hạt vẽ**, tức là bốn đợt
+trước đã in "1 775 px" cho một khung cũng bị chặn trần mà không chỗ nào nói ra. Con số đó không sai, nhưng nó đọc
+**trần của lớp AR** nhiều hơn đọc `ParticleAmount` 120 — đúng cùng một căn bệnh với cột wisp, chỉ khác là không ai để ý
+cho tới khi cột "Hạt sống / đã vẽ" tồn tại.
+
+**Đợt 6 — câu trả lời mà trần đã nuốt mất, đọc ở nơi không có trần.** Trên Live Stage, cùng ba cột, cùng timing, cùng
+seed, chỉ đổi renderer (`GpuStageRenderer` stage path, không qua `GpuArLayer`). Stage vẽ mọi hạt còn sống ngay trong
+`Gopnik`-list của simulation rồi đẩy thẳng vào `sprites`, trần 24 000 nên cả 480 wisp lẫn 264 spark đều nằm **dưới**
+trần. Kết quả (đo thật trên WARP, `stage-effect/sheet-*.png`):
+
+- `particles.wisps` — stage: **off→far tăng hàng nghìn px** (cùng `WispAmount` 45 → 150), `demand == quads` (480/480
+  ở far, 0/0 ở off), chứng tỏ hiệu ứng **còn sống** phía sau trần 192; AR chỉ còn 85 px vì bị cắt.
+- `particles.flames` — stage: tăng tương tự, **không capped ở cả hai renderer**, làm mốc đối chiếu rằng pipeline hạt
+  không chết.
+- `particles.sparks` — stage: `ParticleAmount` 120 tăng hàng nghìn px, `demand == quads` (264/264), trong khi AR chỉ
+  1 775 px nhưng gắn `capped: 264/192`.
+
+Ba cột stage tồn tại để trả lời đúng câu hỏi mà hai cột AR bị chặn đã che đi — "kéo slider có đổi hình không?" — mà
+không đề xuất nâng trần AR. Trần AR 192 vs stage 24 000 là hai ngân sách khác nhau do `EffectBudget` định, không phải
+lỗi hiển thị; trang AR ghi "đo trần", trang stage ghi "đo slider khi không có trần", và cả hai cùng đúng.
+
 Nên đây **không phải lỗ hổng của trang**: muốn đo độ nhạy của `WispAmount` trong AR thì phải đổi **chính sách trần**
 (`MaxProjectedParticles`, ảnh hưởng hiệu năng thật) hoặc đo trên **renderer sân khấu** — nơi `KeyEmissionBudget` và
-trần sprite là chuyện khác. Cả hai là quyết định của sản phẩm, không phải của một trang ảnh. Trang ghi đúng như vậy
-thay vì thêm một cột trông như đã trả lời.
+trần sprite là chuyện khác. Cả hai là quyết định của sản phẩm, không phải của một trang ảnh. Từ đợt 6, trang sân
+khấu làm vế thứ hai, và trang AR giữ nguyên câu "đo trần" thay vì thêm một cột trông như đã trả lời.
 
 ## 8. Đợt 4: năm family cuối, và ba cơ chế mới
 

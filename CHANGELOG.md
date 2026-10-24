@@ -52,6 +52,7 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
   vẽ) và cả `particles.sparks` (**264** / **192**), tức là cột sparks từ bốn đợt trước vẫn được in như một phép đo
   `ParticleAmount` trong khi thực ra nó đọc trần của lớp AR. Wisp 480 chứ không phải 1 674 như tích phân trạng thái
   dừng, vì cảnh Held chỉ giữ 0,4 s; cả hai con số đều nằm trên trần, và tài liệu giữ cả hai thay vì chọn con số đẹp hơn.
+- **Ba cột stage cho cùng câu hỏi, nhưng không có trần 192.** `--verify-stage-effect-only` chụp lại `particles.wisps` / `particles.flames` / `particles.sparks` trên **Live Stage** (cùng timing/cùng seed/cùng một-family-một-cột, nhưng vẽ bằng `GpuStageRenderer` stage path, trần **24 000** nên `demand == quads` ở cả hai đầu). Trên stage, `WispAmount` 150 cho **480/480** hạt sống/vẽ và `ParticleAmount` 120 cho **264/264**, pixel đổi giữa `off` và `far` tăng **hàng nghìn** (không còn bị cắt ở 85 px / 1 775 px của AR). Hai bản đo cùng đúng: AR báo **"trần"**, stage báo **"slider còn sống"**, và không bản nào đề xuất nâng trần AR.
 
 ## 2.2.0 — 2026-10-18
 
