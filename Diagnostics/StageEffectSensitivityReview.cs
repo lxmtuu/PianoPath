@@ -491,15 +491,11 @@ internal static class StageEffectSensitivityReview
         "ShowImpactRings" => settings.ShowImpactRings ? 1 : 0,
         "ImpactWaveIntensity" => settings.ImpactWaveIntensity,
         "ShowImpactFlash" => settings.ShowImpactFlash ? 1 : 0,
-        "ImpactFlashStyle" => settings.ImpactFlashStyle,
         "ImpactFlashIntensity" => settings.ImpactFlashIntensity,
-        "ImpactMorph" => settings.ImpactMorph,
         "ImpactMorphIntensity" => settings.ImpactMorphIntensity,
-        "ReleaseEffect" => settings.ReleaseEffect,
         "ReleaseIntensity" => settings.ReleaseIntensity,
         "ShowLightBeams" => settings.ShowLightBeams ? 1 : 0,
         "BeamIntensity" => settings.BeamIntensity,
-        "FallingTrail" => settings.FallingTrail,
         "FallingTrailIntensity" => settings.FallingTrailIntensity,
         "FallingTrailLength" => settings.FallingTrailLength,
         "FallingGhost" => settings.FallingGhost ? 1 : 0,
@@ -530,9 +526,7 @@ internal static class StageEffectSensitivityReview
             var path = Path.Combine(root, shot.File);
             if (!File.Exists(path))
                 throw new InvalidDataException($"The stage sensitivity review lists {shot.File} but the file was not written.");
-            var pixels = ReviewPng.Decode(File.ReadAllBytes(path), out var width, out var height);
-            if (width != Width || height != Height)
-                throw new InvalidDataException($"The stage file {shot.File} is {width}×{height}, expected {Width}×{Height}.");
+            var pixels = ReviewPng.Decode(Path.Combine(root, shot.File), Width, Height);
             var sha = Convert.ToHexString(SHA256.HashData(pixels));
             if (!string.Equals(sha, shot.PixelSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"Hash mismatch for stage file {shot.File}: manifest {shot.PixelSha256} vs file {sha}.");
