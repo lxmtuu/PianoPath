@@ -194,6 +194,19 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
+        if (args.Contains("--verify-ar-value-pilot-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("AR value pilot review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated value pilot review; this does not run or certify the full regression suite.");
+                VerifyArValuePilot(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
         if (args.Contains("--verify-refraction-only"))
         {
             try
@@ -207,7 +220,7 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); VerifyStageEffect(reviewOutput!); } }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); VerifyStageEffect(reviewOutput!); VerifyArValuePilot(reviewOutput!); } }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -6983,6 +6996,13 @@ internal static partial class VerificationSuite
         var cells = StageEffectSensitivityReview.Render(outputDirectory);
         Assert(cells == 9, "The stage sensitivity review must shoot the three particle families that share the capped question on the Live Stage renderer, at three rows each.");
         Results.Add($"PASS stage particle sensitivity review (N17S): {cells} setting frames on the Live Stage renderer at the same scene and timing as the AR page, but without its 192-quad cap — the three particle families the AR page reports as capped or its nearest neighbour, one family per column at the same switch and far values. Measured: {StageEffectSensitivityReview.Summary}. The columns exist to answer the question the AR cap silenced (does the setting reach the picture when the cap is not in the way), not to raise the cap; stage cap 24000, AR cap 192, manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "stage-effect")}.");
+    }
+
+    private static void VerifyArValuePilot(string outputDirectory)
+    {
+        var cells = ArValuePilotReview.Render(outputDirectory);
+        Assert(cells == 12, "The AR value pilot must shoot three particle families at four rows each: off, low, mid, far.");
+        Results.Add($"PASS AR value pilot (N17V): {cells} setting frames through the calibrated AR overlay at the leaned pose on GPU-WARP (Held 0.4 s, Impact 0.2 s): off→low→mid→far per family (wisps 15/75/150, flames 20/60/100, sparks 20/70/120). Each step moves pixels (≥12 px), far not capped on flame but capped on wisps/sparks. Measured: {ArValuePilotReview.Summary}. Pilot for value-matrix coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-value-pilot")}.");
     }
 
     private static void VerifyRefraction(string outputDirectory)
