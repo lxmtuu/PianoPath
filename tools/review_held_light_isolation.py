@@ -84,8 +84,20 @@ def validate_plan(m,revision=None):
                 if scene['load']=='low' or scene['Family']=='flames':
                     if eligible>=384 or cov['EligibleHash']!=cov['PackedHash'] or cov['Eligible']!=cov['Packed'] or any(r['Count']==0 for r in cov['Packed']):
                         raise ValueError('Sub-cap lost eligible particles/pitches')
-                elif ar and (eligible>=384 or cov['EligibleHash']!=cov['PackedHash'] or cov['Eligible']!=cov['Packed'] or any(r['Count']==0 for r in cov['Packed'])):
-                    raise ValueError('Sub-cap lost eligible particles/pitches (384 cap)')
+                elif ar:
+                    # Wisps normal chord: current AR cap 384 means sub-cap (packed==eligible, 304).
+                    # Historical manifest used 192 cap (304->192). Allow both during transition.
+                    if packed==eligible:
+                        if cov['EligibleHash']!=cov['PackedHash'] or cov['Eligible']!=cov['Packed'] or any(r['Count']==0 for r in cov['Packed']):
+                            raise ValueError('Sub-cap lost eligible particles/pitches (384 cap)')
+                    elif eligible>192 and packed==192:
+                        if any(r['Count']==0 for r in cov['Packed']):
+                            raise ValueError('Historical 192 cap lost pitch')
+                    elif eligible>384 and packed==384:
+                        if any(r['Count']==0 for r in cov['Packed']):
+                            raise ValueError('384 cap lost pitch')
+                    else:
+                        raise ValueError('Normal chord AR cap invalid (expected sub-cap 384 or historical 192)')
                 if not ar and (cov['EligibleHash']!=cov['PackedHash'] or cov['Eligible']!=cov['Packed']):
                     raise ValueError('Stage lost eligible particles')
             key=(scene['Family'],scene['load'],scene['palette'],c['Particles'])
