@@ -41,7 +41,10 @@ internal static class ArValuePilotReview
             "ParticleAmount", EffectParameterKind.Percentage, [20, 70, 120], [], ""),
     ];
 
-    private sealed record Shot(string File, string PixelSha256, int Lit, int Painted, int Quads, int Demand, byte[]? Pixels);
+    private sealed class Shot(string File, string PixelSha256, int Lit, int Painted, int Quads, int Demand, byte[]? Pixels)
+    {
+        public string File => File; public string PixelSha256 => PixelSha256; public int Lit => Lit; public int Painted => Painted; public int Quads => Quads; public int Demand => Demand; public byte[]? Pixels { get; set; } = Pixels;
+    }
     private sealed record Cell(string Family, Stage Stage, string Parameter, string Row, double Value, string Choice,
         string File, string PixelSha256, int ArChanged, int ArLit, int ArPainted, int Quads, int Demand, string Reading, string Note);
     private sealed record SheetReport(string File, string Sha, int Columns, int Rows, IReadOnlyList<Cell> Cells);
