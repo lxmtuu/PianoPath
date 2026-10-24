@@ -11,22 +11,22 @@ def fixture():
     for k in sorted(expected):
         recipe,palette,view,phase,frame,mode=k;traced=view!='live-stage' and mode!='fast'
         keys=([60]*300+[61]*300+[60+256]*300+[61+256]*300) if phase in ('chord-held','motion') else [60,61,60+256]
-        keys=keys if traced else [];selected=r.select(keys) if mode=='fair' else list(range(min(192,len(keys))))
+        keys=keys if traced else [];selected=r.select(keys) if mode=='fair' else list(range(min(384,len(keys))))
         rows.append(dict(Id=r.identifier(k),Recipe=recipe,Palette=palette,View=view,Phase=phase,Frame=frame,Mode=mode,File=r.identifier(k)+'.png',
-            PixelSha256=('F' if mode=='fair' and len(keys)>192 else 'A')*64,RawHash='B'*64,PacketHash=('E' if mode=='fair' and len(keys)>192 else 'C')*64,
+            PixelSha256=('F' if mode=='fair' and len(keys)>384 else 'A')*64,RawHash='B'*64,PacketHash=('E' if mode=='fair' and len(keys)>384 else 'C')*64,
             KeyHash='D'*64,NonParticleHash='E'*64,EligibleHash='F'*64,SelectedHash='A'*64,RawParticles=1200,Packets=300,
             EligibleKeys=keys,Selected=selected,InventoryFile=r.identifier(k)+'.json.gz' if traced else None,InventoryHash='B'*64 if traced else None,DrawMilliseconds=1))
-    return dict(schema=1,family='ar-particle-budget',reviewOnly=True,defaultEnabled=False,cap=192,width=640,height=360,fps=30,seed=20261016,
+    return dict(schema=1,family='ar-particle-budget',reviewOnly=True,defaultEnabled=False,cap=384,width=640,height=360,fps=30,seed=20261016,
         sourceRevision='synthetic',baselineRevision=r.BASELINE,policy=r.POLICY,recipes=r.RECIPES,palettes=['prism','indigo'],notes=r.NOTES,
         checkpoints=[dict(Id=p,Frame=f) for p,f in r.CHECKPOINTS.items()],pedalOnFrame=24,pedalOffFrame=54,sourceHashes=dict.fromkeys(r.SOURCES,'A'*64),captures=rows)
 
 class BudgetTests(unittest.TestCase):
     def test_roles_pitches_borrowing_stable_order_and_under_cap(self):
         keys=[p+128*o for o,p,_ in itertools.product(range(3),range(48,56),range(50))];s=r.select(keys)
-        self.assertEqual(192,len(s));self.assertEqual(s,sorted(set(s)))
-        for o,p in itertools.product(range(3),range(48,56)):self.assertEqual(8,sum(keys[i]==p+o*128 for i in s))
+        self.assertEqual(384,len(s));self.assertEqual(s,sorted(set(s)))
+        for o,p in itertools.product(range(3),range(48,56)):self.assertEqual(16,sum(keys[i]==p+o*128 for i in s))
         self.assertEqual([0,1,2],r.select([316,60,188]));self.assertEqual([],r.select(keys,0))
-        s=r.select([188]+[60]*300+[317]*300);self.assertIn(0,s);self.assertEqual(192,len(s))
+        s=r.select([188]+[60]*300+[317]*300);self.assertIn(0,s);self.assertEqual(384,len(s))
         rng=random.Random(20261016)
         for _ in range(100):
             keys=[rng.randrange(384) for _ in range(rng.randrange(1500))];cap=rng.randrange(257);before=keys.copy();s=r.select(keys,cap)
@@ -35,7 +35,7 @@ class BudgetTests(unittest.TestCase):
         m=fixture();rows=r.validate(m,'synthetic');self.assertEqual(904,len(rows));self.assertEqual(6,len(list(r.sheets(rows))));self.assertEqual(2,len(list(r.motions(rows))))
         def target(m):return next(c for c in m['captures'] if c['Mode']=='fair' and c['Phase']=='chord-held' and c['View']=='ar-reference')
         for change in (lambda m:m['captures'].pop(),lambda m:m.__setitem__('defaultEnabled',True),lambda m:m.__setitem__('cap',256),lambda m:m['sourceHashes'].clear(),
-            lambda m:target(m)['Selected'].append(1199),lambda m:target(m).__setitem__('Selected',list(range(192))),lambda m:target(m).__setitem__('RawHash','F'*64),
+            lambda m:target(m)['Selected'].append(1199),lambda m:target(m).__setitem__('Selected',list(range(384))),lambda m:target(m).__setitem__('RawHash','F'*64),
             lambda m:target(m).__setitem__('NonParticleHash','F'*64),lambda m:target(m).__setitem__('File','../false.png'),lambda m:target(m).__setitem__('EligibleHash','A'*64)):
             x=copy.deepcopy(m);change(x)
             with self.assertRaises(ValueError):r.validate(x)
@@ -73,7 +73,7 @@ class BudgetTests(unittest.TestCase):
         look=(root/'Gpu/GpuLook.cs').read_text();layer=(root/'Gpu/GpuArLayer.Effects.cs').read_text()
         self.assertIn('ArFairParticleBudgetForReview { get; private set; }',look)
         self.assertNotIn('ArFairParticleBudgetForReview = s.',look)
-        self.assertIn('private const int MaxProjectedParticles = 192',layer)
+        self.assertIn('private const int MaxProjectedParticles = 384',layer)
         self.assertIn('look.UseFairArParticleBudget || ObserveBudgetForReview is not null',layer)
         self.assertIn('UseFairArParticleBudget => UpgradedParticleEffects || ArFairParticleBudgetForReview',look)
         self.assertIn('UpgradedParticleEffects = s.UpgradedParticleEffects',look)
