@@ -46,7 +46,7 @@ internal static class ArValuePilotReview
         internal required string File { get; init; }
         internal required string PixelSha256 { get; init; }
         internal required int Lit { get; init; }
-        internal required int Painted { get; init; }
+        internal required int PaintedCount { get; init; }
         internal required int Quads { get; init; }
         internal required int Demand { get; init; }
         internal byte[]? Pixels { get; set; }
@@ -92,7 +92,7 @@ internal static class ArValuePilotReview
                     // Need painted check on one of the on-frames, not off; do after first on capture
                     // low
                     var low = CaptureAr(root, renderer, pose, camera, Settings(fam, 0, isOff: false), fam, "low");
-                    if (low.Painted < MinimumOverlayPixels) throw new InvalidDataException($"{fam.Id} low frame painted {low.Painted} < {MinimumOverlayPixels}");
+                    if (low.PaintedCount < MinimumOverlayPixels) throw new InvalidDataException($"{fam.Id} low frame painted {low.PaintedCount} < {MinimumOverlayPixels}");
                     if (low.Quads <= 0) throw new InvalidDataException($"{fam.Id} low drew no quads");
                     shots.Add(low);
                     sheet.Blit(col * Columns + 1, captions[col * Columns + 1], low.Pixels!, Width, Height, premultiplied: false);
@@ -114,10 +114,10 @@ internal static class ArValuePilotReview
                     if (offVsFar < MinimumChangedPixels) throw new InvalidDataException($"{fam.Id} off↔far {offVsFar} < {MinimumChangedPixels}");
 
                     // Cells: off is reference, low/mid/far compare to off for readability
-                    cells.Add(new Cell(fam.Id, fam.Stage, fam.SwitchName, "off", 0, "", off.File, off.PixelSha256, 0, off.Lit, off.Painted, off.Quads, off.Demand, "Reference", "Family off"));
-                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "low", fam.Numbers[0], "", low.File, low.PixelSha256, offVsLow, low.Lit, low.Painted, low.Quads, low.Demand, Read(offVsLow), $"Low {fam.Numbers[0]:0} vs off"));
-                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "mid", fam.Numbers[1], "", mid.File, mid.PixelSha256, OptionMatrixPlan.ChangedPixels(mid.Pixels!, off.Pixels!), mid.Lit, mid.Painted, mid.Quads, mid.Demand, Read(OptionMatrixPlan.ChangedPixels(mid.Pixels!, off.Pixels!)), $"Mid {fam.Numbers[1]:0} vs off"));
-                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "far", fam.Numbers[2], "", far.File, far.PixelSha256, offVsFar, far.Lit, far.Painted, far.Quads, far.Demand, Read(offVsFar), $"Far {fam.Numbers[2]:0} vs off"));
+                    cells.Add(new Cell(fam.Id, fam.Stage, fam.SwitchName, "off", 0, "", off.File, off.PixelSha256, 0, off.Lit, off.PaintedCount, off.Quads, off.Demand, "Reference", "Family off"));
+                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "low", fam.Numbers[0], "", low.File, low.PixelSha256, offVsLow, low.Lit, low.PaintedCount, low.Quads, low.Demand, Read(offVsLow), $"Low {fam.Numbers[0]:0} vs off"));
+                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "mid", fam.Numbers[1], "", mid.File, mid.PixelSha256, OptionMatrixPlan.ChangedPixels(mid.Pixels!, off.Pixels!), mid.Lit, mid.PaintedCount, mid.Quads, mid.Demand, Read(OptionMatrixPlan.ChangedPixels(mid.Pixels!, off.Pixels!)), $"Mid {fam.Numbers[1]:0} vs off"));
+                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "far", fam.Numbers[2], "", far.File, far.PixelSha256, offVsFar, far.Lit, far.PaintedCount, far.Quads, far.Demand, Read(offVsFar), $"Far {fam.Numbers[2]:0} vs off"));
 
                     off.Pixels = null; low.Pixels = null; mid.Pixels = null; far.Pixels = null;
                 }
@@ -182,7 +182,7 @@ internal static class ArValuePilotReview
         var quads = Probe(renderer, fam.Id);
         var relative = Path.Combine("ar-value-pilot", OptionMatrixPlan.Slug(fam.Id), $"{label}.png");
         var sha = ReviewPng.Write(Path.Combine(root, relative), pixels, Width, Height, $"{fam.Id}/{label} pilot AR");
-        return new Shot { File = relative.Replace('\\', '/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels), Painted = OptionMatrixPlan.ChangedPixels(pixels, camera), Quads = quads, Demand = demand, Pixels = pixels };
+        return new Shot { File = relative.Replace('\\', '/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels), PaintedCount = OptionMatrixPlan.ChangedPixels(pixels, camera), Quads = quads, Demand = demand, Pixels = pixels };
     }
     private static (int Frames, double Seconds) Timing(Stage stage) => stage switch
     {

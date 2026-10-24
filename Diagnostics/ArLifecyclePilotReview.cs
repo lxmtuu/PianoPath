@@ -38,7 +38,7 @@ internal static class ArLifecyclePilotReview
         internal required string File { get; init; }
         internal required string PixelSha256 { get; init; }
         internal required int Lit { get; init; }
-        internal required int Painted { get; init; }
+        internal required int PaintedCount { get; init; }
         internal required int Quads { get; init; }
         internal required int Demand { get; init; }
         internal byte[]? Pixels { get; set; }
@@ -79,7 +79,7 @@ internal static class ArLifecyclePilotReview
                 shots.Add(off);
                 sheet.Blit(col, captions[col], off.Pixels!, Width, Height, premultiplied:false);
                 var on = CaptureAr(root, renderer, pose, camera, Settings(isOff:false), m, "on");
-                if (on.Painted < MinimumOverlayPixels && m.Label != "T2 0.35s") throw new InvalidDataException($"impact.flash {m.Label} on painted {on.Painted} < {MinimumOverlayPixels}");
+                if (on.PaintedCount < MinimumOverlayPixels && m.Label != "T2 0.35s") throw new InvalidDataException($"impact.flash {m.Label} on painted {on.PaintedCount} < {MinimumOverlayPixels}");
                 shots.Add(on);
                 sheet.Blit(col+Columns, captions[col+Columns], on.Pixels!, Width, Height, premultiplied:false);
 
@@ -95,8 +95,8 @@ internal static class ArLifecyclePilotReview
                     if (on.Quads <= 0) throw new InvalidDataException($"impact.flash {m.Label} on drew no quads");
                 }
                 milestoneResults.Add((m, changed, on.Quads, on.Demand));
-                cells.Add(new Cell("impact.flash", m.Label, "ShowImpactFlash", "off", m.Seconds, "", off.File, off.PixelSha256, 0, off.Lit, off.Painted, off.Quads, off.Demand, "Reference", "Family off"));
-                cells.Add(new Cell("impact.flash", m.Label, "ImpactFlashStyle", "Plasma", m.Seconds, "Plasma", on.File, on.PixelSha256, changed, on.Lit, on.Painted, on.Quads, on.Demand, changed >= MinimumChangedPixels ? "moves" : "expired", changed >= MinimumChangedPixels ? "Plasma vs off" : "Plasma expired (flash 0.26s)"));
+                cells.Add(new Cell("impact.flash", m.Label, "ShowImpactFlash", "off", m.Seconds, "", off.File, off.PixelSha256, 0, off.Lit, off.PaintedCount, off.Quads, off.Demand, "Reference", "Family off"));
+                cells.Add(new Cell("impact.flash", m.Label, "ImpactFlashStyle", "Plasma", m.Seconds, "Plasma", on.File, on.PixelSha256, changed, on.Lit, on.PaintedCount, on.Quads, on.Demand, changed >= MinimumChangedPixels ? "moves" : "expired", changed >= MinimumChangedPixels ? "Plasma vs off" : "Plasma expired (flash 0.26s)"));
                 off.Pixels = null; on.Pixels = null;
             }
             var finished = sheet.Finish();
@@ -131,7 +131,7 @@ internal static class ArLifecyclePilotReview
         var quads = renderer.ArFlashCount;
         var relative = Path.Combine("ar-lifecycle-pilot", $"impact.flash-{m.Frames}f-{label}.png");
         var sha = ReviewPng.Write(Path.Combine(root, relative), pixels, Width, Height, $"impact.flash/{m.Label}/{label} pilot AR");
-        return new Shot { File = relative.Replace('\\','/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels), Painted = OptionMatrixPlan.ChangedPixels(pixels, camera), Quads = quads, Demand = demand, Pixels = pixels };
+        return new Shot { File = relative.Replace('\\','/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels), PaintedCount = OptionMatrixPlan.ChangedPixels(pixels, camera), Quads = quads, Demand = demand, Pixels = pixels };
     }
 
     private static (byte[] Pixels, int Demand) RenderAr(GpuStageRenderer renderer, HeldParticleControlPlan.View pose, byte[] camera, PianoVisualSettings settings, Milestone m)

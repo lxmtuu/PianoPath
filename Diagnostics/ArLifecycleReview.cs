@@ -100,7 +100,7 @@ internal static class ArLifecycleReview
         internal required string File { get; init; }
         internal required string PixelSha256 { get; init; }
         internal required int Lit { get; init; }
-        internal required int Painted { get; init; }
+        internal required int PaintedCount { get; init; }
         internal required int Quads { get; init; }
         internal required int Demand { get; init; }
         internal byte[]? Pixels { get; set; }
@@ -159,8 +159,8 @@ internal static class ArLifecycleReview
                         // For non-expired milestones, require alive
                         if (!isImpactT2 || family.Id != "impact.flash")
                         {
-                            if (on.Painted < MinimumOverlayPixels && !isLastMilestone)
-                                throw new InvalidDataException($"{family.Id} {milestone.Label} on painted {on.Painted} < {MinimumOverlayPixels}");
+                            if (on.PaintedCount < MinimumOverlayPixels && !isLastMilestone)
+                                throw new InvalidDataException($"{family.Id} {milestone.Label} on painted {on.PaintedCount} < {MinimumOverlayPixels}");
                             if (on.Quads <= 0 && !isLastMilestone && family.Id != "falling.pulse")
                             {
                                 // pulse has no own quads, witness is ArShapeCount; allow 0 quads for pulse but check changed
@@ -187,8 +187,8 @@ internal static class ArLifecycleReview
                         sheet.Blit(idxOff, captions[col*2], off.Pixels!, Width, Height, premultiplied: false);
                         sheet.Blit(idxOn, captions[col*2+1], on.Pixels!, Width, Height, premultiplied: false);
 
-                        cells.Add(new Cell(family.Id, stage, milestone.Label, "Show" + family.Id.Split('.')[1], "off", milestone.Seconds, "", off.File, off.PixelSha256, 0, off.Lit, off.Painted, off.Quads, off.Demand, "Reference", "off"));
-                        cells.Add(new Cell(family.Id, stage, milestone.Label, family.On.Name, "on", milestone.Seconds, family.On.Choice, on.File, on.PixelSha256, changed, on.Lit, on.Painted, on.Quads, on.Demand, isExpiredExpected ? "expired" : "moves", isExpiredExpected ? "expired (flash 0.26s)" : $"{family.Id} on vs off"));
+                        cells.Add(new Cell(family.Id, stage, milestone.Label, "Show" + family.Id.Split('.')[1], "off", milestone.Seconds, "", off.File, off.PixelSha256, 0, off.Lit, off.PaintedCount, off.Quads, off.Demand, "Reference", "off"));
+                        cells.Add(new Cell(family.Id, stage, milestone.Label, family.On.Name, "on", milestone.Seconds, family.On.Choice, on.File, on.PixelSha256, changed, on.Lit, on.PaintedCount, on.Quads, on.Demand, isExpiredExpected ? "expired" : "moves", isExpiredExpected ? "expired (flash 0.26s)" : $"{family.Id} on vs off"));
 
                         off.Pixels = null; on.Pixels = null;
                     }
@@ -301,7 +301,7 @@ internal static class ArLifecycleReview
         var quads = Probe(renderer, family.Id);
         var relative = Path.Combine("ar-lifecycle", $"{OptionMatrixPlan.Slug(family.Id)}-{m.Frames}f-{label}.png");
         var sha = ReviewPng.Write(Path.Combine(root, relative), pixels, Width, Height, $"{family.Id}/{m.Label}/{label} lifecycle AR");
-        return new Shot { File = relative.Replace('\\', '/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels), Painted = OptionMatrixPlan.ChangedPixels(pixels, camera), Quads = quads, Demand = demand, Pixels = pixels };
+        return new Shot { File = relative.Replace('\\', '/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels), PaintedCount = OptionMatrixPlan.ChangedPixels(pixels, camera), Quads = quads, Demand = demand, Pixels = pixels };
     }
 
     private static (int Frames, double Seconds) Timing(Stage stage) => stage switch
