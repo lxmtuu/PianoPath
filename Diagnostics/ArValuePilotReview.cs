@@ -12,9 +12,9 @@ namespace PianoPath;
 ///
 /// N17 shows each family at *one* far value (off vs far). To flip Unverified→Applied we need
 /// low/mid/high per percentage/choice setting, to see clamp/rounding that collapses two slider
-/// positions onto one picture. This pilot does that for the 3 capped-adjacent particle families
-/// only (wisps/sparks/flames), 4 captures per family: off, low, mid, far. Stage N17S is mirrored
-/// separately; this pilot is AR-only to keep CI small (≈12 frames vs 51).
+/// positions onto one picture. This pilot does that for 6 families (wisps/flames/sparks +
+/// hold.bar/breath + impact.wave), 4 captures per family: off, low, mid, far (24 frames).
+/// Stage N17S is mirrored separately; this pilot is AR-only to keep CI small (≈24 frames vs 51).
 /// </summary>
 internal static class ArValuePilotReview
 {
@@ -30,7 +30,7 @@ internal static class ArValuePilotReview
     private sealed record PilotFamily(string Id, Stage Stage, string SwitchName, EffectParameterKind SwitchKind, string SwitchOffValue,
         string ValueName, EffectParameterKind ValueKind, double[] Numbers, string[] Choices, string Unit);
 
-    // 3 families, 3 values each (low/mid/far) + off baseline = 4 captures per family = 12 total
+    // 6 families (pilot expanded after N17L success), 3 values each + off = 4 captures per family = 24 total
     private static readonly PilotFamily[] Driven =
     [
         new("particles.wisps", Stage.Held, "ShowWisps", EffectParameterKind.Boolean, "off",
@@ -39,6 +39,12 @@ internal static class ArValuePilotReview
             "FlameIntensity", EffectParameterKind.Percentage, [20, 60, 100], [], ""),
         new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
             "ParticleAmount", EffectParameterKind.Percentage, [20, 70, 120], [], ""),
+        new("hold.bar", Stage.Held, "ShowHoldBar", EffectParameterKind.Boolean, "off",
+            "HoldBarIntensity", EffectParameterKind.Percentage, [20, 60, 100], [], ""),
+        new("hold.breath", Stage.Held, "ShowHoldBreath", EffectParameterKind.Boolean, "off",
+            "HoldBreathRate", EffectParameterKind.Percentage, [20, 60, 100], [], ""),
+        new("impact.wave", Stage.Impact, "ShowImpactRings", EffectParameterKind.Boolean, "off",
+            "ImpactWaveIntensity", EffectParameterKind.Percentage, [20, 75, 150], [], ""),
     ];
 
     private sealed class Shot
@@ -172,6 +178,12 @@ internal static class ArValuePilotReview
             case "FlameIntensity": settings.FlameIntensity = setting.Number; break;
             case "ShowEmbers": settings.ShowEmbers = setting.Number >= 0.5; break;
             case "ParticleAmount": settings.ParticleAmount = setting.Number; break;
+            case "ShowHoldBar": settings.ShowHoldBar = setting.Number >= 0.5; break;
+            case "HoldBarIntensity": settings.HoldBarIntensity = setting.Number; break;
+            case "ShowHoldBreath": settings.ShowHoldBreath = setting.Number >= 0.5; break;
+            case "HoldBreathRate": settings.HoldBreathRate = setting.Number; break;
+            case "ShowImpactRings": settings.ShowImpactRings = setting.Number >= 0.5; break;
+            case "ImpactWaveIntensity": settings.ImpactWaveIntensity = setting.Number; break;
             default: throw new InvalidDataException($"pilot cannot drive {setting.Name}");
         }
     }
