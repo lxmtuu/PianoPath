@@ -1,6 +1,6 @@
 # Ma trận giá trị cho 17 family — kế hoạch đạt Applied
 
-> Trạng thái: **pilot 12 khung `N17V` (wisps 15/75/150, flames 20/60/100, sparks 20/70/120) đã gộp full suite `1d950ef`/`40112672015 success 1h2m` và giữ `e43f46a` xanh `1h2m` sau khi lùi; `6-family` thử `hold.bar/breath 20→40`, `hold.vibration/arc 30/50`, `impact.wave 40/50` đều `failure 9m Verification suite` do `off↔low <12 px` trên `ar-oblique` — tiêu chí “đẹp” bắt ghi rõ `unshot` và mỗi bước phải là ảnh riêng nên đã lùi để giữ **ổn định** (`40136883892 success 1h2m29s`). `N17L 78 khung` vẫn `b0639c2` trong full suite.**
+> Trạng thái 2026-10-25 14:00 VN: **pilot 12 khung `N17V` (wisps 15/75/150, flames 20/60/100, sparks 20/70/120) giữ `cc9fcf9` xanh `40184254811 success 1h3m1s` sau 11 lần thử `4-family` `hold/impact/beams/falling` low 20→70 trên `Held 0.4s/1.0s` `Impact 0.2s` `Approach 0.5s` đều `build failure 6–10m` do `off↔low <12 px` trên `ar-oblique` — tiêu chí “đẹp” bắt ghi rõ `unshot/pinned` và mỗi bước phải là ảnh riêng nên đã lùi để giữ **ổn định**. `N17L 78 khung` `b0639c2` vẫn trong full suite.**
 
 ## 1. Vì sao N17 chưa đủ
 
@@ -64,4 +64,4 @@ Không đợt nào tự lật binding. Lật cần **(1)+(2)+GPU thật+2 tier+c
 Ma trận giá trị không thay thế bench. Pilot 24 khung trên WARP không nói gì về p95 trên RTX. Bench `docs/AR-CAP-192-DECISION.md` §3 vẫn là cổng trước khi nâng trần — dù có ma trận hay không.
 
 ---
-*2026-10-25 00:10 VN: N17L 78 khung `b0639c2`/`40108956299 success 44m`, N17V 12 khung `e43f46a`/`40136883892 success 1h2m29s` đang active; 6-family `40121665775/40122046789/40134872000/40135812415` failure ở Verification suite do `hold` families `off↔low <12 px` (đã thử low 20→40→50, bar/breath/vibration/arc) — giữ ổn định, ghi rõ lý do lùi, chờ đo `off↔low` riêng cho `hold` trước khi mở lại; binding vẫn cần GPU thật + 2 tier + cậu duyệt.*
+*2026-10-25 14:00 VN: N17L 78 khung `b0639c2`/`40108956299 success 44m`, N17V 12 khung `cc9fcf9`/`40184254811 success 1h3m1s` đang active; `4-family` `401216/401338/401348/401358/401835/401890/401901/401914/402047/402058/402075/402099` failure `6–10m` ở `build` do `hold/impact/beams/falling.pulse` families `off↔low <12 px` trên `ar-oblique` (đã thử low 20→70, Held 0.4s/1.0s, Impact 0.2s, Approach 0.5s) — giữ ổn định 12 khung làm nền xanh, ghi rõ `unshot/pinned` theo tiêu chí đẹp, không gọi một cột là cả family; binding vẫn cần GPU thật + 2 tier + cậu duyệt. Pilot 12 khung đã đủ 4 cổng (500 px, quads>0, off↔low/mid/far ≥12) và manifest tất định.*
