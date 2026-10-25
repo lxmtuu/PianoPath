@@ -3284,8 +3284,8 @@ def main():
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")
     print("checked that the N17V value pilot borrows N17's witness table, drives handled settings, "
-          "pins its cell count, agrees with both READMEs and the plan, and still has its own "
-          "fail-fast CI step")
+          "keeps the off-vs-mid gate, pins its cell count, agrees with both READMEs and the plan, "
+          "and still has its own fail-fast CI step")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:

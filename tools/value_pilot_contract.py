@@ -6,7 +6,8 @@ Twelve attempts to widen the pilot failed with ``<family> low drew no quads`` be
 witness table that says which of the AR layer's counters belongs to which family; the pilots now
 delegate to it. This check is the guard that stops a local copy, a hard-coded counter, a stale
 ``Assert(cells == ...)``, an unhandled setting, a README/plan that still quotes the old frame
-count, or a workflow that drops the pilot's own fail-fast step from coming back.
+count, a workflow that drops the pilot's own fail-fast step, or a lost ``off↔mid`` gate (which
+would let a neutral slider value be captioned as a third picture) from coming back.
 
 Pure text in, list of problems out: no .NET, no Windows, no GPU. ``check_sources.py`` calls it on
 the real repository; ``tools/tests/test_value_pilot_contract.py`` calls it on synthetic files.
@@ -133,6 +134,9 @@ def check(files: dict) -> list:
     if "=> renderer.ArParticleFxCount;" in review:
         errors.append("Diagnostics/ArValuePilotReview.cs still returns the particle counter for every "
                       "family; a non-particle family would fail 'low drew no quads' without drawing less")
+    if "off↔mid" not in review:
+        errors.append("Diagnostics/ArValuePilotReview.cs no longer refuses a mid frame identical to off; "
+                      "a neutral slider value would be captioned as a third, independent picture")
     if '"hold.bar" => renderer.' in lifecycle:
         errors.append("Diagnostics/ArLifecycleReview.cs still keeps its own witness switch; "
                       "two tables is how they drift apart")

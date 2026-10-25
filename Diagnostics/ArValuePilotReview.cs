@@ -46,16 +46,19 @@ internal static class ArValuePilotReview
             "BeamIntensity", EffectParameterKind.Percentage, [30, 65, 100], [], ""),
         new("hold.bar", Stage.Held, "HoldBar", EffectParameterKind.Boolean, "off",
             "HoldBarIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+        // 60 is a neutral phase of the breathing animation in the 0.4 s Held scene: it paints exactly
+        // the same picture as the family being off, so the mid point moves to 75.
         new("hold.breath", Stage.Held, "HoldBreath", EffectParameterKind.Boolean, "off",
-            "HoldBreathRate", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+            "HoldBreathRate", EffectParameterKind.Percentage, [25, 75, 100], [], ""),
         new("hold.vibration", Stage.Held, "HoldVibration", EffectParameterKind.Boolean, "off",
             "HoldVibrationAmount", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
         new("hold.color-cycle", Stage.Held, "HoldColorCycle", EffectParameterKind.Boolean, "off",
             "HoldColorCycleSpeed", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
         new("hold.arc", Stage.Held, "HoldElectricArc", EffectParameterKind.Boolean, "off",
             "HoldArcIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+        // The pulse is at its zero crossing at 60 in the 0.5 s Approach scene, so 75 is the mid point.
         new("falling.pulse", Stage.Approach, "FallingPulse", EffectParameterKind.Boolean, "off",
-            "FallingPulseRate", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+            "FallingPulseRate", EffectParameterKind.Percentage, [25, 75, 100], [], ""),
         new("falling.shimmer", Stage.Approach, "NoteShimmer", EffectParameterKind.Boolean, "off",
             "NoteShimmerAmount", EffectParameterKind.Percentage, [50, 70, 100], [], ""),
         new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
@@ -122,6 +125,12 @@ internal static class ArValuePilotReview
                     sheet.Blit(col * Columns + 2, captions[col * Columns + 2], mid.Pixels!, Width, Height, premultiplied: false);
                     var lowVsMid = OptionMatrixPlan.ChangedPixels(low.Pixels!, mid.Pixels!);
                     if (lowVsMid < MinimumChangedPixels) throw new InvalidDataException($"{fam.Id} low↔mid {lowVsMid} < {MinimumChangedPixels}");
+                    // A setting can land on its own neutral phase (hold.breath and falling.pulse both do at
+                    // 60 in these scenes). Without this gate the mid frame is byte-identical to off yet is
+                    // captioned as a third value, which is exactly the "two values, one picture" the plan
+                    // forbids. Refuse the column instead of claiming coverage it does not have.
+                    var offVsMid = OptionMatrixPlan.ChangedPixels(off.Pixels!, mid.Pixels!);
+                    if (offVsMid < MinimumChangedPixels) throw new InvalidDataException($"{fam.Id} off↔mid {offVsMid} < {MinimumChangedPixels}");
 
                     var far = CaptureAr(root, renderer, pose, camera, Settings(fam, 2, isOff: false), fam, "far");
                     shots.Add(far);
@@ -133,7 +142,7 @@ internal static class ArValuePilotReview
 
                     cells.Add(new Cell(fam.Id, fam.Stage, fam.SwitchName, "off", 0, "", off.File, off.PixelSha256, 0, off.Lit, OptionMatrixPlan.ChangedPixels(off.Pixels!, camera), off.Quads, off.Demand, "Reference", "Family off"));
                     cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "low", fam.Numbers[0], "", low.File, low.PixelSha256, offVsLow, low.Lit, OptionMatrixPlan.ChangedPixels(low.Pixels!, camera), low.Quads, low.Demand, Read(offVsLow), $"Low {fam.Numbers[0]:0} vs off"));
-                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "mid", fam.Numbers[1], "", mid.File, mid.PixelSha256, OptionMatrixPlan.ChangedPixels(mid.Pixels!, off.Pixels!), mid.Lit, OptionMatrixPlan.ChangedPixels(mid.Pixels!, camera), mid.Quads, mid.Demand, Read(OptionMatrixPlan.ChangedPixels(mid.Pixels!, off.Pixels!)), $"Mid {fam.Numbers[1]:0} vs off"));
+                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "mid", fam.Numbers[1], "", mid.File, mid.PixelSha256, offVsMid, mid.Lit, OptionMatrixPlan.ChangedPixels(mid.Pixels!, camera), mid.Quads, mid.Demand, Read(offVsMid), $"Mid {fam.Numbers[1]:0} vs off"));
                     cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "far", fam.Numbers[2], "", far.File, far.PixelSha256, offVsFar, far.Lit, OptionMatrixPlan.ChangedPixels(far.Pixels!, camera), far.Quads, far.Demand, Read(offVsFar), $"Far {fam.Numbers[2]:0} vs off"));
 
                     off.Pixels = null; low.Pixels = null; mid.Pixels = null; far.Pixels = null;

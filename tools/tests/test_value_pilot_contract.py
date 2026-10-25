@@ -18,11 +18,11 @@ FAMILIES = [
     ("particles.flames", "ShowFlame", "FlameIntensity", "[20, 60, 100]", "ArParticleFxCount"),
     ("atmosphere.beams", "ShowLightBeams", "BeamIntensity", "[30, 65, 100]", "ArBeamCount"),
     ("hold.bar", "HoldBar", "HoldBarIntensity", "[25, 60, 100]", "ArLiveBarCount"),
-    ("hold.breath", "HoldBreath", "HoldBreathRate", "[25, 60, 100]", "ArLiveBarCount"),
+    ("hold.breath", "HoldBreath", "HoldBreathRate", "[25, 75, 100]", "ArLiveBarCount"),
     ("hold.vibration", "HoldVibration", "HoldVibrationAmount", "[25, 60, 100]", "ArLiveBarCount"),
     ("hold.color-cycle", "HoldColorCycle", "HoldColorCycleSpeed", "[25, 60, 100]", "ArLiveBarCount"),
     ("hold.arc", "HoldElectricArc", "HoldArcIntensity", "[25, 60, 100]", "ArHoldArcCount"),
-    ("falling.pulse", "FallingPulse", "FallingPulseRate", "[25, 60, 100]", "ArShapeCount"),
+    ("falling.pulse", "FallingPulse", "FallingPulseRate", "[25, 75, 100]", "ArShapeCount"),
     ("falling.shimmer", "NoteShimmer", "NoteShimmerAmount", "[50, 70, 100]", "ArNoteShimmerQuadCount"),
     ("particles.sparks", "ShowEmbers", "ParticleAmount", "[20, 70, 120]", "ArParticleFxCount"),
     ("impact.flash", "ShowImpactFlash", "ImpactFlashIntensity", "[25, 60, 100]", "ArFlashCount"),
@@ -58,6 +58,7 @@ internal static class ArValuePilotReview
     }}
 
     private static int Probe(GpuStageRenderer renderer, string family) => {v.DELEGATION};
+    private static void Gate(int offVsMid) {{ if (offVsMid < 12) throw new InvalidDataException("off↔mid collapsed"); }}
 }}
 """
     witness_rows = "\n".join(f'        "{fam}" => renderer.{counter},'
@@ -170,6 +171,11 @@ class ValuePilotContractTests(unittest.TestCase):
     def test_a_missing_readme_row_is_refused(self):
         problems = errors_with(readme_vi="| another switch | nothing here |")
         self.assertTrue(any("lost the --verify-ar-value-pilot-only row" in p for p in problems), problems)
+
+    def test_a_missing_off_vs_mid_gate_is_refused(self):
+        review = fixture()["review"].replace("off↔mid collapsed", "mid collapsed")
+        problems = errors_with(review=review)
+        self.assertTrue(any("no longer refuses a mid frame" in p for p in problems), problems)
 
     def test_a_missing_fail_fast_step_is_refused(self):
         workflow = fixture()["workflow"].replace("--verify-ar-value-pilot-only", "--verify-ar-effect-only")

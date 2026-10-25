@@ -7028,7 +7028,7 @@ internal static partial class VerificationSuite
     {
         var cells = ArValuePilotReview.Render(outputDirectory);
         Assert(cells == 48, "The AR value pilot must shoot twelve families at four rows each: off, low, mid, far.");
-        Results.Add($"PASS AR value pilot (N17V): {cells} setting frames through the calibrated AR overlay at the leaned pose on GPU-WARP (Held 0.4 s, Impact 0.2 s, Approach 0.5 s): off→low→mid→far per family (wisps 15/75/150, flames 20/60/100, beams 30/65/100, hold.bar/breath/vibration/color-cycle/arc 25/60/100, pulse 25/60/100, falling.shimmer 50/70/100, sparks 20/70/120, impact.flash 25/60/100). Each step moves pixels (≥12 px). Measured: {ArValuePilotReview.Summary}. Pilot for value-matrix coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-value-pilot")}.");
+        Results.Add($"PASS AR value pilot (N17V): {cells} setting frames through the calibrated AR overlay at the leaned pose on GPU-WARP (Held 0.4 s, Impact 0.2 s, Approach 0.5 s): off→low→mid→far per family (wisps 15/75/150, flames 20/60/100, beams 30/65/100, hold.bar/vibration/color-cycle/arc 25/60/100, hold.breath 25/75/100, pulse 25/75/100, falling.shimmer 50/70/100, sparks 20/70/120, impact.flash 25/60/100). Each step moves pixels (≥12 px), including off↔mid so a neutral slider value cannot be captioned as a third picture. Measured: {ArValuePilotReview.Summary}. Pilot for value-matrix coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-value-pilot")}.");
     }
 
     private static void VerifyArLifecyclePilot(string outputDirectory)
