@@ -12,9 +12,9 @@ namespace PianoPath;
 ///
 /// N17 shows each family at *one* far value (off vs far). To flip Unverified→Applied we need
 /// low/mid/high per percentage/choice setting, to see clamp/rounding that collapses two slider
-/// positions onto one picture. This pilot does that for 4 families (wisps/flames/sparks/shimmer),
-/// 4 captures per family: off, low, mid, far (16 frames). Stage N17S is mirrored
-/// separately; this pilot is AR-only to keep CI small (≈16 frames vs 51).
+/// positions onto one picture. This pilot does that for 5 families
+/// (wisps/flames/sparks/shimmer/beams), 4 captures per family: off, low, mid, far (20 frames).
+/// Stage N17S is mirrored separately; this pilot is AR-only to keep CI small (≈20 frames vs 51).
 /// </summary>
 internal static class ArValuePilotReview
 {
@@ -31,15 +31,18 @@ internal static class ArValuePilotReview
     private sealed record PilotFamily(string Id, Stage Stage, string SwitchName, EffectParameterKind SwitchKind, string SwitchOffValue,
         string ValueName, EffectParameterKind ValueKind, double[] Numbers, string[] Choices, string Unit);
 
-    // Four families: the three particle families plus falling.shimmer at Approach 0.5 s (50/70/100).
-    // The shimmer is not a particle, so its witness has to come from N17's shared Probe table; reading the
-    // particle counter here is what made the earlier 4-family attempts fail with "low drew no quads".
+    // Five families: the three particle families, falling.shimmer at Approach 0.5 s (50/70/100) and
+    // atmosphere.beams on the Held scene (30/65/100). The shimmer and the beams are not particles, so their
+    // witnesses have to come from N17's shared Probe table; reading the particle counter here is what made
+    // the earlier 4-family attempts fail with "low drew no quads".
     private static readonly PilotFamily[] Driven =
     [
         new("particles.wisps", Stage.Held, "ShowWisps", EffectParameterKind.Boolean, "off",
             "WispAmount", EffectParameterKind.Percentage, [15, 75, 150], [], ""),
         new("particles.flames", Stage.Held, "ShowFlame", EffectParameterKind.Boolean, "off",
             "FlameIntensity", EffectParameterKind.Percentage, [20, 60, 100], [], ""),
+        new("atmosphere.beams", Stage.Held, "ShowLightBeams", EffectParameterKind.Boolean, "off",
+            "BeamIntensity", EffectParameterKind.Percentage, [30, 65, 100], [], ""),
         new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
             "ParticleAmount", EffectParameterKind.Percentage, [20, 70, 120], [], ""),
         new("falling.shimmer", Stage.Approach, "NoteShimmer", EffectParameterKind.Boolean, "off",
@@ -173,6 +176,8 @@ internal static class ArValuePilotReview
             case "ParticleAmount": settings.ParticleAmount = setting.Number; break;
             case "NoteShimmer": settings.NoteShimmer = setting.Number >= 0.5; break;
             case "NoteShimmerAmount": settings.NoteShimmerAmount = setting.Number; break;
+            case "ShowLightBeams": settings.ShowLightBeams = setting.Number >= 0.5; break;
+            case "BeamIntensity": settings.BeamIntensity = setting.Number; break;
             default: throw new InvalidDataException($"pilot cannot drive {setting.Name}");
         }
     }

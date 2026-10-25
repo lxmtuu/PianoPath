@@ -2129,8 +2129,9 @@ def scan_ar_value_pilot_contract():
     Twelve attempts to widen the value pilot were reverted as "off↔low < 12 px" failures, but the
     CI annotations say eleven of them died on ``<family> low drew no quads``: the pilot asked the
     particle counter about a hold bar, a beam, a flash or a shimmer. This guard keeps the delegation,
-    the driven settings, the asserted cell count and both READMEs/plan in step, so the next family
-    added to the pilot cannot silently be measured by a counter that never saw it.
+    the driven settings, the asserted cell count, both READMEs/plan and the workflow's own fail-fast
+    step in step, so the next family added to the pilot cannot silently be measured by a counter that
+    never saw it — or wait an hour for the full suite to say so.
     """
     return value_pilot_contract.check(value_pilot_contract.collect())
 
@@ -3283,7 +3284,8 @@ def main():
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")
     print("checked that the N17V value pilot borrows N17's witness table, drives handled settings, "
-          "pins its cell count and agrees with both READMEs and the plan")
+          "pins its cell count, agrees with both READMEs and the plan, and still has its own "
+          "fail-fast CI step")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:

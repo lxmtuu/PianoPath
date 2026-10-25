@@ -5,8 +5,8 @@ Twelve attempts to widen the pilot failed with ``<family> low drew no quads`` be
 ``ArValuePilotReview.Probe`` returned the *particle* counter for every family. N17 already owns a
 witness table that says which of the AR layer's counters belongs to which family; the pilots now
 delegate to it. This check is the guard that stops a local copy, a hard-coded counter, a stale
-``Assert(cells == ...)``, an unhandled setting or a README/plan that still quotes the old frame
-count from coming back.
+``Assert(cells == ...)``, an unhandled setting, a README/plan that still quotes the old frame
+count, or a workflow that drops the pilot's own fail-fast step from coming back.
 
 Pure text in, list of problems out: no .NET, no Windows, no GPU. ``check_sources.py`` calls it on
 the real repository; ``tools/tests/test_value_pilot_contract.py`` calls it on synthetic files.
@@ -25,6 +25,7 @@ FILES = {
     "readme_vi": ROOT / "README.md",
     "readme_en": ROOT / "README.en.md",
     "plan": ROOT / "docs" / "AR-VALUE-MATRIX-PLAN.md",
+    "workflow": ROOT / ".github" / "workflows" / "build.yml",
 }
 
 DELEGATION = "ArEffectFamilyReview.Probe(renderer, family)"
@@ -173,6 +174,15 @@ def check(files: dict) -> list:
         if family not in plan:
             errors.append(f"docs/AR-VALUE-MATRIX-PLAN.md does not name '{family}'; the plan must "
                           "list the families its status line counts")
+
+    workflow = files["workflow"]
+    if "--verify-ar-value-pilot-only" not in workflow or "- name: AR value pilot (N17V)" not in workflow:
+        errors.append(".github/workflows/build.yml no longer runs --verify-ar-value-pilot-only as its own "
+                      "fail-fast step; a new family's pixel gate would only be checked an hour into the "
+                      "full suite")
+    if "-like 'PASS AR value pilot (N17V)*'" not in workflow:
+        errors.append(".github/workflows/build.yml no longer turns the N17V PASS line into a notice "
+                      "annotation; the measured per-family deltas would only exist in an artifact")
     return errors
 
 
@@ -193,7 +203,8 @@ def main() -> int:
             print("  " + error)
         return 1
     print("checked that the N17V pilot delegates its witness, drives handled settings, "
-          "pins its cell count and agrees with both READMEs and the plan")
+          "pins its cell count, agrees with both READMEs and the plan, and keeps its "
+          "fail-fast CI step")
     return 0
 
 

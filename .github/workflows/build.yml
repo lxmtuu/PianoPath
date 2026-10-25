@@ -412,6 +412,26 @@ jobs:
           } else { "::error title=N17 AR effect families::No verification log was written" }
           exit $proc.ExitCode
 
+      # N17V is the value pilot: every driven family at low/mid/high vs off. It runs on its own before
+      # the hour-long suite for the same reason N17 does — a pixel gate that closes when a new family
+      # joins should name itself in a minute, not be guessed from a truncated log an hour later. The
+      # PASS line is turned into a notice so the measured per-family deltas are readable in CI, and
+      # the step writes into the same review folder the full suite writes later, byte for byte.
+      - name: AR value pilot (N17V)
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'keyflow-ar-value-pilot.log'
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          New-Item -ItemType Directory -Force -Path $review | Out-Null
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList '--verify','--verify-ar-value-pilot-only',"--verify-review-out=$review","--verify-log=$log" -PassThru -Wait
+          if (Test-Path $log) {
+            Get-Content $log | ForEach-Object {
+              Write-Output $_
+              if ($_ -like 'FAIL*') { "::error title=N17V AR value pilot::$_" } elseif ($_ -like 'PASS AR value pilot (N17V)*') { "::notice title=N17V AR value pilot::$_" }
+            }
+          } else { "::error title=N17V AR value pilot::No verification log was written" }
+          exit $proc.ExitCode
+
       # Fail fast on functional/native/WPF regressions before expensive art-review recaptures.
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
