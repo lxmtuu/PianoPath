@@ -1,5 +1,9 @@
 name: build
 
+# 2026-10-25: the SDK feed started resolving the floating 10.0.x to a 10.0.403 whose
+# binary blobs answer HTTP 409 on the runners. Pin the last good patch from the official
+# 10.0 release metadata (latest-sdk 10.0.402, 2026-10-13) until that release is fixed.
+
 on:
   push:
     branches: ["main", "arena/**"]
@@ -78,7 +82,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
 
       - name: Run the portable test project
         run: >-
@@ -128,7 +132,7 @@ jobs:
           lfs: false
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
       - name: Publish private Windows integration build
         shell: pwsh
         run: |
@@ -159,7 +163,7 @@ jobs:
           lfs: false
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
       - name: Build key-light diagnostic
         run: dotnet build PianoPath.csproj --configuration Release
       - name: Native keyboard lamp response
@@ -233,7 +237,7 @@ jobs:
           lfs: false
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
       - name: Build ensemble diagnostic
         run: dotnet build PianoPath.csproj --configuration Release
       - name: Native mixed-scene checkpoints
@@ -306,7 +310,7 @@ jobs:
           lfs: false
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
       - name: Build AR budget diagnostic
         run: dotnet build PianoPath.csproj --configuration Release
       - name: Native mixed-scene checkpoints
@@ -381,7 +385,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
 
       - name: Restore
         run: dotnet restore PianoPath.csproj
