@@ -12,9 +12,9 @@ namespace PianoPath;
 ///
 /// N17 shows each family at *one* far value (off vs far). To flip Unverified→Applied we need
 /// low/mid/high per percentage/choice setting, to see clamp/rounding that collapses two slider
-/// positions onto one picture. This pilot does that for 3 families (wisps/flames/sparks),
-/// 4 captures per family: off, low, mid, far (12 frames). Stage N17S is mirrored
-/// separately; this pilot is AR-only to keep CI small (≈12 frames vs 51).
+/// positions onto one picture. This pilot does that for 4 families (wisps/flames/sparks/shimmer),
+/// 4 captures per family: off, low, mid, far (16 frames). Stage N17S is mirrored
+/// separately; this pilot is AR-only to keep CI small (≈16 frames vs 51).
 /// </summary>
 internal static class ArValuePilotReview
 {
@@ -31,7 +31,9 @@ internal static class ArValuePilotReview
     private sealed record PilotFamily(string Id, Stage Stage, string SwitchName, EffectParameterKind SwitchKind, string SwitchOffValue,
         string ValueName, EffectParameterKind ValueKind, double[] Numbers, string[] Choices, string Unit);
 
-    // 4 families — thử falling.shimmer Approach 0.5s với low 50 (thay 30) để đảm bảo off↔low ≥12 sau 11 lần fail low 20–45. +4 khung riêng.
+    // Four families: the three particle families plus falling.shimmer at Approach 0.5 s (50/70/100).
+    // The shimmer is not a particle, so its witness has to come from N17's shared Probe table; reading the
+    // particle counter here is what made the earlier 4-family attempts fail with "low drew no quads".
     private static readonly PilotFamily[] Driven =
     [
         new("particles.wisps", Stage.Held, "ShowWisps", EffectParameterKind.Boolean, "off",
@@ -233,7 +235,9 @@ internal static class ArValuePilotReview
         }
         finally { renderer.ObserveParticleStateForReview = null; }
     }
-    private static int Probe(GpuStageRenderer renderer, string family) => renderer.ArParticleFxCount;
+    // Delegate to N17's witness table instead of assuming every driven family is a particle family. A flat
+    // ArParticleFxCount reads zero for shimmer, beams, flashes and hold bars even when they drew quads.
+    private static int Probe(GpuStageRenderer renderer, string family) => ArEffectFamilyReview.Probe(renderer, family);
     private static string Read(int c) => c >= MinimumChangedPixels ? "moves" : "still";
     private static void VerifyShots(string root, IReadOnlyList<Shot> shots)
     {
@@ -252,7 +256,7 @@ internal static class ArValuePilotReview
     {
         File.WriteAllText(Path.Combine(root, "ar-value-pilot", "manifest.json"), JsonSerializer.Serialize(new
         {
-            schema = 1, status = "value-pilot-3-points-not-claimed", claim = "each particle family at 3 values vs off, same scene/timing/seed",
+            schema = 1, status = "value-pilot-3-points-not-claimed", claim = "each driven family at 3 values vs off, same scene/timing/seed",
             notClaimed = "art approval, every value, real camera, binding change",
             renderer = "GPU-WARP", adapter, width = Width, height = Height, seed = OptionMatrixPlan.Seed, pose = "ar-oblique",
             sheets = sheets.Select(r => new { r.File, r.Sha, r.Columns, r.Rows, cells = r.Cells.Select(c => new { c.Family, scene = c.Stage.ToString(), c.Parameter, c.Row, c.Value, c.Choice, c.File, c.PixelSha256, c.ArChanged, c.ArLit, c.ArPainted, c.Quads, c.Demand, Capped = c.Demand > c.Quads, c.Reading }) })

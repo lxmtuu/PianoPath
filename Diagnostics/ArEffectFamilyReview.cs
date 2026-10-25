@@ -640,8 +640,12 @@ internal static class ArEffectFamilyReview
     /// ride on the held bar's quad and the arc is a ribbon pass of its own; the pulse has no counter of its own because
     /// it multiplies the alpha of an existing note quad, so its witness is the note quad itself; a burst is a particle
     /// quad. A family the page does not know is a family nobody shot, so it throws instead of reporting zero.
+    ///
+    /// This is the AR reviews' single witness table: the lifecycle and value pilots delegate to it rather than
+    /// keeping a copy. A copied table is how a non-particle family ends up measured with the particle counter,
+    /// which reads zero and reports "drew no quads" for a family that drew perfectly well.
     /// </summary>
-    private static int Probe(GpuStageRenderer renderer, string family) => family switch
+    internal static int Probe(GpuStageRenderer renderer, string family) => family switch
     {
         "hold.bar" => renderer.ArLiveBarCount,
         "hold.breath" => renderer.ArLiveBarCount,

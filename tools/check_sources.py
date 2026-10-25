@@ -41,6 +41,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import value_pilot_contract  # noqa: E402  (same directory as this script)
+
 
 def _raw_string(text: str, i: int):
     """A C# raw string literal starts at ``i`` (three or more quotes, optionally after ``$`` signs) and runs
@@ -2120,6 +2123,18 @@ def scan_ar_effect_family_review():
     return errors
 
 
+def scan_ar_value_pilot_contract():
+    """N17V has to read its quads from N17's witness table, not from the particle counter.
+
+    Twelve attempts to widen the value pilot were reverted as "off↔low < 12 px" failures, but the
+    CI annotations say eleven of them died on ``<family> low drew no quads``: the pilot asked the
+    particle counter about a hold bar, a beam, a flash or a shimmer. This guard keeps the delegation,
+    the driven settings, the asserted cell count and both READMEs/plan in step, so the next family
+    added to the pilot cannot silently be measured by a counter that never saw it.
+    """
+    return value_pilot_contract.check(value_pilot_contract.collect())
+
+
 def scan_effect_channel_ownership():
     """An option must draw on its own, not behind another layer's switch.
 
@@ -3226,6 +3241,7 @@ def main():
     errors.extend(scan_refraction_contract())
     errors.extend(scan_ar_material_review())
     errors.extend(scan_ar_effect_family_review())
+    errors.extend(scan_ar_value_pilot_contract())
     errors.extend(scan_preset_roundtrip())
     errors.extend(scan_review_sheets())
     errors.extend(scan_previews_folder())
@@ -3266,6 +3282,8 @@ def main():
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")
+    print("checked that the N17V value pilot borrows N17's witness table, drives handled settings, "
+          "pins its cell count and agrees with both READMEs and the plan")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:

@@ -368,27 +368,9 @@ internal static class ArLifecycleReview
         new() { Pitch = ApproachPitch, Start = .9, Duration = .5, Velocity = 96, Track = 0 }
     ];
 
-    private static int Probe(GpuStageRenderer renderer, string family) => family switch
-    {
-        "hold.bar" => renderer.ArLiveBarCount,
-        "hold.breath" => renderer.ArLiveBarCount,
-        "hold.vibration" => renderer.ArLiveBarCount,
-        "hold.color-cycle" => renderer.ArLiveBarCount,
-        "hold.arc" => renderer.ArHoldArcCount,
-        "falling.pulse" => renderer.ArShapeCount,
-        "impact.burst" => renderer.ArParticleFxCount,
-        "particles.wisps" => renderer.ArParticleFxCount,
-        "particles.flames" => renderer.ArParticleFxCount,
-        "particles.sparks" => renderer.ArParticleFxCount,
-        "impact.wave" => renderer.ArPulseCount,
-        "impact.flash" => renderer.ArFlashCount,
-        "impact.morph" => renderer.ArParticleFxCount,
-        "release.fx" => renderer.ArReleaseEffectCount,
-        "atmosphere.beams" => renderer.ArBeamCount,
-        "falling.trail" => renderer.ArNoteTrailQuadCount,
-        "falling.shimmer" => renderer.ArNoteShimmerQuadCount,
-        _ => throw new InvalidDataException($"no witness for '{family}'"),
-    };
+    // N17 owns the witness table. Keeping a second copy here is how a family's counter drifts away from the
+    // family it is supposed to witness; delegate so both pilots and the 17-family page read the same counter.
+    private static int Probe(GpuStageRenderer renderer, string family) => ArEffectFamilyReview.Probe(renderer, family);
 
     private static void Apply(PianoVisualSettings settings, DrivenSetting setting)
     {
