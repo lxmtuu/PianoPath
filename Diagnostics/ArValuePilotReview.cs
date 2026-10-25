@@ -25,14 +25,13 @@ internal static class ArValuePilotReview
     private const int TileWidth = Width, TileHeight = Height;
     private static readonly int[] HeldKeys = [48, 72];
     private const int BurstPitch = 60;
+    private const int ApproachPitch = 60;
     private static readonly IReadOnlySet<int> NoPressed = new HashSet<int>();
-    private enum Stage { Held, Impact }
+    private enum Stage { Held, Impact, Approach }
     private sealed record PilotFamily(string Id, Stage Stage, string SwitchName, EffectParameterKind SwitchKind, string SwitchOffValue,
         string ValueName, EffectParameterKind ValueKind, double[] Numbers, string[] Choices, string Unit);
 
-    // 3 families — revert to 12 frames that passed CI 40112672015; 6-family expansion
-    // with hold.bar/breath (low 20 too subtle, off↔low <12) needs recalibration
-    // before merging. Keep stable.
+    // 4 families — thử falling.shimmer Approach 0.5s với low 50 (thay 30) để đảm bảo off↔low ≥12 sau 11 lần fail low 20–45. +4 khung riêng.
     private static readonly PilotFamily[] Driven =
     [
         new("particles.wisps", Stage.Held, "ShowWisps", EffectParameterKind.Boolean, "off",
@@ -41,6 +40,8 @@ internal static class ArValuePilotReview
             "FlameIntensity", EffectParameterKind.Percentage, [20, 60, 100], [], ""),
         new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
             "ParticleAmount", EffectParameterKind.Percentage, [20, 70, 120], [], ""),
+        new("falling.shimmer", Stage.Approach, "NoteShimmer", EffectParameterKind.Boolean, "off",
+            "NoteShimmerAmount", EffectParameterKind.Percentage, [50, 70, 100], [], ""),
     ];
 
     private sealed class Shot
@@ -85,13 +86,9 @@ internal static class ArValuePilotReview
                 for (var col = 0; col < page.Length; col++)
                 {
                     var fam = page[col];
-                    // rest baseline is product value (BaseSettings) but we use off vs low/mid/far; rest not needed for pilot
-                    // Capture off
                     var off = CaptureAr(root, renderer, pose, camera, Settings(fam, null, isOff: true), fam, "off");
                     shots.Add(off);
                     sheet.Blit(col * Columns, captions[col * Columns], off.Pixels!, Width, Height, premultiplied: false);
-                    // Need painted check on one of the on-frames, not off; do after first on capture
-                    // low
                     var low = CaptureAr(root, renderer, pose, camera, Settings(fam, 0, isOff: false), fam, "low");
                     if (OptionMatrixPlan.ChangedPixels(low.Pixels!, camera) < MinimumOverlayPixels) throw new InvalidDataException($"{fam.Id} low frame painted {OptionMatrixPlan.ChangedPixels(low.Pixels!, camera)} < {MinimumOverlayPixels}");
                     if (low.Quads <= 0) throw new InvalidDataException($"{fam.Id} low drew no quads");
@@ -114,7 +111,6 @@ internal static class ArValuePilotReview
                     var offVsFar = OptionMatrixPlan.ChangedPixels(off.Pixels!, far.Pixels!);
                     if (offVsFar < MinimumChangedPixels) throw new InvalidDataException($"{fam.Id} off↔far {offVsFar} < {MinimumChangedPixels}");
 
-                    // Cells: off is reference, low/mid/far compare to off for readability
                     cells.Add(new Cell(fam.Id, fam.Stage, fam.SwitchName, "off", 0, "", off.File, off.PixelSha256, 0, off.Lit, OptionMatrixPlan.ChangedPixels(off.Pixels!, camera), off.Quads, off.Demand, "Reference", "Family off"));
                     cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "low", fam.Numbers[0], "", low.File, low.PixelSha256, offVsLow, low.Lit, OptionMatrixPlan.ChangedPixels(low.Pixels!, camera), low.Quads, low.Demand, Read(offVsLow), $"Low {fam.Numbers[0]:0} vs off"));
                     cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "mid", fam.Numbers[1], "", mid.File, mid.PixelSha256, OptionMatrixPlan.ChangedPixels(mid.Pixels!, off.Pixels!), mid.Lit, OptionMatrixPlan.ChangedPixels(mid.Pixels!, camera), mid.Quads, mid.Demand, Read(OptionMatrixPlan.ChangedPixels(mid.Pixels!, off.Pixels!)), $"Mid {fam.Numbers[1]:0} vs off"));
@@ -149,7 +145,6 @@ internal static class ArValuePilotReview
     private static PianoVisualSettings Settings(PilotFamily fam, int? valueIndex, bool isOff)
     {
         var s = OptionMatrixReview.BaseSettings();
-        // switch
         if (fam.SwitchKind == EffectParameterKind.Boolean)
         {
             Apply(s, new DrivenSetting(fam.SwitchName, EffectParameterKind.Boolean, isOff ? 0 : 1, ""));
@@ -174,6 +169,8 @@ internal static class ArValuePilotReview
             case "FlameIntensity": settings.FlameIntensity = setting.Number; break;
             case "ShowEmbers": settings.ShowEmbers = setting.Number >= 0.5; break;
             case "ParticleAmount": settings.ParticleAmount = setting.Number; break;
+            case "NoteShimmer": settings.NoteShimmer = setting.Number >= 0.5; break;
+            case "NoteShimmerAmount": settings.NoteShimmerAmount = setting.Number; break;
             default: throw new InvalidDataException($"pilot cannot drive {setting.Name}");
         }
     }
@@ -189,8 +186,10 @@ internal static class ArValuePilotReview
     {
         Stage.Held => (12, 1.0 / 30),
         Stage.Impact => (12, 1.0 / 60),
+        Stage.Approach => (30, 1.0 / 60),
         _ => throw new ArgumentOutOfRangeException(nameof(stage)),
     };
+    private static readonly NoteEvent[] ApproachNotes = [new() { Pitch = ApproachPitch, Start = .9, Duration = .5, Velocity = 96, Track = 0 }];
     private static (byte[] Pixels, int Demand) RenderAr(GpuStageRenderer renderer, HeldParticleControlPlan.View pose, byte[] camera, PianoVisualSettings settings, Stage stage)
     {
         var piano = new PianoStage { Width = Width, Height = Height };
@@ -207,10 +206,19 @@ internal static class ArValuePilotReview
         feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1);
         feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1, KeyLight: .6f, Quality: ArQualityTier.Ultra, ProjectedNotes: true, ShowLiveTrails: stage == Stage.Held, ShowDamperStrip: false, ShowRisingMidiNotes: false);
         var (frames, dt) = Timing(stage);
-        var pressed = stage == Stage.Held ? new HashSet<int>(HeldKeys) : NoPressed;
+        var position = frames * dt;
+        if (stage == Stage.Approach && ApproachNotes.Any(n => n.Start <= position))
+            throw new InvalidDataException($"Approach note starts {ApproachNotes[0].Start}s but capture at {position}s would be sounding");
+        var notes = stage == Stage.Approach ? ApproachNotes : Array.Empty<NoteEvent>();
+        var playing = stage == Stage.Approach;
+        var pressed = stage switch
+        {
+            Stage.Held => new HashSet<int>(HeldKeys),
+            _ => NoPressed,
+        };
         void BeforeFrame(int frame)
         {
-            feed.SetDeterministicState([], (frame + 1) * dt, false, pressed);
+            feed.SetDeterministicState(notes, (frame + 1) * dt, playing, pressed);
             feed.SetDeterministicBeatPulse(0);
             if (frame != 0) return;
             if (stage == Stage.Held) foreach (var p in HeldKeys) feed.LiveNote(p, true, .9);
