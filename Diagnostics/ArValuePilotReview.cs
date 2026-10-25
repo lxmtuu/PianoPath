@@ -12,9 +12,9 @@ namespace PianoPath;
 ///
 /// N17 shows each family at *one* far value (off vs far). To flip Unverified→Applied we need
 /// low/mid/high per percentage/choice setting, to see clamp/rounding that collapses two slider
-/// positions onto one picture. This pilot does that for 5 families
-/// (wisps/flames/sparks/shimmer/beams), 4 captures per family: off, low, mid, far (20 frames).
-/// Stage N17S is mirrored separately; this pilot is AR-only to keep CI small (≈20 frames vs 51).
+/// positions onto one picture. This pilot does that for 12 families (five hold families, the three
+/// particle families, beams, shimmer, pulse and flash), 4 captures per family: off, low, mid, far
+/// (48 frames). Stage N17S is mirrored separately; this pilot is AR-only (≈48 frames vs 51 for N17).
 /// </summary>
 internal static class ArValuePilotReview
 {
@@ -31,10 +31,11 @@ internal static class ArValuePilotReview
     private sealed record PilotFamily(string Id, Stage Stage, string SwitchName, EffectParameterKind SwitchKind, string SwitchOffValue,
         string ValueName, EffectParameterKind ValueKind, double[] Numbers, string[] Choices, string Unit);
 
-    // Five families: the three particle families, falling.shimmer at Approach 0.5 s (50/70/100) and
-    // atmosphere.beams on the Held scene (30/65/100). The shimmer and the beams are not particles, so their
-    // witnesses have to come from N17's shared Probe table; reading the particle counter here is what made
-    // the earlier 4-family attempts fail with "low drew no quads".
+    // Twelve families. Every row is one boolean switch plus one percentage, shot off/low/mid/far in the
+    // scene its lifecycle needs (Held for the hold families and beams, Impact for sparks and flash,
+    // Approach for shimmer and pulse). Non-particle families read N17's shared Probe table: a flat
+    // ArParticleFxCount reports zero quads for a bar, an arc, a beam, a shape or a flash and is what
+    // made the earlier widening attempts fail with "low drew no quads".
     private static readonly PilotFamily[] Driven =
     [
         new("particles.wisps", Stage.Held, "ShowWisps", EffectParameterKind.Boolean, "off",
@@ -43,10 +44,24 @@ internal static class ArValuePilotReview
             "FlameIntensity", EffectParameterKind.Percentage, [20, 60, 100], [], ""),
         new("atmosphere.beams", Stage.Held, "ShowLightBeams", EffectParameterKind.Boolean, "off",
             "BeamIntensity", EffectParameterKind.Percentage, [30, 65, 100], [], ""),
-        new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
-            "ParticleAmount", EffectParameterKind.Percentage, [20, 70, 120], [], ""),
+        new("hold.bar", Stage.Held, "HoldBar", EffectParameterKind.Boolean, "off",
+            "HoldBarIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+        new("hold.breath", Stage.Held, "HoldBreath", EffectParameterKind.Boolean, "off",
+            "HoldBreathRate", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+        new("hold.vibration", Stage.Held, "HoldVibration", EffectParameterKind.Boolean, "off",
+            "HoldVibrationAmount", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+        new("hold.color-cycle", Stage.Held, "HoldColorCycle", EffectParameterKind.Boolean, "off",
+            "HoldColorCycleSpeed", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+        new("hold.arc", Stage.Held, "HoldElectricArc", EffectParameterKind.Boolean, "off",
+            "HoldArcIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+        new("falling.pulse", Stage.Approach, "FallingPulse", EffectParameterKind.Boolean, "off",
+            "FallingPulseRate", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
         new("falling.shimmer", Stage.Approach, "NoteShimmer", EffectParameterKind.Boolean, "off",
             "NoteShimmerAmount", EffectParameterKind.Percentage, [50, 70, 100], [], ""),
+        new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
+            "ParticleAmount", EffectParameterKind.Percentage, [20, 70, 120], [], ""),
+        new("impact.flash", Stage.Impact, "ShowImpactFlash", EffectParameterKind.Boolean, "off",
+            "ImpactFlashIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
     ];
 
     private sealed class Shot
@@ -178,6 +193,20 @@ internal static class ArValuePilotReview
             case "NoteShimmerAmount": settings.NoteShimmerAmount = setting.Number; break;
             case "ShowLightBeams": settings.ShowLightBeams = setting.Number >= 0.5; break;
             case "BeamIntensity": settings.BeamIntensity = setting.Number; break;
+            case "HoldBar": settings.HoldBar = setting.Number >= 0.5; break;
+            case "HoldBarIntensity": settings.HoldBarIntensity = setting.Number; break;
+            case "HoldBreath": settings.HoldBreath = setting.Number >= 0.5; break;
+            case "HoldBreathRate": settings.HoldBreathRate = setting.Number; break;
+            case "HoldVibration": settings.HoldVibration = setting.Number >= 0.5; break;
+            case "HoldVibrationAmount": settings.HoldVibrationAmount = setting.Number; break;
+            case "HoldColorCycle": settings.HoldColorCycle = setting.Number >= 0.5; break;
+            case "HoldColorCycleSpeed": settings.HoldColorCycleSpeed = setting.Number; break;
+            case "HoldElectricArc": settings.HoldElectricArc = setting.Number >= 0.5; break;
+            case "HoldArcIntensity": settings.HoldArcIntensity = setting.Number; break;
+            case "FallingPulse": settings.FallingPulse = setting.Number >= 0.5; break;
+            case "FallingPulseRate": settings.FallingPulseRate = setting.Number; break;
+            case "ShowImpactFlash": settings.ShowImpactFlash = setting.Number >= 0.5; break;
+            case "ImpactFlashIntensity": settings.ImpactFlashIntensity = setting.Number; break;
             default: throw new InvalidDataException($"pilot cannot drive {setting.Name}");
         }
     }
