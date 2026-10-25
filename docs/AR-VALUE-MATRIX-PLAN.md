@@ -1,6 +1,6 @@
 # Ma trận giá trị cho 17 family — kế hoạch đạt Applied
 
-> Trạng thái: **pilot đã code (N17V 12 khung AR, 2 tờ Held/Impact) — `Diagnostics/ArValuePilotReview.cs` 3 family × off/low/mid/far, cổng ≥12 px đôi một, `N17L 78 khung` đã gộp vào full suite `b0639c2`**. Ma trận vòng đời (§11.3.2) đã xong, còn ma trận giá trị full 17 family (§11.3.1) chờ pilot xanh + bench.
+> Trạng thái: **pilot 12 khung `N17V` (wisps 15/75/150, flames 20/60/100, sparks 20/70/120) đã gộp full suite `1d950ef`/`40112672015 success 1h2m` và giữ `e43f46a` xanh `1h2m` sau khi lùi; `6-family` thử `hold.bar/breath 20→40`, `hold.vibration/arc 30/50`, `impact.wave 40/50` đều `failure 9m Verification suite` do `off↔low <12 px` trên `ar-oblique` — tiêu chí “đẹp” bắt ghi rõ `unshot` và mỗi bước phải là ảnh riêng nên đã lùi để giữ **ổn định** (`40136883892 success 1h2m29s`). `N17L 78 khung` vẫn `b0639c2` trong full suite.**
 
 ## 1. Vì sao N17 chưa đủ
 
@@ -64,4 +64,4 @@ Không đợt nào tự lật binding. Lật cần **(1)+(2)+GPU thật+2 tier+c
 Ma trận giá trị không thay thế bench. Pilot 24 khung trên WARP không nói gì về p95 trên RTX. Bench `docs/AR-CAP-192-DECISION.md` §3 vẫn là cổng trước khi nâng trần — dù có ma trận hay không.
 
 ---
-*2026-10-24 22:50 VN: N17L 78 khung (Held/Approach/Impact/Release) đã gộp vào full suite sau `a0e2599`/`40104690364` success; N17V pilot 12 khung đã code, isolated PASS, sẽ gộp vào full suite sau khi CI bench qua — binding vẫn cần GPU thật + 2 tier + cậu duyệt.*
+*2026-10-25 00:10 VN: N17L 78 khung `b0639c2`/`40108956299 success 44m`, N17V 12 khung `e43f46a`/`40136883892 success 1h2m29s` đang active; 6-family `40121665775/40122046789/40134872000/40135812415` failure ở Verification suite do `hold` families `off↔low <12 px` (đã thử low 20→40→50, bar/breath/vibration/arc) — giữ ổn định, ghi rõ lý do lùi, chờ đo `off↔low` riêng cho `hold` trước khi mở lại; binding vẫn cần GPU thật + 2 tier + cậu duyệt.*
