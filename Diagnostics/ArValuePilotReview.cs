@@ -12,10 +12,12 @@ namespace PianoPath;
 ///
 /// N17 shows each family at *one* far value (off vs far). To flip Unverified→Applied we need
 /// low/mid/high per percentage/choice setting, to see clamp/rounding that collapses two slider
-/// positions onto one picture. This pilot does that for all 17 AR families, 4 captures each: off,
-/// low, mid, far (68 frames). Twelve families drive a percentage; five drive the choice that is
-/// their own switch (falling.trail, impact.wave, impact.morph, release.fx) or their own style
-/// (impact.burst). Stage N17S is mirrored separately; this pilot is AR-only.
+/// positions onto one picture. This pilot shoots 19 columns over all 17 AR families, 4 captures
+/// each: off, low, mid, far (76 frames). A family with more than one declared setting gets one
+/// column per setting; every setting the column does not shoot is recorded as pinned (a value the
+/// scene must hold) or unshot (a percentage never moved), read from EffectContractCatalog rather
+/// than copied, so a column can never be called the whole family. Stage N17S is mirrored
+/// separately; this pilot is AR-only.
 /// </summary>
 internal static class ArValuePilotReview
 {
@@ -83,10 +85,19 @@ internal static class ArValuePilotReview
         // to stay on for that column; it is a pin, not a second thing being driven.
         new("falling.trail", Stage.Approach, "FallingTrail", EffectParameterKind.Choice, "None",
             "FallingTrailLength", EffectParameterKind.Percentage, [25, 60, 100], [], "", "Glow"),
+        // Round C: a second column for the same family, driving a different declared setting. This is
+        // the shape §11.3.1 asks for — one setting per column, three values each — and the manifest
+        // names the remaining settings as pinned/unshot instead of calling one column the family.
+        new("falling.trail", Stage.Approach, "FallingTrail", EffectParameterKind.Choice, "None",
+            "FallingTrail", EffectParameterKind.Choice, [], ["Glow", "Blur", "Ribbon"], "", "Glow"),
         new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
             "ParticleAmount", EffectParameterKind.Percentage, [20, 70, 120], [], ""),
         new("impact.flash", Stage.Impact, "ShowImpactFlash", EffectParameterKind.Boolean, "off",
             "ImpactFlashIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+        // N17 measured Plasma at 82127 px; all three declared flash styles draw very different
+        // pictures, so the style is a second, independent axis for this family.
+        new("impact.flash", Stage.Impact, "ShowImpactFlash", EffectParameterKind.Boolean, "off",
+            "ImpactFlashStyle", EffectParameterKind.Choice, [], ["Flash", "Lightning", "Plasma"], ""),
         new("impact.burst", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
             "ImpactBurst", EffectParameterKind.Choice, [], ["Embers", "Fireworks", "Dust"], ""),
         // These three draw only tens of pixels in N17, so the column drives the choice itself at three
@@ -202,7 +213,10 @@ internal static class ArValuePilotReview
             VerifyShots(root, shots);
             Summary = string.Join("; ", Driven.Select(f =>
             {
-                var cs = reports.SelectMany(r => r.Cells).Where(c => c.Family == f.Id).ToArray();
+                // Match the column, not just the family: two columns of one family would otherwise
+                // both quote the first column's numbers.
+                var cs = reports.SelectMany(r => r.Cells)
+                    .Where(c => c.Family == f.Id && c.Parameter == f.ValueName).ToArray();
                 var low = cs.First(c => c.Row == "low");
                 var mid = cs.First(c => c.Row == "mid");
                 var far = cs.First(c => c.Row == "far");
@@ -275,6 +289,7 @@ internal static class ArValuePilotReview
             case "ImpactWave": settings.ImpactWave = setting.Choice; break;
             case "ImpactMorph": settings.ImpactMorph = setting.Choice; break;
             case "ReleaseEffect": settings.ReleaseEffect = setting.Choice; break;
+            case "ImpactFlashStyle": settings.ImpactFlashStyle = setting.Choice; break;
             default: throw new InvalidDataException($"pilot cannot drive {setting.Name}");
         }
     }
@@ -282,7 +297,9 @@ internal static class ArValuePilotReview
     {
         var (pixels, demand) = RenderAr(renderer, pose, camera, settings, fam.Stage);
         var quads = Probe(renderer, fam.Id);
-        var relative = Path.Combine("ar-value-pilot", OptionMatrixPlan.Slug(fam.Id), $"{label}.png");
+        // A family can own more than one column (one per declared setting), so the folder has to
+        // carry the setting too or the second column would overwrite the first column's pictures.
+        var relative = Path.Combine("ar-value-pilot", OptionMatrixPlan.Slug($"{fam.Id}-{fam.ValueName}"), $"{label}.png");
         var sha = ReviewPng.Write(Path.Combine(root, relative), pixels, Width, Height, $"{fam.Id}/{label} pilot AR");
         return new Shot { File = relative.Replace('\\', '/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels), Quads = quads, Demand = demand, Pixels = pixels };
     }
@@ -367,13 +384,46 @@ internal static class ArValuePilotReview
             if (!string.Equals(sha, s.PixelSha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException($"hash {s.File}");
         }
     }
+    /// <summary>
+    /// What each column did <em>not</em> shoot, read from the same contract catalogue the product uses.
+    /// A percentage the column never moves is unshot; a boolean or another choice is pinned to the
+    /// neutral look (or to a declared pin) so the scene is valid. Without this block a reader could
+    /// mistake one driven setting for the whole family — the exact over-claim §11.3/§5 forbids.
+    /// </summary>
+    private sealed record CoverageRow(string Family, string Column, string[] Declared, string[] Driven,
+        string[] Pinned, string[] Unshot, string PinnedTo);
+
+    private static CoverageRow[] Coverage()
+    {
+        var all = EffectContractCatalog.AllFamilies;
+        return Driven.Select(fam =>
+        {
+            var contract = all.Single(candidate => candidate.Id == fam.Id);
+            var driven = new HashSet<string>(StringComparer.Ordinal) { fam.SwitchName, fam.ValueName };
+            var parameters = contract.Parameters.Select(parameter => parameter.SettingName).ToArray();
+            var unknown = driven.Where(name => !parameters.Contains(name)).ToArray();
+            if (unknown.Length > 0)
+                throw new InvalidDataException($"{fam.Id}/{fam.ValueName} drives {string.Join(", ", unknown)} "
+                    + "which the effect contract does not declare");
+            return new CoverageRow(fam.Id, fam.ValueName, parameters, driven.ToArray(),
+                parameters.Where(name => !driven.Contains(name)
+                        && contract.Parameters.Any(p => p.SettingName == name && p.Kind != EffectParameterKind.Percentage))
+                    .Concat(fam.Pins ?? Array.Empty<string>()).Distinct().ToArray(),
+                parameters.Where(name => !driven.Contains(name)
+                        && contract.Parameters.Any(p => p.SettingName == name && p.Kind == EffectParameterKind.Percentage))
+                    .ToArray(),
+                "OptionMatrixReview.BaseSettings() neutral look, plus the column's declared pins");
+        }).ToArray();
+    }
+
     private static void WriteManifest(string root, string adapter, IReadOnlyList<SheetReport> sheets, int total)
     {
         File.WriteAllText(Path.Combine(root, "ar-value-pilot", "manifest.json"), JsonSerializer.Serialize(new
         {
-            schema = 1, status = "value-pilot-3-points-not-claimed", claim = "each driven family at 3 values vs off, same scene/timing/seed",
-            notClaimed = "art approval, every value, real camera, binding change",
+            schema = 2, status = "value-pilot-3-points-not-claimed", claim = "each driven setting at 3 values vs off, same scene/timing/seed; one setting per column",
+            notClaimed = "art approval, every value, real camera, binding change, every setting of every family",
             renderer = "GPU-WARP", adapter, width = Width, height = Height, seed = OptionMatrixPlan.Seed, pose = "ar-oblique",
+            coverage = Coverage().Select(c => new { c.Family, c.Column, c.Declared, c.Driven, c.Pinned, c.Unshot, c.PinnedTo }).ToArray(),
             sheets = sheets.Select(r => new { r.File, r.Sha, r.Columns, r.Rows, cells = r.Cells.Select(c => new { c.Family, scene = c.Stage.ToString(), c.Parameter, c.Row, c.Value, c.Choice, c.File, c.PixelSha256, c.ArChanged, c.ArLit, c.ArPainted, c.Quads, c.Demand, Capped = c.Demand > c.Quads, c.Reading }) })
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
@@ -383,6 +433,15 @@ internal static class ArValuePilotReview
         var b = new StringBuilder();
         b.Append("<!doctype html><meta charset=utf-8><title>Value Pilot</title><style>body{font:14px system-ui;background:#10141b;color:#e1e9f3;max-width:1400px;margin:24px;padding:16px}table{border-collapse:collapse}th,td{border:1px solid #263243;padding:4px 8px}</style><h1>AR value pilot — 3 điểm / setting</h1><p>Same pose/camera/seed, WARP, 4 cột off→low→mid→far. Máy: " + E(adapter) + "</p>");
         foreach (var r in sheets) { b.Append($"<h2>{E(r.File)}</h2><table><tr><th>Family</th><th>Row</th><th>Value</th><th>AR px vs off</th><th>Quads</th><th>Demand/Quads</th></tr>"); foreach (var c in r.Cells) b.Append($"<tr><td>{E(c.Family)}</td><td>{E(c.Row)}</td><td>{E(c.Choice.Length > 0 ? c.Choice : c.Value.ToString("0"))}</td><td>{c.ArChanged:N0}</td><td>{c.Quads:N0}</td><td>{c.Demand:N0}/{c.Quads:N0}</td></tr>"); b.Append("</table>"); b.Append($"<img src={E(Path.GetFileName(r.File))} style=max-width:100%><br>"); }
+        b.Append("<h2>Coverage: what each column did not shoot</h2><p>One column drives one declared setting; "
+            + "the rest are pinned to the neutral look or named as unshot. Read from EffectContractCatalog, "
+            + "not copied here, so a setting added to the contract cannot be silently dropped.</p>"
+            + "<table><tr><th>Family</th><th>Column</th><th>Driven</th><th>Pinned</th><th>Unshot</th></tr>");
+        foreach (var c in Coverage())
+            b.Append($"<tr><td>{E(c.Family)}</td><td>{E(c.Column)}</td>"
+                + $"<td>{E(string.Join(", ", c.Driven))}</td><td>{E(string.Join(", ", c.Pinned))}</td>"
+                + $"<td>{E(string.Join(", ", c.Unshot))}</td></tr>");
+        b.Append("</table>");
         File.WriteAllText(Path.Combine(root, "ar-value-pilot", "index.html"), b.ToString());
     }
 }

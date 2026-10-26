@@ -3285,6 +3285,7 @@ def main():
           "publishes them, and the guards that keep a release run out of main of the source repository")
     print("checked that the N17V value pilot borrows N17's witness table, drives handled settings, "
           "keeps the off-vs-mid gate, keeps the choice switches, release scene and wave pin, "
+          "declares pinned/unshot coverage from the contract catalogue, "
           "pins its cell count, agrees with both READMEs and the plan, "
           "and still has its own fail-fast CI step")
     if errors:

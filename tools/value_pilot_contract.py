@@ -8,7 +8,8 @@ delegate to it. This check is the guard that stops a local copy, a hard-coded co
 ``Assert(cells == ...)``, an unhandled setting, a README/plan that still quotes the old frame
 count, a workflow that drops the pilot's own fail-fast step, a lost ``off↔mid`` gate (which
 would let a neutral slider value be captioned as a third picture), a choice switch with the wrong
-off value, or a release scene that no longer lifts the key from coming back.
+off value, a release scene that no longer lifts the key, a repeated (family, setting) column, or
+a coverage block that stops naming the settings each column did not shoot, from coming back.
 
 Pure text in, list of problems out: no .NET, no Windows, no GPU. ``check_sources.py`` calls it on
 the real repository; ``tools/tests/test_value_pilot_contract.py`` calls it on synthetic files.
@@ -117,9 +118,13 @@ def check(files: dict) -> list:
         return errors + ["Diagnostics/ArValuePilotReview.cs no longer declares a Driven family table; "
                          "the value pilot would shoot nothing while the suite still asserts a cell count"]
     ids = [row[0] for row in driven]
-    if len(set(ids)) != len(ids):
-        errors.append(f"Diagnostics/ArValuePilotReview.cs drives a family twice: {ids}; "
-                      "one family one column is the whole point of the page")
+    # Round C: one column drives ONE setting, so a family may legitimately own several columns.
+    # What may not repeat is the (family, setting) pair: that would overwrite the first column's
+    # pictures and let one setting be captioned twice as two independent pieces of evidence.
+    columns = [(row[0], row[2]) for row in driven]
+    if len(set(columns)) != len(columns):
+        errors.append(f"Diagnostics/ArValuePilotReview.cs drives a (family, setting) twice: {columns}; "
+                      "the second column would overwrite the first one's pictures")
 
     if "internal static int Probe" not in witness:
         errors.append("Diagnostics/ArEffectFamilyReview.cs no longer exposes an internal Probe; "
@@ -174,6 +179,23 @@ def check(files: dict) -> list:
     if "ShowImpactRings" not in review:
         errors.append("Diagnostics/ArValuePilotReview.cs no longer pins ShowImpactRings for "
                       "impact.wave; the wave rides on the ring pass and would emit no quads")
+
+    # Round C: a column that shoots one of a family's declared settings must say what it did NOT
+    # shoot. Reading the contract catalogue (rather than a copied list) is the only way a new
+    # setting cannot silently disappear from the coverage statement.
+    for token, message in (
+        ("EffectContractCatalog.AllFamilies", "no longer reads the effect contract catalogue; "
+         "unshot settings would be a hand-written list that drifts from the product"),
+        ("Unshot", "no longer records unshot percentages; a column shooting one setting could "
+         "be mistaken for the whole family"),
+        ("Pinned", "no longer records pinned settings; the reader cannot tell which values the "
+         "scene had to hold"),
+        ("coverage = Coverage()", "no longer writes the coverage block into manifest.json"),
+        ("-{fam.ValueName}", "no longer keys each column's capture folder by its driven setting; "
+         "two columns of one family would overwrite each other's pictures"),
+    ):
+        if token not in review:
+            errors.append("Diagnostics/ArValuePilotReview.cs " + message)
 
     applied = set(CASES.findall(review))
     for family, switch, value in driven:
@@ -241,8 +263,9 @@ def main() -> int:
             print("  " + error)
         return 1
     print("checked that the N17V pilot delegates its witness, drives handled settings, "
-          "pins its cell count, agrees with both READMEs and the plan, and keeps its "
-          "fail-fast CI step")
+          "declares pinned/unshot coverage from the contract catalogue, scopes each column's "
+          "captures to its setting, pins its cell count, agrees with both READMEs and the plan, "
+          "and keeps its fail-fast CI step")
     return 0
 
 

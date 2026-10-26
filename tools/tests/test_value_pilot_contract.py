@@ -34,10 +34,13 @@ FAMILIES = [
     ("impact.wave", "Impact", "ImpactWave", "Choice", "None", "Ring", "ImpactWave", "Choice", '["Ring", "Shockwave", "Ripple"]', "ArPulseCount", ["ShowImpactRings"]),
     ("impact.morph", "Impact", "ImpactMorph", "Choice", "None", "Shatter", "ImpactMorph", "Choice", '["Shatter", "Melt", "Bounce"]', "ArParticleFxCount", []),
     ("release.fx", "Release", "ReleaseEffect", "Choice", "Fade", "Float Up", "ReleaseEffect", "Choice", '["Float Up", "Dissolve", "Smoke"]', "ArReleaseEffectCount", []),
+    # Round C: one family can own two columns, each driving a different declared setting.
+    ("falling.trail", "Approach", "FallingTrail", "Choice", "None", "Glow", "FallingTrail", "Choice", '["Glow", "Blur", "Ribbon"]', "ArNoteTrailQuadCount", []),
+    ("impact.flash", "Impact", "ShowImpactFlash", "Boolean", "off", "", "ImpactFlashStyle", "Choice", '["Flash", "Lightning", "Plasma"]', "ArFlashCount", []),
 ]
 
 
-def fixture(families=FAMILIES, cells=68):
+def fixture(families=FAMILIES, cells=76):
     rows = []
     for fam, stage, switch, switch_kind, off, on, value, value_kind, values, _, pins in families:
         numbers = values if value_kind == "Percentage" else "[]"
@@ -88,6 +91,13 @@ internal static class ArValuePilotReview
     private static int Probe(GpuStageRenderer renderer, string family) => {v.DELEGATION};
     private static void Gate(int offVsMid) {{ if (offVsMid < 12) throw new InvalidDataException("off↔mid collapsed"); }}
     private static int ReleaseLiftFrame => 12;
+    private static string Path(PilotFamily fam) => Slug($"{{fam.Id}}-{{fam.ValueName}}");
+    private static object[] Coverage()
+    {{
+        var all = EffectContractCatalog.AllFamilies;
+        return Driven.Select(fam => new {{ Pinned = all.Single(c => c.Id == fam.Id), Unshot = new string[0] }}).ToArray();
+    }}
+    private static void WriteManifest() {{ var manifest = new {{ coverage = Coverage() }}; }}
 }}
 """
     witness_rows = "\n".join(f'        "{f[0]}" => renderer.{f[9]},' for f in families)
@@ -105,7 +115,7 @@ internal static class ArValuePilotReview
     private static int Probe(GpuStageRenderer renderer, string family) => {v.DELEGATION};
 }}
 """
-    suite = f"""        Assert(cells == {cells}, "The AR value pilot must shoot all seventeen families at four rows each.");
+    suite = f"""        Assert(cells == {cells}, "The AR value pilot must shoot nineteen columns over all seventeen families.");
         Results.Add($"PASS AR value pilot (N17V): {{cells}} setting frames ...");
 """
     workflow = """      - name: AR value pilot (N17V)
@@ -164,7 +174,7 @@ class ValuePilotContractTests(unittest.TestCase):
     def test_a_family_without_a_witness_is_refused(self):
         extra = ("hold.shadow", "Held", "HoldShadow", "Boolean", "off", "", "HoldShadowIntensity",
                  "Percentage", "[25, 60, 100]", "ArShadowCount", [])
-        files = fixture(families=FAMILIES + [extra], cells=72)
+        files = fixture(families=FAMILIES + [extra], cells=80)
         files["witness"] = files["witness"].replace(
             '        "hold.shadow" => renderer.ArShadowCount,\n', "")
         problems = v.check(files)
@@ -206,25 +216,25 @@ class ValuePilotContractTests(unittest.TestCase):
         self.assertTrue(any("no longer pins ShowImpactRings" in p for p in problems), problems)
 
     def test_a_stale_cell_count_is_refused(self):
-        problems = errors_with(suite=fixture()["suite"].replace("cells == 68", "cells == 64"))
-        self.assertTrue(any("pins the 68 N17V cells" in p for p in problems), problems)
+        problems = errors_with(suite=fixture()["suite"].replace("cells == 76", "cells == 72"))
+        self.assertTrue(any("pins the 76 N17V cells" in p for p in problems), problems)
 
     def test_a_missing_pass_line_is_refused(self):
         suite = fixture()["suite"].replace('PASS AR value pilot (N17V)', 'PASS value pilot')
         problems = errors_with(suite=suite)
         self.assertTrue(any("no longer prints the N17V PASS line" in p for p in problems), problems)
 
-    def test_a_readme_still_quoting_fortyeight_frames_is_refused(self):
-        problems = errors_with(readme_vi=fixture()["readme_vi"].replace("68 khung", "48 khung"))
-        self.assertTrue(any("68 khung" in p for p in problems), problems)
+    def test_a_readme_still_quoting_sixtyeight_frames_is_refused(self):
+        problems = errors_with(readme_vi=fixture()["readme_vi"].replace("76 khung", "68 khung"))
+        self.assertTrue(any("76 khung" in p for p in problems), problems)
 
     def test_an_english_readme_that_drops_a_family_is_refused(self):
         problems = errors_with(readme_en=fixture()["readme_en"].replace("`release.fx`", "`release`"))
         self.assertTrue(any("does not name 'release.fx'" in p for p in problems), problems)
 
-    def test_a_plan_still_quoting_fortyeight_frames_is_refused(self):
-        problems = errors_with(plan=fixture()["plan"].replace("68 khung", "48 khung"))
-        self.assertTrue(any("does not say '68 khung'" in p for p in problems), problems)
+    def test_a_plan_still_quoting_sixtyeight_frames_is_refused(self):
+        problems = errors_with(plan=fixture()["plan"].replace("76 khung", "68 khung"))
+        self.assertTrue(any("does not say '76 khung'" in p for p in problems), problems)
 
     def test_a_missing_readme_row_is_refused(self):
         problems = errors_with(readme_vi="| another switch | nothing here |")
@@ -245,6 +255,41 @@ class ValuePilotContractTests(unittest.TestCase):
         review = fixture()["review"].replace("off↔mid collapsed", "mid collapsed")
         problems = errors_with(review=review)
         self.assertTrue(any("no longer refuses a mid frame" in p for p in problems), problems)
+
+    def test_a_second_column_for_one_family_is_allowed(self):
+        # Both shapes are legal: one column per family (the round-B shape) and one column per
+        # setting (the round-C shape, where a family with several settings owns several columns).
+        seen, single = set(), []
+        for f in FAMILIES:
+            if f[0] not in seen:
+                seen.add(f[0])
+                single.append(f)
+        self.assertEqual([], v.check(fixture(families=single, cells=68)))
+        self.assertEqual([], v.check(fixture()))
+
+    def test_a_repeated_family_and_setting_pair_is_refused(self):
+        doubled = list(FAMILIES) + [FAMILIES[-1]]
+        problems = v.check(fixture(families=doubled, cells=80))
+        self.assertTrue(any("drives a (family, setting) twice" in p for p in problems), problems)
+
+    def test_a_pilot_without_coverage_is_refused(self):
+        review = fixture()["review"].replace("coverage = Coverage()", "coverage = new object[0]")
+        problems = errors_with(review=review)
+        self.assertTrue(any("coverage block" in p for p in problems), problems)
+
+    def test_a_pilot_without_unshot_is_refused(self):
+        problems = errors_with(review=fixture()["review"].replace("Unshot", "ShotNames"))
+        self.assertTrue(any("unshot percentages" in p for p in problems), problems)
+
+    def test_a_pilot_without_the_catalogue_is_refused(self):
+        review = fixture()["review"].replace("EffectContractCatalog.AllFamilies", "Driven")
+        problems = errors_with(review=review)
+        self.assertTrue(any("effect contract catalogue" in p for p in problems), problems)
+
+    def test_a_pilot_without_a_setting_scoped_capture_folder_is_refused(self):
+        review = fixture()["review"].replace("-{fam.ValueName}", "")
+        problems = errors_with(review=review)
+        self.assertTrue(any("overwrite each other's pictures" in p for p in problems), problems)
 
     def test_an_empty_file_set_is_refused(self):
         problems = v.check({"review": ""})
