@@ -666,7 +666,9 @@ internal static class ArEffectFamilyReview
         "atmosphere.beams" => renderer.ArBeamCount,
         // A trail is one quad behind the note; the shimmer is a second quad inside the note's own patch, which is why
         // it needed a counter of its own rather than being inferred from the object quad count.
-        "falling.trail" => renderer.ArNoteTrailQuadCount,
+        // falling.trail declares both the trail and the ghost settings; a column that drives only
+        // FallingGhost draws no trail quad, so the family's witness has to count both kinds.
+        "falling.trail" => renderer.ArNoteTrailQuadCount + renderer.ArGhostNoteQuadCount,
         "falling.shimmer" => renderer.ArNoteShimmerQuadCount,
         _ => throw new InvalidDataException(
             $"The AR effect review has no witness counter for '{family}'; teach Probe() about it before the page " +

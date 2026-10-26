@@ -145,6 +145,12 @@ internal static class ArValuePilotReview
             "ImpactMorphIntensity", EffectParameterKind.Percentage, [15, 65, 100], [], "", "Shatter"),
         new("release.fx", Stage.Release, "ReleaseEffect", EffectParameterKind.Choice, "Fade",
             "ReleaseIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], "", "Float Up"),
+        // The last unshot percentage. Ghost copies are discrete: strength >.66 draws 3, >.33 draws 2,
+        // otherwise 1, and opacity scales with the amount. 30/65/100 therefore produces three
+        // genuinely different pictures (1 / 2 / 3 echoes), not three brightness levels of one.
+        // Its witness is ArGhostNoteQuadCount, so N17's falling.trail witness counts both quads.
+        new("falling.trail", Stage.Approach, "FallingGhost", EffectParameterKind.Boolean, "off",
+            "FallingGhostAmount", EffectParameterKind.Percentage, [30, 65, 100], [], ""),
     ];
 
     private sealed class Shot
@@ -349,6 +355,8 @@ internal static class ArValuePilotReview
             case "ImpactWaveIntensity": settings.ImpactWaveIntensity = setting.Number; break;
             case "ImpactMorphIntensity": settings.ImpactMorphIntensity = setting.Number; break;
             case "ReleaseIntensity": settings.ReleaseIntensity = setting.Number; break;
+            case "FallingGhost": settings.FallingGhost = setting.Number >= 0.5; break;
+            case "FallingGhostAmount": settings.FallingGhostAmount = setting.Number; break;
             default: throw new InvalidDataException($"pilot cannot drive {setting.Name}");
         }
     }
@@ -458,11 +466,19 @@ internal static class ArValuePilotReview
         return Driven.Select(fam =>
         {
             var contract = all.Single(candidate => candidate.Id == fam.Id);
-            var driven = new HashSet<string>(StringComparer.Ordinal) { fam.SwitchName, fam.ValueName };
+            // A family may own several columns, each driving one setting. Coverage is a property of
+            // the FAMILY: a setting is driven if ANY of its columns drives it, so a family whose
+            // percentages all have columns reports unshot = [] instead of repeating them per column.
+            var driven = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var column in Driven.Where(candidate => candidate.Id == fam.Id))
+            {
+                driven.Add(column.SwitchName);
+                driven.Add(column.ValueName);
+            }
             var parameters = contract.Parameters.Select(parameter => parameter.SettingName).ToArray();
             var unknown = driven.Where(name => !parameters.Contains(name)).ToArray();
             if (unknown.Length > 0)
-                throw new InvalidDataException($"{fam.Id}/{fam.ValueName} drives {string.Join(", ", unknown)} "
+                throw new InvalidDataException($"{fam.Id} drives {string.Join(", ", unknown)} "
                     + "which the effect contract does not declare");
             return new CoverageRow(fam.Id, fam.ValueName, parameters, driven.ToArray(),
                 parameters.Where(name => !driven.Contains(name)
@@ -483,6 +499,7 @@ internal static class ArValuePilotReview
             notClaimed = "art approval, every value, real camera, binding change, every setting of every family",
             renderer = "GPU-WARP", adapter, width = Width, height = Height, seed = OptionMatrixPlan.Seed, pose = "ar-oblique",
             coverage = Coverage().Select(c => new { c.Family, c.Column, c.Declared, c.Driven, c.Pinned, c.Unshot, c.PinnedTo }).ToArray(),
+            fullyCovered = Coverage().All(c => c.Unshot.Length == 0),
             gateFailures = failures,
             sheets = sheets.Select(r => new { r.File, r.Sha, r.Columns, r.Rows, cells = r.Cells.Select(c => new { c.Family, scene = c.Stage.ToString(), c.Parameter, c.Row, c.Value, c.Choice, c.File, c.PixelSha256, c.ArChanged, c.ArLit, c.ArPainted, c.Quads, c.Demand, Capped = c.Demand > c.Quads, c.Reading }) })
         }, new JsonSerializerOptions { WriteIndented = true }));

@@ -193,6 +193,19 @@ def check(files: dict) -> list:
         errors.append("Diagnostics/ArValuePilotReview.cs no longer writes gateFailures into the "
                       "manifest; a red run would not say which columns to drop")
 
+    # The last unshot percentage: ghost quads need their own witness, and coverage has to be a
+    # property of the family (union of its columns), not of one column, or a fully driven family
+    # would still report its percentages as unshot.
+    if "fullyCovered" not in review:
+        errors.append("Diagnostics/ArValuePilotReview.cs no longer reports fullyCovered; a family "
+                      "whose percentages all have columns could still look only partly covered")
+    if "ArGhostNoteQuadCount" not in witness:
+        errors.append("Diagnostics/ArEffectFamilyReview.cs no longer counts ghost quads for "
+                      "falling.trail; a column that drives only FallingGhost would report zero quads")
+    if "Driven.Where(candidate => candidate.Id == fam.Id)" not in review:
+        errors.append("Diagnostics/ArValuePilotReview.cs no longer computes coverage per family; "
+                      "each column would list the family's other driven settings as unshot")
+
     for token, message in (
         ("EffectContractCatalog.AllFamilies", "no longer reads the effect contract catalogue; "
          "unshot settings would be a hand-written list that drifts from the product"),
