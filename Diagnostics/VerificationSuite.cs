@@ -60,7 +60,7 @@ internal static partial class VerificationSuite
             {
                 if(string.IsNullOrWhiteSpace(reviewOutput))throw new ArgumentException("AR budget review requires --verify-review-out=<directory>.");
                 var count=ArParticleBudgetReview.Render(reviewOutput);
-                Results.Add($"PASS AR budget trial: {count} native captures; default/frozen baseline unchanged, under-cap identity, unchanged eligible payloads/non-particle packets; fixed 192 cap and stable selected order. Not hardware/performance/default promotion.");
+                Results.Add($"PASS AR budget trial: {count} native captures; default/frozen baseline unchanged, under-cap identity, unchanged eligible payloads/non-particle packets; fixed 384 cap and stable selected order. Not hardware/performance/default promotion.");
                 Finish(app,args,null);
             }
             catch(Exception ex){Finish(app,args,ex);}
@@ -103,7 +103,163 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
+        if (args.Contains("--verify-option-matrix-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Option matrix review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N12(b) option matrix; this does not run or certify the full regression suite.");
+                VerifyOptionMatrix(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+        if (args.Contains("--verify-preset-roundtrip-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Preset round-trip review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N12(f) preset round-trip review; this does not run or certify the full regression suite.");
+                VerifyPresetRoundTrip(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+        if (args.Contains("--verify-option-numeric-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Numeric option review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N12(e) numeric option review; this does not run or certify the full regression suite.");
+                VerifyOptionNumeric(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+        if (args.Contains("--verify-option-pose-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("AR/pose review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N12(d) AR/pose slice; this does not run or certify the full regression suite.");
+                VerifyOptionPose(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+        if (args.Contains("--verify-ar-material-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("AR material review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N16 AR material review; this does not run or certify the full regression suite.");
+                VerifyArMaterial(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+        if (args.Contains("--verify-ar-effect-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("AR effect review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N17 AR hold-family review; this does not run or certify the full regression suite.");
+                VerifyArEffect(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+        if (args.Contains("--verify-stage-effect-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Stage effect review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N17S stage particle sensitivity review; this does not run or certify the full regression suite.");
+                VerifyStageEffect(outputDirectory: reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+        if (args.Contains("--verify-ar-value-pilot-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("AR value pilot review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated value pilot review; this does not run or certify the full regression suite.");
+                VerifyArValuePilot(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+        if (args.Contains("--verify-stage-value-pilot-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Stage value pilot review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N17V-S stage value pilot review; this does not run or certify the full regression suite.");
+                VerifyStageValuePilot(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+        if (args.Contains("--verify-ar-lifecycle-pilot-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("AR lifecycle pilot review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated lifecycle pilot review; this does not run or certify the full regression suite.");
+                VerifyArLifecyclePilot(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+        if (args.Contains("--verify-ar-lifecycle-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("AR lifecycle review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated lifecycle matrix review; this does not run or certify the full regression suite.");
+                VerifyArLifecycle(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+        if (args.Contains("--verify-refraction-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Refraction review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N8 refraction review; this does not run or certify the full regression suite.");
+                VerifyRefraction(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); VerifyArLifecycle(reviewOutput!); VerifyArValuePilot(reviewOutput!); VerifyStageValuePilot(reviewOutput!); /* stage 9 already inside VerifyArEffect; pilots isolated only */ } }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -347,6 +503,20 @@ internal static partial class VerificationSuite
         var localSound = new PianoVisualSettings { PianoSoundEnabled = false, AudioReverbAmount = 37 };
         localSound.CopyFrom(new PianoVisualSettings { PianoSoundEnabled = true, AudioReverbAmount = 125 });
         var sharedSound = VisualPresetShare.TryDecode(VisualPresetShare.Encode(new PianoVisualSettings { PianoSoundEnabled = false, AudioReverbAmount = 37 }), out var sharedLook, out _);
+        Assert(new PianoVisualSettings().NoteLandingGlow && GpuOnlyEffects.Omitted(new PianoVisualSettings()).Contains("Landing glow"),
+            "N6: landing glow ships on, so a software-rendered take has to name it instead of dropping it silently.");
+        // N12: the AR card's "leaves out" line is only worth reading if it matches the renderer. The flat overlay
+        // draws note bodies and nothing that needs the saved pose, and the star field lives in the stage
+        // background pass, which is skipped while the camera is the background (GpuStageRenderer.cs:588).
+        var flatLook = new PianoVisualSettings { ArNotesInPerspective = false, FallingTrail = "Glow", FallingGhost = true, ShowStars = true, ShowNoteLabels = true };
+        var flatOmitted = ArOmittedEffects.Omitted(flatLook);
+        Assert(flatOmitted.SequenceEqual(new[] { "Falling trail", "Echo ghosts", "Landing glow", "Note names", "Backdrop stars" }),
+            $"N12: the flat AR overlay must name every note effect it drops and the star field it never draws, in interface order; it named [{string.Join(", ", flatOmitted)}].");
+        var projectedLook = new PianoVisualSettings { ArNotesInPerspective = true, FallingTrail = "Glow", FallingGhost = true, ShowStars = true, ShowNoteLabels = true };
+        Assert(ArOmittedEffects.Omitted(projectedLook).SequenceEqual(new[] { "Backdrop stars" }),
+            "N12: with perspective notes on, trails, ghosts, landing glow and note names are built from calibrated patches, so only the star field is left out.");
+        Assert(ArOmittedEffects.Omitted(new PianoVisualSettings { ArNotesInPerspective = true, ShowStars = false }).Count == 0,
+            "N12: a projected look with the star field off loses nothing, so the AR card must stay quiet instead of printing a line about nothing.");
         Assert(!mutedSound.PianoSoundEnabled && mutedSound.AudioReverbAmount == 37
                 && !localSound.PianoSoundEnabled && localSound.AudioReverbAmount == 37
                 && sharedSound && sharedLook.PianoSoundEnabled && sharedLook.AudioReverbAmount == 100,
@@ -416,8 +586,15 @@ internal static partial class VerificationSuite
                     && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified
                     && contract.Capabilities.ArOverlay.FallbackId is null,
                 $"The {alias} contract must keep AR material support Unverified despite its shared-shader camera-quad route.");
-            Assert(contract.Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
-                $"The {alias} contract must not claim AR parameter parity before the per-setting matrix is verified.");
+            // N16 (docs/AR-MATERIAL-PARITY.md) is the per-setting matrix: a parameter the material's shader
+            // branch reads is Applied on the AR quad, the one Crystal Outline's branch skips is Ignored, and the
+            // glow stays Unverified because its halo lies outside the note rectangle the quad is cut to.
+            Assert(contract.Parameters.All(parameter => parameter.Bindings.ArOverlay
+                    == (parameter.SettingName == "NoteGlow" ? EffectParameterBindingState.Unverified
+                        : parameter.SettingName == "NoteRefraction" && alias == "CrystalOutline"
+                            ? EffectParameterBindingState.Ignored
+                            : EffectParameterBindingState.Applied)),
+                $"The {alias} contract must claim exactly the AR parameter bindings the per-setting N16 matrix measured.");
             Assert(contract.Accessibility.FlashRisk == EffectFlashRisk.None
                     && contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
                     && contract.Accessibility.NonColorCue != EffectShapeCue.None,
@@ -445,11 +622,17 @@ internal static partial class VerificationSuite
             {
                 var crystalRefraction = alias == "CrystalOutline" && parameter.SettingName == "NoteRefraction";
                 var expectedGpuBinding = crystalRefraction ? EffectParameterBindingState.Ignored : EffectParameterBindingState.Applied;
+                // N16 (docs/AR-MATERIAL-PARITY.md) is the dedicated camera-quad coverage: the branch reads the
+                // setting and the AR frame moves, or the branch skips it and the AR frame does not. The glow is
+                // measured but stays Unverified because its halo lies outside the rectangle the quad is cut to.
+                var expectedArBinding = parameter.SettingName == "NoteGlow" ? EffectParameterBindingState.Unverified
+                    : crystalRefraction ? EffectParameterBindingState.Ignored
+                    : EffectParameterBindingState.Applied;
                 Assert(parameter.Bindings.WpfStage == EffectParameterBindingState.Applied
                         && parameter.Bindings.GpuStage == expectedGpuBinding
                         && parameter.Bindings.Recording == EffectParameterBindingState.Unverified
-                        && parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified,
-                    $"The {alias} input {parameter.SettingName} should keep its AR binding Unverified until the material setting has dedicated camera-quad coverage.");
+                        && parameter.Bindings.ArOverlay == expectedArBinding,
+                    $"The {alias} input {parameter.SettingName} should carry exactly the AR binding the N16 camera-quad matrix measured.");
                 var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
                 Assert(property is not null, $"The {alias} parameter {parameter.SettingName} should refer to an existing setting.");
                 if (property is null) continue;
@@ -845,7 +1028,39 @@ internal static partial class VerificationSuite
                 && busy.HaloPulse && busy.FallingPulse && busy.HoldBreath,
             "Applying the accessibility policy must never mutate the user's own settings object.");
 
-        Results.Add("PASS accessibility toggle policy: legacy JSON loads toggles-off, toggles-off keep the saved look byte-for-byte, Reduced Motion freezes every catalogued self-animated family (pulses, shimmer, ambient sky, stars, petals, meteors, beams, vibration, colour cycle, arc) while Reduce Flashes silences the flash channel and suppresses the un-analysed burst and star twinkle, High Contrast lifts the note outline to its shape-cue floors without weakening stronger looks, and user settings are never mutated. The stage chokepoint applies this policy to both renderers; the dock probe in the settings check proves the live wiring.");
+        // N11: every shipped look, not a hand-built sample. A listener who turns Reduced Motion on must get a
+        // calm stage whichever preset they picked, while the notes still fall at the speed and direction they
+        // chose; Reduce Flashes must clear the flash channel; and with both off the look must come back untouched
+        // and a second application must change nothing.
+        foreach (var preset in VisualPresets.BuiltIn)
+        {
+            var look = preset.Settings.Clone();
+            look.ReducedMotion = true;
+            var calm = look.WithAccessibilityTogglesApplied();
+            Assert(calm.BackgroundMotion == "None" && !calm.FallingPulse && !calm.HoldVibration && !calm.HoldColorCycle
+                    && !calm.HoldBreath && !calm.NoteShimmer && !calm.ShootingStars && !calm.HaloPulse
+                    && !calm.ShowStars && !calm.ShowPetals && !calm.ShowLightBeams
+                    && calm.AmbientEnergyAmount == 0 && calm.AmbientNatureAmount == 0
+                    && calm.AmbientLightAmount == 0 && calm.AmbientCosmicAmount == 0,
+                $"{preset.Name}: Reduced Motion must freeze every self-animated family in every shipped look, not only in the default one.");
+            Assert(calm.NoteFallSpeed == look.NoteFallSpeed && calm.NoteDirection == look.NoteDirection && calm.ShowNotes == look.ShowNotes,
+                $"{preset.Name}: Reduced Motion must never stop the notes or change how they fall; it removes decoration, not the music.");
+            Assert(calm.WithAccessibilityTogglesApplied().ToJson() == calm.ToJson(),
+                $"{preset.Name}: applying Reduced Motion twice must be the same as applying it once.");
+
+            look.ReducedMotion = false; look.ReduceFlashes = true;
+            var unflashedLook = look.WithAccessibilityTogglesApplied();
+            Assert(!unflashedLook.ShowImpactFlash && unflashedLook.ImpactFlashIntensity == 0,
+                $"{preset.Name}: Reduce Flashes must clear the flash channel in every shipped look.");
+            Assert(unflashedLook.FallingPulse == look.FallingPulse && unflashedLook.BackgroundMotion == look.BackgroundMotion,
+                $"{preset.Name}: Reduce Flashes must leave motion-only layers exactly as the look set them.");
+
+            look.ReduceFlashes = false;
+            Assert(look.WithAccessibilityTogglesApplied().ToJson() == look.ToJson(),
+                $"{preset.Name}: with both toggles off the applied look must be the preset untouched.");
+        }
+
+        Results.Add("PASS accessibility toggle policy: legacy JSON loads toggles-off, toggles-off keep the saved look byte-for-byte, Reduced Motion freezes every catalogued self-animated family (pulses, shimmer, ambient sky, stars, petals, meteors, beams, vibration, colour cycle, arc) while Reduce Flashes silences the flash channel and suppresses the un-analysed burst and star twinkle, High Contrast lifts the note outline to its shape-cue floors without weakening stronger looks, and user settings are never mutated. All fourteen shipped looks pass the same Reduced Motion, Reduce Flashes and untouched-when-off checks, and the pulse the note itself carries is capped at 1.67 Hz by MotionBudget. The stage chokepoint applies this policy to both renderers; the dock probe in the settings check proves the live wiring.");
     }
 
     /// <summary>
@@ -6760,6 +6975,102 @@ internal static partial class VerificationSuite
         var captures = Phase1VisualReview.Render(outputDirectory);
         Assert(captures == 48, "Phase 1 visual review must write 48 images across three looks, four checkpoints, two renderers and two sizes.");
         Results.Add($"PASS Phase 1 visual review: {captures} WPF/GPU-WARP images at 1920×1080 and 960×540, with manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyOptionMatrix(string outputDirectory)
+    {
+        var captures = OptionMatrixReview.Render(outputDirectory);
+        Assert(captures == 128, "The option matrix must capture 64 scenes (every value of eleven settings families, each with its own off baseline) through two renderers.");
+        Results.Add($"PASS option matrix (N12(b)): {captures} WPF/GPU-WARP captures at 960×540 over 11 settings families — every value drawn, every value distinguishable from its own off state and from its siblings, every family's off state bit-identical inside its scene at one fixed seed. The morph and release families are captured with Embers, Impact rings, Impact flash and wisps off, so those captures also prove both channels draw on their own. Renderer-branching evidence, not art approval, AR projection or a default change; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyPresetRoundTrip(string outputDirectory)
+    {
+        var result = PresetRoundTripReview.Render(outputDirectory);
+        Assert(result.Presets == 20, "The preset round trip must cover the fourteen built-in looks and the six shelf files.");
+        Assert(result.Frames == result.Presets * 4 && result.Files == result.Presets * 2,
+            "Each preset is captured before and after the file on two renderers, with one stored picture per renderer.");
+        Results.Add($"PASS preset round trip (N12(f)): {result.Presets} shipped presets (14 built-in, 6 shelf) applied through the dock's own path, written with WritePresetFile, read back through ReadPresetFile and applied again — all {result.Properties} writable settings properties identical both in the settings the file returned and in the settings the dock applied, and the {OptionMatrixPlan.Frames(OptionMatrixPlan.Scene.Falling)}-frame scene byte-identical on both WPF and GPU-WARP ({result.Files} stored pictures, {result.Frames} frames compared). A property the preset file or a migration drops fails the run naming that property. Not art approval, not a migration-version claim; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyOptionNumeric(string outputDirectory)
+    {
+        var result = OptionNumericReview.Render(outputDirectory);
+        Assert(result.Captures == 54, "The numeric option review must capture nine axes at three values on two renderers.");
+        var captures = result.Captures;
+        // The tightest pair per axis, both renderers, so the log carries the number the gate is close to.
+        var tightest = string.Join("; ", result.Tightest
+            .GroupBy(pair => pair.Axis)
+            .Select(axis => $"{axis.Key} ✓"
+                + string.Join(" ", axis.Select(pair => $"{pair.Renderer} {pair.Left}↔{pair.Right}={pair.Changed}px"))));
+        Results.Add($"PASS numeric option review (N12(e)): {captures} WPF/GPU-WARP captures at 960×540 — nine slider axes (note width on a falling note and on a held bar, fall speed, trail/wave/flash/release intensity, wave size, burst amount) shot at three values on both renderers; every pair of values on an axis moves pixels on both, so no hidden floor, clamp or rounding can collapse two slider positions onto one picture, and every capture reads its setting back after Clamp(). Tightest pair per axis: {tightest}. Renderer-branching evidence, not art approval, linearity or a default change; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyOptionPose(string outputDirectory)
+    {
+        var captures = OptionPoseReview.Render(outputDirectory);
+        Assert(captures == 63, "The AR/pose slice must capture part 1 (four off states plus five values) and part 2 (the note material, the trail and four ambient layers, off and on) at each of the three calibrated poses.");
+        Results.Add($"PASS AR/pose option slice (N12(d)): {captures} WARP captures at 1280×720 across the three calibrated poses — part 1 (27) the impact wave, the impact burst, both morph channels and the release ring, whose art is drawn into the camera image; part 2 (36) the note material and the falling trail, built as projected patches for a note still sounding above the keys (body 0 to 0.735 key-depths behind the key plane, trail to about 1.22), plus the four ambient layers, emitted screen-space over the picture. Every capture is compared with its own off state at the same pose and one fixed seed. Proof that the option reaches the projected layer, not an art, real-camera, hand-occlusion or every-value claim; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyArMaterial(string outputDirectory)
+    {
+        var cells = ArMaterialReview.Render(outputDirectory);
+        Assert(cells == 18, "The AR material review must shoot the six note-material settings through the AR overlay on the three piloted materials.");
+        Results.Add($"PASS AR note-material review (N16): {cells} setting frames through the calibrated AR overlay at the reference pose on GPU-WARP, each compared with its own material at rest at the same pose, camera, scene and seed, and drawn in the same two settings on the WPF and the Direct3D stage for comparison. The settings the material function reads inside the body move the AR picture; Crystal Outline's refraction and 3D switch — which its branch never reads — stay under the floor, which is why the contract omits or ignores them. The glow is measured without a claim because its halo lies outside the note's own rectangle. Renderer-branching and uniform-delivery evidence, not art approval, every-value coverage or a hardware frame; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyArEffect(string outputDirectory)
+    {
+        var cells = ArEffectFamilyReview.Render(outputDirectory);
+        Assert(cells == 51, "The AR effect review must shoot seventeen effect families at three rows each: the family at the product's values, the same family switched off, and its second setting at the far end of the range the contract declares.");
+        Results.Add($"PASS AR effect-family review (N17): {cells} setting frames through the calibrated AR overlay at the leaned pose on GPU-WARP over four scenes, one per lifecycle: two keys two octaves apart held for the whole run (the five hold families, the two held particle families and the light beams), one song note in flight and not yet sounding (its trail, its shimmer and the pulse), one strike at the key (the burst, the spark stream, the wave, the flash and the morph), and one key lifted after 0.2 s (the release effect). One family is switched on per column, so a difference cannot come from a family the column is not about, and each row is compared with the same family at the product's own values at the same pose, camera and seed. A family whose switch is a choice carries the value the renderer treats as off (ImpactWave None, ImpactMorph None, ReleaseEffect Fade) in its middle row; a family that declares more than two settings carries its switch and the first percentage the contract lists after it, and every other boolean is pinned off unless the family cannot be drawn without it, while any other choice is pinned at a value the product draws; a far value that equals what the reference frame already shows is skipped, so a column can never carry three pictures where two are the same; every setting the column does not shoot is named in the manifest under \"unshot\" instead of being dropped silently. A column is refused unless the layer's own quad counter for that family is non-zero and unless taking the whole family away moves the picture, so a scene that cannot show the family fails instead of recording three near-identical frames. Measured: {ArEffectFamilyReview.Summary}. Renderer-branching and uniform-delivery evidence for the effect families whose binding stays Unverified, not art approval, not every value of every range, and no default change; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+        var stageCells = StageEffectSensitivityReview.Render(outputDirectory);
+        Assert(stageCells == 9, "The stage sensitivity review must shoot the three particle families that share the capped question on the Live Stage renderer, at three rows each.");
+        Results.Add($"PASS stage particle sensitivity review (N17S): {stageCells} setting frames on the Live Stage renderer at the same scene and timing as the AR page, but without its 384-quad cap — the three particle families the AR page reports as capped or its nearest neighbour, one family per column at the same switch and far values. Measured: {StageEffectSensitivityReview.Summary}. The columns exist to answer the question the AR cap silenced (does the setting reach the picture when the cap is not in the way), not to raise the cap; stage cap 24000, AR cap 384, manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "stage-effect")}.");
+    }
+
+    private static void VerifyStageEffect(string outputDirectory)
+    {
+        var cells = StageEffectSensitivityReview.Render(outputDirectory);
+        Assert(cells == 9, "The stage sensitivity review must shoot the three particle families that share the capped question on the Live Stage renderer, at three rows each.");
+        Results.Add($"PASS stage particle sensitivity review (N17S): {cells} setting frames on the Live Stage renderer at the same scene and timing as the AR page, but without its 384-quad cap — the three particle families the AR page reports as capped or its nearest neighbour, one family per column at the same switch and far values. Measured: {StageEffectSensitivityReview.Summary}. The columns exist to answer the question the AR cap silenced (does the setting reach the picture when the cap is not in the way), not to raise the cap; stage cap 24000, AR cap 384, manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "stage-effect")}.");
+    }
+
+    private static void VerifyStageValuePilot(string outputDirectory)
+    {
+        var cells = StageEffectSensitivityReview.RenderValuePilot(outputDirectory);
+        Assert(cells == 24, "The stage value pilot must shoot six columns over the three capped particle families at four rows each: off, low, mid, far.");
+        Results.Add($"PASS stage value pilot (N17V-S): {cells} setting frames on the Live Stage renderer at the same scene and timing as the AR page, but without its 384-quad cap — off→low→mid→far per (family, percentage) column: wisps WispAmount 15/75/150 and WispSpeed 100/300/600, flames FlameIntensity 20/60/100 and FlameHeight 25/60/100, sparks ParticleAmount 20/70/120 and ParticleSize 2/8/16. Each step moves pixels (≥12 px), including off↔mid; every weak column is reported together rather than failing the run at the first one. Measured: {StageEffectSensitivityReview.ValuePilotSummary}. This answers whether the slider reaches the picture when no cap is in the way; it is not a proposal to raise the AR cap, not art approval, not a hardware frame and not a binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "stage-value-pilot")}.");
+    }
+
+    private static void VerifyArValuePilot(string outputDirectory)
+    {
+        var cells = ArValuePilotReview.Render(outputDirectory);
+        Assert(cells == 128, "The AR value pilot must shoot thirty-two columns over all seventeen families at four rows each: off, low, mid, far.");
+        Results.Add($"PASS AR value pilot (N17V): {cells} setting frames through the calibrated AR overlay at the leaned pose on GPU-WARP (Held 0.4 s, Impact 0.2 s, Approach 0.5 s, Release key lifted at 0.2 s): off→low→mid→far per family (wisps 15/75/150, flames 20/60/100, beams 30/65/100, hold.bar/vibration/color-cycle/arc 25/60/100, hold.breath 25/75/100, pulse 25/75/100, falling.shimmer 50/70/100, sparks 20/70/120, impact.flash 25/60/100, falling.trail Glow + trail length 25/60/100, impact.burst Embers/Fireworks/Dust, impact.wave Ring/Shockwave/Ripple, impact.morph Shatter/Melt/Bounce, release.fx Float Up/Dissolve/Smoke; falling.trail Glow/Blur/Ribbon; impact.flash Flash/Lightning/Plasma; round D adds WispSpeed/WispTurbulence/WispGlow, FlameHeight, ParticleSpeed/Size/Glow/Life, FallingTrailIntensity, ImpactWaveIntensity, ImpactMorphIntensity, ReleaseIntensity and FallingGhostAmount 30/65/100). Every declared percentage now has its own column, so manifest.json reports fullyCovered = true. Each column drives one declared setting; the rest are recorded as pinned or unshot in manifest.json, read from EffectContractCatalog so one column is never called the whole family. Each step moves pixels (≥12 px), including off↔mid so a neutral slider value cannot be captioned as a third picture. Measured: {ArValuePilotReview.Summary}. Pilot for value-matrix coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-value-pilot")}.");
+    }
+
+    private static void VerifyArLifecyclePilot(string outputDirectory)
+    {
+        var cells = ArLifecyclePilotReview.Render(outputDirectory);
+        Assert(cells == 6, "The AR lifecycle pilot must shoot impact.flash at three lifetimes (two captures per milestone, off vs on) on AR.");
+        Results.Add($"PASS AR lifecycle pilot (N17L): {cells} frames through the calibrated AR overlay at the leaned pose on GPU-WARP (Impact impact.flash T0 0.05 s/T1 0.20 s/T2 0.35 s): off vs Plasma at each milestone. T0 and T1 move pixels (≥12 px), T2 shows no impact plume (expired). Measured: {ArLifecyclePilotReview.Summary}. Pilot for lifecycle coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-lifecycle-pilot")}.");
+    }
+
+    private static void VerifyArLifecycle(string outputDirectory)
+    {
+        var cells = ArLifecycleReview.Render(outputDirectory);
+        Assert(cells == 78, "The AR lifecycle matrix must shoot 17 families at 2+3+2 milestones (off vs on) on AR: Held 8×2, Approach 3×2, Impact 5×3, Release 1×2.");
+        Results.Add($"PASS AR lifecycle matrix (N17L full): {cells} frames through the calibrated AR overlay at the leaned pose on GPU-WARP — Held 8 families ×2 milestones (0.4/1.0 s), Approach 3×2 (0.25/0.50 s), Impact 5×3 (0.05/0.20/0.42 s), Release 1×2 (0.40/0.60 s): off vs on at each milestone, same pose/camera/seed. Short-lived impact.flash expired at T2, others persist. Measured: {ArLifecycleReview.Summary}. Lifecycle coverage, not art or binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "ar-lifecycle")}.");
+    }
+
+    private static void VerifyRefraction(string outputDirectory)
+    {
+        var captures = RefractionReview.Render(outputDirectory);
+        Assert(captures == 36, "The refraction review must shoot six note materials at three slider levels through two renderers.");
+        var gpuQuiet = string.Join(", ", RefractionReview.Styles.Where(style => !RefractionReview.GpuConsumers.Contains(style)));
+        Results.Add($"PASS refraction review (N8): {captures} WPF/GPU-WARP captures at {OptionMatrixPlan.Width}×{OptionMatrixPlan.Height} — the six note materials at NoteRefraction 0/50/100 with the slider as the only difference between two captures of a row. WPF moves pixels for all six (the fringe, or the satin sheen when that material is on); the Direct3D shader moves pixels only for Solid, Glass and Gem, the branches that read NoteB.w, and is bit-identical across the three levels for {gpuQuiet}. That is the intentional difference in docs/NOTE-EFFECTS-ACTION-PLAN.md §3.6 held to pixels: the WPF-only fringe stays WPF-only, and a pass that starts consuming the slider on the GPU fails here instead of quietly changing a reviewed preset. Renderer-branching evidence, not art approval or a hardware frame; manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
     }
 
     private static void VerifyPrismFlowReview(string outputDirectory)

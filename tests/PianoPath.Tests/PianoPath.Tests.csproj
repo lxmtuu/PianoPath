@@ -39,6 +39,14 @@
     <Compile Include="..\..\Diagnostics\KeyParticleEnsemblePlan.cs" Link="Product\Diagnostics\KeyParticleEnsemblePlan.cs" />
     <Compile Include="..\..\Diagnostics\KeyboardKeyLightPlan.cs" Link="Product\Diagnostics\KeyboardKeyLightPlan.cs" />
     <Compile Include="..\..\Gpu\StageLightCurves.cs" Link="Product\Gpu\StageLightCurves.cs" />
+    <Compile Include="..\..\Stage\WispMotion.cs" Link="Product\Stage\WispMotion.cs" />
+    <Compile Include="..\..\Stage\StageClock.cs" Link="Product\Stage\StageClock.cs" />
+    <Compile Include="..\..\Stage\FlameMotion.cs" Link="Product\Stage\FlameMotion.cs" />
+    <Compile Include="..\..\Stage\ParticleFlow.cs" Link="Product\Stage\ParticleFlow.cs" />
+    <Compile Include="..\..\Stage\HeldEmission.cs" Link="Product\Stage\HeldEmission.cs" />
+    <Compile Include="..\..\Diagnostics\OptionMatrixPlan.cs" Link="Product\Diagnostics\OptionMatrixPlan.cs" />
+    <Compile Include="..\..\Diagnostics\ReviewSheet.cs" Link="Product\Diagnostics\ReviewSheet.cs" />
+    <Compile Include="..\..\Diagnostics\OptionNumericPlan.cs" Link="Product\Diagnostics\OptionNumericPlan.cs" />
     <Compile Include="..\..\Camera\ArDriftMeter.cs" Link="Product\Camera\ArDriftMeter.cs" />
     <Compile Include="..\..\Gpu\ReleaseParticleAppearance.cs" Link="Product\Gpu\ReleaseParticleAppearance.cs" />
     <Compile Include="..\..\Gpu\BounceParticleAppearance.cs" Link="Product\Gpu\BounceParticleAppearance.cs" />
@@ -52,6 +60,7 @@
     <Compile Include="..\..\Gpu\HeldParticleAppearance.cs" Link="Product\Gpu\HeldParticleAppearance.cs" />
     <Compile Include="..\..\Camera\ArParticleBillboard.cs" Link="Product\Camera\ArParticleBillboard.cs" />
     <Compile Include="..\..\Gpu\KeyRingChannelGain.cs" Link="Product\Gpu\KeyRingChannelGain.cs" />
+    <Compile Include="..\..\Stage\Effects\EffectChannel.cs" Link="Product\Stage\Effects\EffectChannel.cs" />
     <Compile Include="..\..\Diagnostics\AuxParticleTimeline.cs" Link="Product\Diagnostics\AuxParticleTimeline.cs" />
     <Compile Include="..\..\Diagnostics\HeldParticleControlPlan.cs" Link="Product\Diagnostics\HeldParticleControlPlan.cs" />
     <Compile Include="..\..\Diagnostics\HeldLightIsolationPlan.cs" Link="Product\Diagnostics\HeldLightIsolationPlan.cs" />
@@ -106,8 +115,12 @@
     <Compile Include="..\..\Gpu\GpuRecordingTap.cs" Link="Product\Gpu\GpuRecordingTap.cs" />
     <Compile Include="..\..\Stage\Effects\EffectContracts.cs" Link="Product\Stage\Effects\EffectContracts.cs" />
     <Compile Include="..\..\Stage\Effects\AccessibilityContracts.cs" Link="Product\Stage\Effects\AccessibilityContracts.cs" />
+    <Compile Include="..\..\Stage\Effects\MotionBudget.cs" Link="Product\Stage\Effects\MotionBudget.cs" />
+    <Compile Include="..\..\Stage\GpuOnlyEffects.cs" Link="Product\Stage\GpuOnlyEffects.cs" />
+    <Compile Include="..\..\Stage\ArOmittedEffects.cs" Link="Product\Stage\ArOmittedEffects.cs" />
     <Compile Include="..\..\Gpu\GpuAdapterSelection.cs" Link="Product\Gpu\GpuAdapterSelection.cs" />
     <Compile Include="..\..\Stage\KeyboardLayout.cs" Link="Product\Stage\KeyboardLayout.cs" />
+    <Compile Include="..\..\Stage\NoteGeometry.cs" Link="Product\Stage\NoteGeometry.cs" />
     <Compile Include="..\..\Camera\Homography.cs" Link="Product\Camera\Homography.cs" />
     <Compile Include="..\..\Camera\ArCalibration.cs" Link="Product\Camera\ArCalibration.cs" />
     <Compile Include="..\..\Camera\ArCameraPose.cs" Link="Product\Camera\ArCameraPose.cs" />

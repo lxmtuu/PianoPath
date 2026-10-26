@@ -94,7 +94,8 @@ internal readonly struct FrameStats
 /// player feels, and a mean hides exactly that. p99 is reported too, but the gate is p95: over a couple of
 /// hundred frames p99 is one or two samples and moves with whatever else the machine was doing.</para>
 /// </remarks>
-internal sealed record FrameBudget(string Scene, int Width, int Height, double P95LimitMs, string Preset, string Description, bool Camera = false)
+internal sealed record FrameBudget(string Scene, int Width, int Height, double P95LimitMs, string Preset, string Description,
+    bool Camera = false, int NoteCount = 0, bool NoteEffects = true)
 {
     /// <summary>Frames measured per scene when the command line does not say.</summary>
     internal const int DefaultFrames = 120;
@@ -131,6 +132,38 @@ internal sealed record FrameBudget(string Scene, int Width, int Height, double P
 
     /// <summary>The scenes <c>--bench</c> measures plus the AR one, which <c>--bench-ar</c> asks for.</summary>
     internal static IReadOnlyList<FrameBudget> AllWithAr { get; } = [DefaultLook, HeavyLook, ArLook];
+
+    /// <summary>
+    /// N9: the note layer's own cost, measured as a matrix rather than as a verdict. Eighteen scenes — three
+    /// sizes, one, twenty and sixty simultaneous bars, each with the three note effects off and on — so the
+    /// answer to "what does a note cost" is a curve in the bar count instead of one number for one song. They
+    /// carry no budget: this is a measurement, and a budget written for a machine nobody has measured on would
+    /// be a guess wearing a threshold. Ambient, impacts and particles are off in every cell, so the difference
+    /// between two cells is the notes and nothing else.
+    /// </summary>
+    internal static IReadOnlyList<FrameBudget> Detail { get; } = BuildDetail();
+
+    private static IReadOnlyList<FrameBudget> BuildDetail()
+    {
+        (int Width, int Height)[] sizes = [(1280, 720), (1920, 1080), (2560, 1440)];
+        int[] counts = [1, 20, 60];
+        var scenes = new List<FrameBudget>(sizes.Length * counts.Length * 2);
+        foreach (var (width, height) in sizes)
+            foreach (var count in counts)
+                foreach (var effects in new[] { false, true })
+                    scenes.Add(new FrameBudget(
+                        $"notes-{height}p-{count:00}-{(effects ? "fx" : "plain")}", width, height, 0, "", Effects(count, height, effects),
+                        NoteCount: count, NoteEffects: effects));
+        return scenes;
+    }
+
+    private static string Effects(int count, int height, bool effects) => effects
+        ? $"{count} simultaneous notes at {height}p with the falling trail, echo ghosts and landing glow on; ambient and impacts off"
+        : $"{count} simultaneous notes at {height}p with no trail, ghosts or landing glow; ambient and impacts off";
+
+    /// <summary>Finds a detail scene by id, or null when the name is not one of them.</summary>
+    internal static FrameBudget? FindDetail(string? scene) =>
+        string.IsNullOrWhiteSpace(scene) ? null : Detail.FirstOrDefault(budget => string.Equals(budget.Scene, scene.Trim(), StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Finds a scene by id (<c>default</c>, <c>heavy</c>), or null when the name is not one of them.</summary>
     internal static FrameBudget? Find(string? scene) =>

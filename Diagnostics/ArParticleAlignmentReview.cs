@@ -70,8 +70,7 @@ internal static class ArParticleAlignmentReview
                     var lateral=(p.X/Math.Max(1,width)-PianoStage.KeyCenterOf(p.Pitch))*pose.KeyboardWidthDepthRatio;
                     if(p.Wisp)
                     {
-                        var amp=(5+look.WispTurbulence*26)*(.45f+look.WispWidth)*Math.Min(1,p.Age*1.6f);
-                        lateral+=Math.Sin(p.Age*(3+look.WispTurbulence*5)+p.Phase)*amp*unit;
+                        if(look.ParticleFlow<=0)lateral+=WispMotion.OffsetPrecise(look.WispTurbulence,look.WispWidth,(float)p.Age,(float)p.Phase)*unit;
                     }
                     var basis=ArParticleFrame.ForNotes(direction);
                     var rise=Math.Clamp((hitY-p.Y)*unit,-.2,2.4);

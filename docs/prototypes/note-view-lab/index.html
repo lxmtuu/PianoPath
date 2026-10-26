@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Note view lab — WPF · GPU · AR</title>
+<style>
+  :root {
+    --bg: #070a11; --panel: #0e1420; --panel-2: #121a29; --ink: #e9eef8;
+    --muted: #8fa0b8; --line: #223149; --accent: #5fe3ff; --accent-2: #b18cff;
+    --warn: #ffd479; --ok: #7df0b1;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 28px clamp(14px, 3vw, 40px) 72px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; margin-bottom: 6px; }
+  h1 { font-size: clamp(22px, 3vw, 30px); margin: 0; letter-spacing: -.02em; }
+  .badge {
+    font-size: 12px; color: #06222a; background: var(--accent); border-radius: 999px;
+    padding: 3px 9px; font-weight: 700; letter-spacing: .02em;
+  }
+  .sub { color: var(--muted); margin: 2px 0 22px; max-width: 78ch; }
+  .sub a { color: var(--accent); text-decoration: none; }
+  .sub a:hover { text-decoration: underline; }
+
+  .controls {
+    position: sticky; top: 0; z-index: 5;
+    background: rgba(7, 10, 17, .92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    padding: 12px 0 14px; margin-bottom: 18px;
+  }
+  .control-row { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+  .control { display: flex; align-items: center; gap: 8px; }
+  .control > label { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .grow { flex: 1 1 260px; min-width: 220px; }
+  input[type="range"] { accent-color: var(--accent); width: 100%; max-width: 240px; }
+  select {
+    background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px;
+  }
+  button {
+    background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 9px; padding: 7px 13px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: #38557c; }
+  button[aria-pressed="true"] { background: #16384a; border-color: #2d7f99; color: #dffaff; }
+  .seg { display: flex; gap: 6px; }
+  .num { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 700; }
+  .time-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .time-row input[type="range"] { max-width: none; flex: 1; }
+
+  .panels { display: grid; gap: 22px; }
+  .panel {
+    background: linear-gradient(180deg, var(--panel), #0a0f19);
+    border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 15px; border-bottom: 1px solid var(--line);
+  }
+  .panel-title { display: flex; align-items: center; gap: 9px; font-weight: 700; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .dot.stage { background: var(--accent); }
+  .dot.flat { background: var(--warn); }
+  .dot.three { background: var(--accent-2); }
+  .panel-tag { color: var(--muted); font-size: 12px; }
+  canvas { display: block; width: 100%; height: auto; background: #070b13; }
+  .stats {
+    padding: 9px 15px 11px; font-size: 12.5px; color: var(--muted);
+    border-top: 1px solid var(--line); min-height: 38px;
+  }
+  .stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .stats em { color: var(--warn); font-style: normal; }
+
+  h2 { font-size: 17px; margin: 34px 0 10px; letter-spacing: -.01em; }
+  .note {
+    border-left: 3px solid var(--accent); background: #0c1420; padding: 12px 15px;
+    border-radius: 0 10px 10px 0; color: #c7d4e6; font-size: 13.5px;
+  }
+  .note b { color: var(--ink); }
+  .note.warn { border-left-color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: right; padding: 7px 9px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  tr.on td { background: #10202e; color: #eaf9ff; }
+  tr.on td:first-child { color: var(--accent); font-weight: 700; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  footer { margin-top: 34px; color: var(--muted); font-size: 12.5px; }
+  footer a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 640px) {
+    body { padding: 18px 12px 56px; }
+    .panel-head { align-items: flex-start; flex-direction: column; gap: 4px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="note-view-app">
+  <header>
+    <h1>Note view lab</h1>
+    <span class="badge">mô phỏng từ mã nguồn</span>
+  </header>
+  <p class="sub">
+    Ba đường vẽ nốt, cùng một bản nhạc và cùng một đồng hồ. Panel trên là WPF/GPU (một công thức),
+    panel giữa là AR phẳng (mặc định), panel dưới là AR 3D. Số đo lấy từ
+    <a href="../../NOTE-EFFECTS-ACTION-PLAN.md">NOTE-EFFECTS-ACTION-PLAN.md</a>;
+    công thức đọc trực tiếp từ <code>PianoStage.cs</code>, <code>GpuStageSimulation.cs</code>,
+    <code>ArProjection.cs</code> và <code>Ar3DNoteProjection.cs</code>.
+  </p>
+
+  <div class="controls">
+    <div class="control-row">
+      <div class="control">
+        <button id="play" aria-pressed="true">Tạm dừng</button>
+        <span class="num" id="time-label">0.0 s</span>
+      </div>
+      <div class="control">
+        <label>Khung hình</label>
+        <div class="seg" role="group" aria-label="Độ phân giải">
+          <button data-res="900" aria-pressed="false">900p</button>
+          <button data-res="1080" aria-pressed="true">1080p</button>
+          <button data-res="1440" aria-pressed="false">1440p</button>
+        </div>
+      </div>
+      <div class="control">
+        <label>Note width</label>
+        <input id="note-width" type="range" min="30" max="100" step="1" value="80">
+        <span class="num" id="note-width-label">80%</span>
+      </div>
+      <div class="control">
+        <label for="width-mode">Quy ước bề rộng</label>
+        <select id="width-mode">
+          <option value="clamped" selected>Đã sửa: lane + kẹp 98% phím đen</option>
+          <option value="lane">Trước sửa: lane (tràn ở 100%)</option>
+          <option value="span">Theo phím (Fit keys)</option>
+        </select>
+      </div>
+      <div class="control">
+        <label for="length-mode">Độ dài thanh</label>
+        <select id="length-mode">
+          <option value="fixed" selected>Đã sửa: trần 20 s</option>
+          <option value="old">Trước sửa: 0,9·hitY</option>
+        </select>
+      </div>
+      <div class="control">
+        <label>Min-aspect (3D)</label>
+        <input id="min-aspect" type="range" min="0" max="200" step="10" value="0">
+        <span class="num" id="min-aspect-label">0%</span>
+      </div>
+      <div class="control">
+        <label><input id="ar-effects" type="checkbox" checked> Hiệu ứng AR 3D</label>
+      </div>
+    </div>
+    <div class="time-row">
+      <input id="time" type="range" min="0" max="18" step="0.01" value="0" aria-label="Thời gian">
+    </div>
+  </div>
+
+  <div class="panels">
+    <section class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot stage"></span>WPF / GPU stage</div>
+        <div class="panel-tag">lane = W/88 · thanh bị kẹp 0,9·hitY</div>
+      </div>
+      <canvas id="stage-canvas" aria-label="Mô phỏng nốt rơi trên stage"></canvas>
+      <div class="stats" id="stage-stats">…</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot flat"></span>AR phẳng — mặc định</div>
+        <div class="panel-tag">span phím · live-bar release 0,35 s</div>
+      </div>
+      <canvas id="flat-canvas" aria-label="Mô phỏng nốt AR phẳng"></canvas>
+      <div class="stats" id="flat-stats">…</div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div class="panel-title"><span class="dot three"></span>AR 3D — Notes in perspective</div>
+        <div class="panel-tag">ghost · landing · nhãn · min-aspect · live-bar release 3,0 s</div>
+      </div>
+      <canvas id="ar3d-canvas" aria-label="Mô phỏng nốt AR 3D"></canvas>
+      <div class="stats" id="ar3d-stats">…</div>
+    </section>
+  </div>
+
+  <h2>Số đo ở khung đang chọn</h2>
+  <div class="legend">
+    <span><i class="sw" style="background:#5fe3ff"></i>stage: bề rộng = lane × %</span>
+    <span><i class="sw" style="background:#ffd479"></i>AR: bề rộng = span phím × 86%</span>
+    <span><i class="sw" style="background:#b18cff"></i>3D: thêm ghost/landing/nhãn</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Khung</th><th>Nốt stage (px)</th><th>% phím trắng</th><th>% phím đen</th>
+        <th>Nốt AR (px)</th><th>Lookahead</th><th>Thanh 4 s</th><th>AR reach</th>
+      </tr>
+    </thead>
+    <tbody id="measure-rows"></tbody>
+  </table>
+
+  <h2>Đọc gì ở đây</h2>
+  <div class="note">
+    <b>N1 — bề rộng.</b> Ở 1080p và 80%, nốt stage rộng 17,45 px: 47,3% phím trắng nhưng 90,9% phím đen.
+    AR phủ 86% span phím thật nên nốt trắng rộng gấp 1,82×. Bản đã sửa kẹp ở 98% phím đen: kéo lên 100% thì nốt
+    còn 18,82 px thay vì tràn 13,6%. Chọn <em>Trước sửa</em> để thấy cái cũ; <em>Fit keys</em> để thấy phương án span.
+  </div>
+  <div class="note warn" style="margin-top:10px">
+    <b>N2 — độ dài thanh.</b> Bản đã sửa bỏ clamp theo cửa sổ: nốt 4 s là thanh 4,00 s ở cả 900p, 1080p và
+    1440p, chỉ phần nhìn thấy khác nhau; trần an toàn là 20 s. Chọn <em>Trước sửa</em> để thấy 2,50 / 3,00 / 4,00 s
+    và 10% trống trên cùng. AR vẫn cắt ở 3,0 s vì đó là <em>vùng nhìn</em>, không phải giới hạn duration.
+  </div>
+  <div class="note" style="margin-top:10px">
+    <b>N3 — AR phẳng.</b> Tắt/bật “Hiệu ứng AR 3D”: panel phẳng không có ghost, landing glow hay nhãn; panel 3D có.
+    Release của live bar cũng khác: 0,35 s (phẳng) so với 3,0 s (3D).
+  </div>
+
+  <h2>Giới hạn của mô phỏng</h2>
+  <p class="sub" style="margin-bottom:0">
+    Đây là hình học và thời gian, không phải render thật: màu, bloom và vật liệu được đơn giản hoá; AR dùng phép
+    chiếu phẳng/lược đồ với một key-depth bằng chiều cao bàn phím, không đi qua calibration camera. Nốt dùng chung
+    một danh sách demo; nhịp và vị trí là giả lập. Các nút <em>Trước sửa</em> chỉ để so sánh lịch sử; mặc định là
+    hình học đã sửa. Muốn con số chính xác của từng hằng số, chạy
+    <code>python3 tools/note_effects_report.py --check</code>.
+  </p>
+
+  <footer>
+    <a href="../../NOTE-EFFECTS-ACTION-PLAN.md">NOTE-EFFECTS-ACTION-PLAN.md</a> ·
+    <a href="../../DAMPER-BAR-LIGHT-ANALYSIS.md">DAMPER-BAR-LIGHT-ANALYSIS.md</a> ·
+    <a href="../particle-motion-lab/index.html">particle-motion-lab</a> ·
+    không sửa mã sản phẩm.
+  </footer>
+</div>
+<script src="note-view.js"></script>
+</body>
+</html>

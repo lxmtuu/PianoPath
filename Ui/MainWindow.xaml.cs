@@ -125,8 +125,14 @@ public partial class MainWindow : Window
             QueueMidiUiEvent(new PendingMidiUiEvent(pitch, velocity, on, direct));
         };
         // The raw controller value reaches the synthesiser so a continuous pedal can half-pedal; it is sent
-        // from the MIDI thread for the same latency reason as the notes above.
-        _midi.PedalLevelChanged += (pedal, value) => _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), value);
+        // from the MIDI thread for the same latency reason as the notes above. The sustain level also reaches
+        // the stage so its glow and the AR strip follow a half-pedal instead of snapping on and off.
+        _midi.PedalLevelChanged += (pedal, value) =>
+        {
+            _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), value);
+            if (pedal == PianoPedal.Sustain)
+                Dispatcher.BeginInvoke(() => Stage.SetSustainLevel(value / 127.0));
+        };
         _midi.PedalChanged += (pedal, down) => Dispatcher.BeginInvoke(() =>
         {
             _liveAudioSent = true;
@@ -1182,6 +1188,8 @@ public partial class MainWindow : Window
             // opaque background while either runs; the switch is the user's and honoured only there.
             Stage.TransparentBackdrop = (sequence || webm) && _visualSettings.RecordingTransparent;
             StartGpuRecording(_videoRecorder);
+            if (!RecordingFromGpu && MissingGpuOnlyEffects() is { Length: > 0 } missingGpuEffects)
+                Trace.WriteLine($"Keyflow: {missingGpuEffects}");
             _audioTrackStarted = BeginAudioTrack();
             // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
             _recordClock.Restart(); _recordTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / (_videoRecorder.FrameRate * 2)) };

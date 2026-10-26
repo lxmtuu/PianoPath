@@ -1,0 +1,220 @@
+using Xunit;
+
+namespace PianoPath.Tests;
+
+/// <summary>
+/// The N12(b) matrix has to stay a matrix: one family per settings axis, every value the product offers, one
+/// off state each, and one capture per value. These checks run on Linux without WPF, so they pin the table that
+/// the Windows capture driver walks — <c>tools/check_sources.py</c> pins the same table to
+/// <see cref="PianoVisualSettings"/>, which is the half that needs the product class.
+/// </summary>
+public class OptionMatrixPlanTests
+{
+    [Fact]
+    public void The_matrix_covers_eleven_settings_axes_and_every_value_they_offer()
+    {
+        Assert.Equal(11, OptionMatrixPlan.Families.Count);
+        Assert.Equal(62, OptionMatrixPlan.Families.Sum(family => family.Values.Count));
+        Assert.Equal(
+            new[] { "note-style", "falling-trail", "impact-wave", "impact-burst", "impact-morph", "impact-flash",
+                    "release", "ambient-energy", "ambient-nature", "ambient-light", "ambient-cosmic" },
+            OptionMatrixPlan.Families.Select(family => family.Id).ToArray());
+        Assert.Equal(
+            new[] { "NoteStyle", "FallingTrail", "ImpactWave", "ImpactBurst", "ImpactMorph", "ImpactFlashStyle",
+                    "ReleaseEffect", "AmbientEnergy", "AmbientNature", "AmbientLight", "AmbientCosmic" },
+            OptionMatrixPlan.Families.Select(family => family.Setting).ToArray());
+    }
+
+    [Fact]
+    public void Every_family_names_an_off_state_it_can_reach()
+    {
+        foreach (var family in OptionMatrixPlan.Families)
+        {
+            Assert.Contains(family.Neutral, family.Values);
+            Assert.Equal(family.Values.Count, family.Values.Distinct(StringComparer.Ordinal).Count());
+            // Only the two channels whose every value is an effect need a visibility gate; for the rest the
+            // neutral is a real value and the baseline sets it.
+            Assert.Equal(family.Neutral is "Embers" or "Flash", family.Gate is not null);
+        }
+    }
+
+    [Fact]
+    public void The_off_state_is_not_captured_twice_unless_a_gate_defines_it()
+    {
+        foreach (var family in OptionMatrixPlan.Families)
+        {
+            var captured = OptionMatrixPlan.CapturedValues(family);
+            if (family.Gate is null)
+            {
+                Assert.DoesNotContain(family.Neutral, captured);
+                Assert.Equal(family.Values.Count - 1, captured.Count);
+                Assert.True(OptionMatrixPlan.IsNeutral(family, family.Neutral));
+            }
+            else
+            {
+                // Every value draws something, so the baseline is the channel switched off and all values stay.
+                Assert.Equal(family.Values, captured);
+                Assert.False(OptionMatrixPlan.IsNeutral(family, family.Neutral));
+            }
+        }
+        Assert.Equal(64, OptionMatrixPlan.SceneCount);
+        Assert.Equal(128, OptionMatrixPlan.SceneCount * 2);
+    }
+
+    [Fact]
+    public void The_review_size_keeps_the_contact_sheet_small()
+    {
+        // 960×540 is the harness' review size: a shard or a ring still covers dozens of pixels, while 128 of
+        // these PNGs stay a small artifact instead of riding inside the 1+ GiB Phase 1 bundle.
+        Assert.Equal(960, OptionMatrixPlan.Width);
+        Assert.Equal(540, OptionMatrixPlan.Height);
+        Assert.Equal(OptionMatrixPlan.SceneCount * 2, 128);
+    }
+
+    [Fact]
+    public void Each_scene_has_one_frame_count_and_one_sample_time()
+    {
+        foreach (var family in OptionMatrixPlan.Families)
+        {
+            var frames = OptionMatrixPlan.Frames(family);
+            Assert.InRange(frames, 2, 120);
+            Assert.Equal(frames / 60.0, OptionMatrixPlan.Seconds(family), 9);
+            // The sample must land inside every lifetime the scene shows: 0.117 s after the hit for the impact
+            // channels (0.26-0.55 s lives) and 0.133 s after the release for the release channel.
+            if (family.Scene == OptionMatrixPlan.Scene.Impact) Assert.Equal(8, frames);
+            if (family.Scene == OptionMatrixPlan.Scene.Release) Assert.Equal(16, frames);
+        }
+        Assert.Equal(90, OptionMatrixPlan.Frames(OptionMatrixPlan.Families.Single(family => family.Id == "falling-trail")));
+    }
+
+    [Fact]
+    public void Only_the_falling_scene_plays_a_song_note()
+    {
+        foreach (var family in OptionMatrixPlan.Families)
+        {
+            var notes = OptionMatrixPlan.Notes(family);
+            Assert.Equal(family.Scene == OptionMatrixPlan.Scene.Falling, OptionMatrixPlan.Playing(family));
+            if (family.Scene != OptionMatrixPlan.Scene.Falling) Assert.Empty(notes);
+            else
+            {
+                var note = Assert.Single(notes);
+                Assert.Equal(OptionMatrixPlan.Pitch, note.Pitch);
+                Assert.True(note.Duration > OptionMatrixPlan.Seconds(family), "the sampled note must still sound at the capture");
+            }
+        }
+    }
+
+    [Fact]
+    public void The_ar_pose_slice_uses_values_the_product_offers()
+    {
+        Assert.Equal(5, OptionMatrixPlan.PoseSelections.Count);
+        foreach (var (id, value) in OptionMatrixPlan.PoseSelections)
+        {
+            var family = OptionMatrixPlan.PoseFamily(id);
+            Assert.Contains(value, family.Values);
+            // A neutral value would make the two AR captures identical by construction.
+            Assert.NotEqual(family.Neutral, value);
+            Assert.Contains(value, OptionMatrixPlan.CapturedValues(family));
+        }
+        // The slice exists to cover the three ownership channels in AR: morph particles, the morph flash and
+        // the release ring, all of which draw while every sibling layer switch is off.
+        var families = OptionMatrixPlan.PoseSelections.Select(selection => OptionMatrixPlan.PoseFamily(selection.Family)).ToArray();
+        Assert.Equal(2, families.Count(family => family.Setting == "ImpactMorph"));
+        Assert.Contains(families, family => family.Setting == "ReleaseEffect");
+        // The three ownership channels have no switch of their own; the burst family legitimately has one
+        // (every burst value draws), which is exactly why it is not one of the channels under test.
+        var owned = families.Where(family => family.Setting is "ImpactMorph" or "ReleaseEffect").ToArray();
+        Assert.Equal(3, owned.Length);
+        Assert.All(owned, family => Assert.Null(family.Gate));
+        Assert.Equal("ShowEmbers", families.Single(family => family.Setting == "ImpactBurst").Gate);
+        Assert.Throws<ArgumentException>(() => OptionMatrixPlan.PoseFamily("nope"));
+    }
+
+    [Fact]
+    public void The_second_ar_slice_covers_the_note_and_ambient_axes_without_repeating_part_one()
+    {
+        Assert.Equal(6, OptionMatrixPlan.PoseSliceSelections.Count);
+        // One row per family: a family shot twice would be compared against an off state it cannot tell apart
+        // from its own sibling.
+        Assert.Equal(OptionMatrixPlan.PoseSliceSelections.Count,
+            OptionMatrixPlan.PoseSliceSelections.Select(selection => selection.Family).Distinct(StringComparer.Ordinal).Count());
+        foreach (var (id, value) in OptionMatrixPlan.PoseSliceSelections)
+        {
+            var family = OptionMatrixPlan.PoseFamily(id);
+            Assert.Contains(value, family.Values);
+            Assert.NotEqual(family.Neutral, value);
+            Assert.Contains(value, OptionMatrixPlan.CapturedValues(family));
+        }
+        // Part 2 is exactly the rest of what the overlay draws: the two song-note axes and the four ambient
+        // layers. Part 1's five effect axes must not leak in.
+        var settings = OptionMatrixPlan.PoseSliceSelections.Select(selection => OptionMatrixPlan.PoseFamily(selection.Family).Setting).ToArray();
+        Assert.Equal(new[] { "NoteStyle", "FallingTrail", "AmbientEnergy", "AmbientNature", "AmbientLight", "AmbientCosmic" }, settings);
+        var partOne = OptionMatrixPlan.PoseSelections.Select(selection => selection.Family).ToHashSet(StringComparer.Ordinal);
+        Assert.All(OptionMatrixPlan.PoseSliceSelections, selection => Assert.DoesNotContain(selection.Family, partOne));
+        // The note axes keep their family's own scene; the ambient axes need the empty one, because a scene with a
+        // note in it would compare the note rather than the layer.
+        Assert.Equal(OptionMatrixPlan.Scene.Falling, OptionMatrixPlan.PoseFamily("note-style").Scene);
+        Assert.Equal(OptionMatrixPlan.Scene.Falling, OptionMatrixPlan.PoseFamily("falling-trail").Scene);
+        Assert.All(OptionMatrixPlan.PoseSliceSelections.Where(selection => selection.Family.StartsWith("ambient-", StringComparison.Ordinal)),
+            selection => Assert.Equal(OptionMatrixPlan.Scene.Ambient, OptionMatrixPlan.PoseFamily(selection.Family).Scene));
+    }
+
+    [Fact]
+    public void The_falling_scene_note_is_still_inside_the_calibrated_picture()
+    {
+        // The note axes of the AR/pose slice are shot at the Falling scene, which only works while the note's
+        // visible body is close enough to the keys to be inside a picture calibrated around the keyboard. The
+        // projection clamps the leading edge at the key plane and shortens the tail by however long the note has
+        // been sounding, so the body is the part still above the keys, not the whole two seconds of note.
+        var style = ArNoteStyle.Default;
+        var note = Assert.Single(OptionMatrixPlan.Notes(OptionMatrixPlan.Scene.Falling));
+        var position = OptionMatrixPlan.Seconds(OptionMatrixPlan.Scene.Falling);
+        Assert.True(note.Start < position, "the sampled note has to have begun, or the body would start above the picture");
+        var signedHead = (note.Start - position) * style.FallSpeed;
+        var head = Math.Max(0, signedHead);
+        var natural = Math.Max(note.Duration * style.FallSpeed - style.Gap, style.MinLength);
+        var tail = Math.Min(Math.Max(signedHead + natural, head), style.Reach);
+        Assert.Equal(OptionMatrixPlan.FallingSceneNoteHeadDepth, head, 6);
+        Assert.Equal(OptionMatrixPlan.FallingSceneNoteTailDepth, tail, 6);
+        // A body of zero or negative length would draw nothing; a body past the reach would have been clipped and
+        // the capture would show a different note than the one this test describes.
+        Assert.True(tail > head + .1, "the scene's note must have a body above the keys at the capture");
+        Assert.True(tail < style.Reach, "the body has to be the note's real tail, not one clipped by the reach");
+    }
+
+    [Fact]
+    public void Slugs_are_stable_file_names()
+    {
+        Assert.Equal("speed-lines", OptionMatrixPlan.Slug("Speed Lines"));
+        Assert.Equal("crystaloutline", OptionMatrixPlan.Slug("CrystalOutline"));
+        Assert.Equal("lightning-storm", OptionMatrixPlan.Slug("Lightning Storm"));
+        Assert.Equal("none", OptionMatrixPlan.Slug("None"));
+        foreach (var family in OptionMatrixPlan.Families)
+        foreach (var value in family.Values)
+        {
+            var slug = OptionMatrixPlan.Slug(value);
+            Assert.False(string.IsNullOrWhiteSpace(slug));
+            Assert.All(slug, c => Assert.True(char.IsLetterOrDigit(c) || c == '-'));
+            Assert.DoesNotContain("--", slug);
+        }
+        // One value per family cannot share another's file name.
+        Assert.All(OptionMatrixPlan.Families, family =>
+            Assert.Equal(family.Values.Count, family.Values.Select(OptionMatrixPlan.Slug).Distinct(StringComparer.Ordinal).Count()));
+    }
+
+    [Fact]
+    public void Changed_pixels_ignore_alpha_and_the_two_byte_floor()
+    {
+        byte[] black = [0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255];
+        byte[] sameButAlpha = [0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 255];
+        byte[] smallStep = [2, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255];
+        byte[] onePixel = [9, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255];
+        Assert.Equal(0, OptionMatrixPlan.ChangedPixels(black, sameButAlpha));
+        Assert.Equal(0, OptionMatrixPlan.ChangedPixels(black, smallStep));
+        Assert.Equal(1, OptionMatrixPlan.ChangedPixels(black, onePixel));
+        Assert.Equal(1, OptionMatrixPlan.NonBlackPixels(onePixel));
+        Assert.Equal(0, OptionMatrixPlan.NonBlackPixels(black));
+        Assert.Equal(0, OptionMatrixPlan.NonBlackPixels(smallStep)); // a 2/255 step is still the black floor
+        Assert.Throws<ArgumentException>(() => OptionMatrixPlan.ChangedPixels(black, new byte[4]));
+    }
+}

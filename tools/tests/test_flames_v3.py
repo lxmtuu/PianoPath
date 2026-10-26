@@ -43,6 +43,12 @@ class FlamesV3Tests(unittest.TestCase):
         bad=copy.deepcopy(motion);bad['captures'][0]['hashes']=['F'*64]
         with self.assertRaises(ValueError):r.retained(m,old,bad,motion)
 
+    def test_flames_motion_must_declare_the_v3_law(self):
+        # The static quartets keep v2 geometry for the light comparison, so the only evidence of the W2
+        # motion is the clip manifest. A clip set that does not say which law drew it is not evidence.
+        with self.assertRaisesRegex(ValueError,'v3 motion law'):
+            r.paired(Path('.'),dict(captures=[]),require_motion_law=True)
+
     def test_paired_apng_keeps_every_native_half_pixel_and_timing(self):
         try:from PIL import Image
         except ImportError:self.skipTest('Pillow decoder is review-only')

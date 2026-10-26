@@ -73,7 +73,7 @@ internal sealed partial class PianoStage
                 feed.Watermark = _visual.ShowWatermark ? GpuWatermark : null;
                 PublishGpuLook();
                 feed.SetStageHeight(ActualHeight);
-                feed.SetSustainLevel(_sustainPedal, _simulation.Sustain);
+                feed.SetSustainLevel(_sustainPedal, _sustainRaw);
                 feed.SetPointer(_pointerX, _pointerY);
                 ForwardGpuState();
             }

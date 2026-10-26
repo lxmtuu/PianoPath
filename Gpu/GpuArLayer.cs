@@ -15,7 +15,7 @@ internal struct GpuArQuad
     public Vector4 W;
     /// <summary>Linear rgb and opacity.</summary>
     public Vector4 Color;
-    /// <summary>For notes, x=sounding, y=seed and w=hold-bar strength; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6, beam 7, shimmer 8, note trail 9, note label 10 or damper strip 11; experimental held particle surface 17.</summary>
+    /// <summary>For notes, x=sounding, y=seed and w=hold-bar strength; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6, beam 7, shimmer 8, note trail 9, note label 10, damper strip 11 (y is the bloom ignition) or damper cell/tick 12 (y=1 marks a flat stroke and x is the rim alpha); experimental held particle surface 17.</summary>
     public Vector4 Misc;
 }
 
@@ -74,6 +74,8 @@ internal sealed partial class GpuArLayer
     internal int LiveBarCount { get; private set; }
     internal int RisingMidiNoteCount { get; private set; }
     internal int NoteTrailQuadCount { get; private set; }
+    /// <summary>Sheen quads drawn inside existing note bodies; the shimmer has no quad of its own on the page.</summary>
+    internal int NoteShimmerQuadCount { get; private set; }
     internal int GhostNoteQuadCount { get; private set; }
     internal int LandingGlowCount { get; private set; }
     internal int NoteLabelCount { get; private set; }
@@ -86,6 +88,8 @@ internal sealed partial class GpuArLayer
     internal int BeamCount { get; private set; }
     internal int ReleaseEffectCount { get; private set; }
     internal int DamperStripCount { get; private set; }
+    internal int DamperCellCount { get; private set; }
+    internal int DamperTickCount { get; private set; }
 
     /// <summary>Guide line quads packed by the alignment check (roadmap §14.7 "Thêm 1"); verification reads it.</summary>
     internal int AlignmentGuideCount { get; private set; }
@@ -106,9 +110,9 @@ internal sealed partial class GpuArLayer
         quads.Clear();
         _shapes.Clear(); _projectedShapes.Clear(); _liveBars.Clear(); _projectedLiveBars.Clear(); _risingMidiNotes.Clear();
         KeyQuadCount = LiveBarCount = RisingMidiNoteCount = 0;
-        NoteTrailQuadCount = GhostNoteQuadCount = LandingGlowCount = NoteLabelCount = 0;
+        NoteTrailQuadCount = GhostNoteQuadCount = LandingGlowCount = NoteLabelCount = NoteShimmerQuadCount = 0;
         ImpactLightCount = NoteLightCount = PulseCount = ParticleFxCount = FlashCount = HoldArcCount = BeamCount = ReleaseEffectCount = 0;
-        DamperStripCount = 0;
+        DamperStripCount = DamperCellCount = DamperTickCount = 0;
         AlignmentGuideCount = 0;
         if (ar.Opacity <= 0) return;
 
@@ -131,12 +135,52 @@ internal sealed partial class GpuArLayer
 
         // The damper strip is a scene element, so it packs before everything born with a strike: it hugs the key
         // back edge, waves only with the pedal level, and takes the look's halo colour (the Pedal Glow family).
-        var damperLift = ArDampers.ClampLevel(input.SustainLevel);
+        var damperLift = ArDampers.ClampLevel(simulation.SustainLift);
+        // D3: a held pedal breathes ±2% instead of standing perfectly still; with the pedal up the factor is
+        // exactly 1, so the D1 look is untouched, and the accessibility toggle turns the sway off.
+        var damperBreath = ArDampers.Breath(damperLift, simulation.Clock, look.ReducedMotion);
         if (ar.ShowDamperStrip && ArElementCatalog.CanDraw(ar.Quality, ArElement.Dampers)
             && ArDampers.TryPatch(ar.Calibration, view, damperLift, out var damperPatch))
         {
-            quads.Add(Pack(damperPatch, look.ArDamperColor, (float)(ArDampers.AlphaFor(damperLift) * opacity), new Vector4(0, 0, 11f, 0)));
+            quads.Add(Pack(damperPatch, look.ArDamperColor, (float)(ArDampers.AlphaFor(damperLift) * damperBreath * opacity),
+                new Vector4((float)damperLift, (float)ArDampers.Ignition(damperLift), 11f, (float)ArDampers.CorePositionFor(damperLift))));
             DamperStripCount++;
+
+            // One cell and one pin per key that is held or lifted by the pedal. They are scene elements like
+            // the strip, so they pack before everything born with a strike: they hug the key back edge, lift
+            // with the pedal (or the held key) and never occlude a note. Sostenuto is not in the GPU state yet;
+            // a sostenuto-caught key still shows through the held flag while it is physically down.
+            var damperDepth = ArDampers.DepthFor(damperLift);
+            for (var pitch = layout.FirstPitch; pitch <= layout.LastPitch; pitch++)
+            {
+                var value = simulation.DamperTick(pitch);
+                if (value < .02f) continue;
+                var (left, right) = layout.Span(pitch);
+                var cellWidth = ArDampers.CellWidth(right - left, KeyboardLayout.IsBlack(pitch));
+                var centre = (left + right) * .5;
+                if (!ArProjection.TryProject(ar.Calibration, view, centre - cellWidth / 2, centre + cellWidth / 2,
+                        -damperDepth, 0, out var cell, out _, out _)) continue;
+                var tint = Vector3.Lerp(look.ArDamperColor, look.NoteColor(pitch, 0), .22f);
+                quads.Add(Pack(cell, tint, (float)(ArDampers.CellBodyAlpha(value) * damperBreath * opacity),
+                    new Vector4((float)(ArDampers.CellRimAlpha(value) * damperBreath * opacity), 0, 12f, 0)));
+                DamperCellCount++;
+
+                // The pin rises from the cell's back edge toward the falling notes with a crossbar for a head.
+                // Its height and width follow the projection (one band deep, a tenth of the cell wide) so the same
+                // six lines of code reads correctly at 1080p and in a 320x180 preview instead of the pin filling
+                // half the keyboard there. Both are flat screen-space strokes, so they ask for no cell rim.
+                var height = (float)(ArDampers.PinHeight(Math.Abs(cell.FrontLeft.Y - cell.BackLeft.Y)) * value);
+                if (height < .5f) continue;
+                var cx = (float)((cell.BackLeft.X + cell.BackRight.X) * .5);
+                var baseY = (float)((cell.BackLeft.Y + cell.BackRight.Y) * .5);
+                var half = (float)(ArDampers.PinWidth(cell.BackRight.X - cell.BackLeft.X) * .5);
+                var alpha = (float)(ArDampers.TickAlpha(value) * damperBreath * opacity);
+                quads.Add(Pack(ScreenRect(cx - half, baseY - height, cx + half, baseY), look.ArDamperColor, alpha, new Vector4(0, 1, 12f, 0)));
+                var capHalf = half * 2.25f;
+                var capHeight = Math.Max(1f, height * .13f);
+                quads.Add(Pack(ScreenRect(cx - capHalf, baseY - height - capHeight, cx + capHalf, baseY - height), look.ArDamperColor, alpha, new Vector4(0, 1, 12f, 0)));
+                DamperTickCount += 2;
+            }
         }
 
         if (!suppressKeySpillForReview && ar.Calibration.CameraPose is { } keyPose && ar.Quality != ArQualityTier.Lite && keyLight > 0
@@ -276,14 +320,14 @@ internal sealed partial class GpuArLayer
         return color;
     }
 
-    private static void AddSongNote(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, int noteIndex,
+    private void AddSongNote(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, int noteIndex,
         bool sounding, double fade, NoteEvent note, float opacity, GpuLook look, double time, bool ghostPass = false)
     {
         var played = note.Played;
         var color = SongNoteColor(pitch, note, sounding, look, time);
         var noteOpacity = played ? .42f : 1f;
         var pulse = look.FallingPulse && !sounding
-            ? .62f + .38f * MathF.Sin((float)time * (1.5f + look.FallingPulseRate * 9) + pitch * .7f) : 1f;
+            ? .62f + .38f * MathF.Sin((float)time * (float)MotionBudget.PulseAngularRate(look.FallingPulseRate) + pitch * .7f) : 1f;
         var breath = sounding && look.HoldBreath
             ? .72f + .28f * MathF.Sin((float)time * (1 + look.HoldBreathRate * 5)) : 1f;
         var linear = GpuStageSimulation.ToLinear(color) * breath;
@@ -306,7 +350,7 @@ internal sealed partial class GpuArLayer
         return look.RainbowTrail ? GpuStageSimulation.ColorFromHue(time * look.RainbowHueSpeed + pitch * 9) : color;
     }
 
-    private static void AddLiveBar(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, double fade, bool held,
+    private void AddLiveBar(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, double fade, bool held,
         float strength, Vector3 color, float opacity, GpuLook look, double time, bool ghostPass = false)
     {
         var breath = held && look.HoldBreath
@@ -314,7 +358,7 @@ internal sealed partial class GpuArLayer
         color = LiveNoteColor(pitch, held, strength, color, look, time);
 
         var pulse = look.FallingPulse && !held
-            ? .62f + .38f * MathF.Sin((float)time * (1.5f + look.FallingPulseRate * 9) + pitch * .7f) : 1f;
+            ? .62f + .38f * MathF.Sin((float)time * (float)MotionBudget.PulseAngularRate(look.FallingPulseRate) + pitch * .7f) : 1f;
         var linear = GpuStageSimulation.ToLinear(color) * breath;
         var alpha = opacity * (float)Math.Clamp(fade, 0, 1) * pulse;
         var holdBar = held && look.HoldBar ? look.HoldBarIntensity * opacity * (float)Math.Clamp(fade, 0, 1) : 0;
@@ -326,7 +370,7 @@ internal sealed partial class GpuArLayer
     private static double Distance(double x, double y) => Math.Sqrt(x * x + y * y);
 
     /// <summary>Projects the GPU stage's moving note sheen along an AR note's own calibrated quad.</summary>
-    private static void AddNoteShimmer(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch,
+    private void AddNoteShimmer(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch,
         Vector3 linearColor, float alpha, GpuLook look)
     {
         if (!look.NoteShimmer || look.NoteShimmerAmount <= .01f || alpha <= .01f) return;
@@ -338,7 +382,13 @@ internal sealed partial class GpuArLayer
         var phase = pitch * 1.6180339f + .37f;
         quads.Add(Pack(patch, linearColor, alpha,
             new Vector4(phase, look.NoteShimmerAmount, 8, 0)));
+        NoteShimmerQuadCount++;
     }
+
+    /// <summary>A flat screen-space rectangle in output pixels: the AR layer's own strokes need no projection.</summary>
+    private static ArPatch ScreenRect(double left, double top, double right, double bottom) => new(
+        new ArCorner(left, top, 1), new ArCorner(right, top, 1),
+        new ArCorner(right, bottom, 1), new ArCorner(left, bottom, 1));
 
     private static GpuArQuad Pack(ArPatch patch, Vector3 color, float alpha, Vector4 misc) => new()
     {

@@ -4,7 +4,7 @@ namespace PianoPath;
 
 internal sealed partial class GpuArLayer
 {
-    private const int MaxProjectedParticles = 192;
+    private const int MaxProjectedParticles = 384;
     // Null in production. Observes only particles that really packed; never participates in selection.
     internal Action<GpuArParticle>? ObservePackedParticleForReview { get; set; }
     private const byte ParticleStreak = 1, ParticleConfetti = 2, ParticleDust = 3,
@@ -462,8 +462,10 @@ internal sealed partial class GpuArLayer
         var y = Math.Clamp((simulation.SimulationHitY - particle.Y) * unit, -.2, 2.4);
         if (particle.Wisp)
         {
-            var amp = (5 + look.WispTurbulence * 26) * (.45f + look.WispWidth) * Math.Min(1, particle.Age * 1.6f);
-            x += Math.Sin(particle.Age * (3 + look.WispTurbulence * 5) + particle.Phase) * amp * unit;
+            // Same rule as the stage sprites: with W1's flow on, the wander is already in the simulated
+            // velocity, so the draw-time curve is not added a second time.
+            if (look.ParticleFlow <= 0)
+                x += WispMotion.OffsetPrecise(look.WispTurbulence, look.WispWidth, (float)particle.Age, (float)particle.Phase) * unit;
         }
         var anchorX = layout.CenterX(particle.Pitch) * pose.KeyboardWidthDepthRatio;
         var center = legacyAxes ? new ArVec3(x, .12, -y) : frame.Point(new(anchorX, .12, 0), x - anchorX, y);

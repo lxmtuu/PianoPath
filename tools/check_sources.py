@@ -41,6 +41,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import value_pilot_contract  # noqa: E402  (same directory as this script)
+
 
 def _raw_string(text: str, i: int):
     """A C# raw string literal starts at ``i`` (three or more quotes, optionally after ``$`` signs) and runs
@@ -959,6 +962,1228 @@ def scan_gpu_overlay_evidence():
         if engine_draws and engine_wording not in sentence:
             errors.append(f"{name}: the GPU limitation bullet no longer says the engine draws the watermark "
                           f"itself (expected {engine_wording!r})")
+    return errors
+
+
+def scan_wisp_motion_contract():
+    """The wisp's sideways wander is one curve, and every renderer has to draw that curve.
+
+    Before W0 the same expression lived in four C# files — twice in ``GpuStageSimulation``, once in
+    ``GpuArLayer.Effects`` and once in ``ArParticleAlignmentReview``, the diagnostic that *measures* AR
+    alignment against its own arithmetic. The software stage held a fifth, different version that added the
+    sine to the particle's velocity, so the same mote was drawn 10.6 px apart at 0.8 s and nothing compared
+    them. Unit tests pin the curve's shape; this check pins the wiring, which is the half that drifted.
+
+    Three things are enforced:
+      * the constants live only in ``Stage/WispMotion.cs``;
+      * each consumer calls ``WispMotion.Offset``, including the software stage's draw — a renderer that
+        quietly reintroduces its own sine fails the fast lane instead of drifting in a video;
+      * that call is gated on ``ParticleFlow <= 0``, because W1's flow already carries the wander in the
+        velocity and drawing the old curve on top would scatter the stream twice — and would put AR, which
+        adds the same offset at draw time, up to 3 px away from the sprites it is measuring.
+    """
+    errors = []
+    curve_path = ROOT / "Stage" / "WispMotion.cs"
+    if not curve_path.exists():
+        return ["Stage/WispMotion.cs is missing; the wisp sway would have no single home again"]
+    consumers = {
+        "Gpu/GpuStageSimulation.cs": 2,
+        "Gpu/GpuArLayer.Effects.cs": 1,
+        "Stage/PianoStage.cs": 1,
+        "Diagnostics/ArParticleAlignmentReview.cs": 1,
+    }
+    for name, expected in consumers.items():
+        path = ROOT / name
+        if not path.exists():
+            errors.append(f"{name} is missing, but it is one of the paths that draws a wisp")
+            continue
+        text = path.read_text(encoding="utf-8")
+        found = _code(text).count("WispMotion.Offset")
+        if found != expected:
+            errors.append(f"{name}: expected {expected} call(s) to WispMotion.Offset, found {found} — every "
+                          f"renderer of a wisp must draw the shared curve, not its own copy")
+    # Any multiplication of a turbulence value by a literal is somebody's own sway — whatever the variable is
+    # called and however the spaces fall. Passing the setting to WispMotion, dividing it by 100 to normalise it
+    # or reading it through P() is not, so this keys on the `*` and not on the name alone.
+    sway = re.compile(r"(?i)(?:\b\w*turbulence\b)\s*\*")
+    for path in sorted(ROOT.rglob("*.cs")):
+        if "obj" in path.parts or "bin" in path.parts or path == curve_path:
+            continue
+        rel = path.relative_to(ROOT).as_posix()
+        for number, line in enumerate(_code(path.read_text(encoding="utf-8")).split("\n"), 1):
+            if sway.search(line):
+                errors.append(f"{rel}:{number}: multiplies a wisp turbulence value by a literal, which is a "
+                              f"second copy of the sway; WispMotion owns that curve now")
+    # W1 draws a coherent stream by *moving* the motes; the draw-time wander is exactly what made them
+    # wave on their own phases, so it has to stand down while the flow runs. Gating it in one renderer and
+    # forgetting another would put the scatter back on half the frame, which is worse than either look.
+    for name in consumers:
+        path = ROOT / name
+        if not path.exists():
+            continue
+        lines = _code(path.read_text(encoding="utf-8")).split("\n")
+        for number, line in enumerate(lines):
+            if "WispMotion.Offset" not in line:
+                continue
+            context = ((lines[number - 1] if number else "") + line).replace(" ", "").replace("\t", "")
+            if "ParticleFlow<=0" not in context:
+                errors.append(f"{name}:{number + 1}: draws the wisp's draw-time sway without checking "
+                              f"`ParticleFlow <= 0`; while the flow runs the wander is already in the "
+                              f"velocity, so adding it here scatters the stream twice")
+    # The software stage must not integrate the sway into velocity again: the same sine inside the wisp
+    # update moves the mote faster in slow motion and re-opens the 10.6 px disagreement.
+    stage = ROOT / "Stage" / "PianoStage.cs"
+    if stage.exists():
+        branch = re.search(r"if \(p\.Wisp\)\s*\{(.*?)\}", stage.read_text(encoding="utf-8"), re.S)
+        if branch and "Math.Sin(p.Age" in branch.group(1):
+            errors.append("Stage/PianoStage.cs: the software stage is integrating the wisp sway into velocity "
+                          "again; it must be a draw-time offset, or slow motion moves the mote")
+    return errors
+
+
+def scan_stage_clock_contract():
+    """Slow motion must scale the particles and nothing else, on both renderers.
+
+    The GPU simulation has always done this: ``particleDt = frameDt * PhysicsTimeFactor`` feeds the particle
+    integrator, while rings, flashes, live bars, key heat and the beat envelope read ``frameDt``. The software
+    stage used one scaled clock for everything, so at any factor but 100 its live bars fell at a different
+    speed from the engine's — the same song, a different animation. Nothing compared the two, so nothing went
+    red; the check below is the cheap half of the replacement.
+
+    Three facts, each one a way the split has already been (or could be) undone:
+      * the software stage asks ``StageClock.Particle`` for its particle clock;
+      * it does not feed that scaled clock to the things a player reads as real time — the held bar, the
+        impact rings and the impact flash ages;
+      * the GPU keeps the same division of labour, so the two renderers stay comparable.
+    """
+    errors = []
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    gpu_path = ROOT / "Gpu" / "GpuStageSimulation.cs"
+    for path in (stage_path, gpu_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; it decides which clock a frame runs on"]
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    if "StageClock.Particle(" not in stage:
+        errors.append("Stage/PianoStage.cs: the software stage no longer asks StageClock for its particle clock, "
+                      "so the slow-motion slider is scaling the whole stage again")
+    for line in ("trail.Age += particleDt", "trail.HeldSeconds += particleDt",
+                 "ring.Age += particleDt", "flash.Age += particleDt"):
+        if line in stage:
+            errors.append(f"Stage/PianoStage.cs: '{line}' puts a real-time effect on the particle clock; only "
+                          f"the particles may slow down")
+    gpu = _code(gpu_path.read_text(encoding="utf-8"))
+    if "particleDt = frameDt * look.PhysicsTimeFactor" not in gpu:
+        errors.append("Gpu/GpuStageSimulation.cs: the GPU no longer derives particleDt from the frame clock "
+                      "and the look's factor, so StageClock.Particle mirrors a formula that has moved")
+    return errors
+
+
+def scan_flame_motion_contract():
+    """The held-key flame must stay one effect, not two.
+
+    The engine draws it as a stream of motes and always has; the software stage drew a plume pinned to the key
+    top, so the same preset showed fire on a GPU machine and a stuck decal without one. ``Stage/FlameMotion.cs``
+    now holds the engine's law and the fallback calls it.
+
+    This is a drift detector, not a duplicate of the C# tests: if the engine's literals change, the shared
+    helper has to change with them, and the failure message says which literal moved. It also refuses the old
+    anchored plume's geometry, because that is the exact shape this replaced.
+    """
+    errors = []
+    helper_path = ROOT / "Stage" / "FlameMotion.cs"
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    gpu_path = ROOT / "Gpu" / "GpuStageSimulation.cs"
+    for path in (helper_path, stage_path, gpu_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; it is part of the flame contract"]
+    helper = _code(helper_path.read_text(encoding="utf-8"))
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    gpu = _code(gpu_path.read_text(encoding="utf-8"))
+    for name in ("EmissionRate", "RiseSpeed", "LifeSeconds", "Size", "Sway", "Ramp"):
+        if name not in helper:
+            errors.append(f"Stage/FlameMotion.cs: the flame's {name} is gone, so the fallback and the engine no longer share a law")
+        elif f"FlameMotion.{name}(" not in stage:
+            errors.append(f"Stage/PianoStage.cs: nothing calls FlameMotion.{name}, so the frame being drawn is not the engine's flame")
+    for literal, what in (
+        ("70 * look.FlameIntensity * _heat[pitch]", "birth rate"),
+        ("-(50 + 150 * look.FlameHeight)", "rise speed"),
+        (".22f + look.FlameHeight * .45f", "lifetime"),
+        ("layout.Lane * (.35f + Rand() * .3f)", "mote size"),
+    ):
+        if literal not in gpu:
+            errors.append(f"Gpu/GpuStageSimulation.cs: the flame's {what} changed away from '{literal}'; update "
+                          "Stage/FlameMotion.cs in the same commit or the two renderers drift apart again")
+    if "keyTop - flameH * .42" in stage:
+        errors.append("Stage/PianoStage.cs: the anchored flame plume is back (keyTop - flameH * .42); it is the shape "
+                      "that never moves and it belongs to no renderer any more")
+    # The W2 candidate (buoyant rise, drag, cooling swell) is one law with one home. If the engine grows its own
+    # copy of the four numbers, the review clips stop measuring the same flame the software stage could adopt.
+    for name in ("V3Buoyancy", "V3Drag", "V3Lift", "V3Swell", "StepV3"):
+        if name not in helper:
+            errors.append(f"Stage/FlameMotion.cs: the flame's W2 {name} is gone, so the motion candidate has no law")
+    if "FlameMotion.StepV3(ref p.X" not in gpu:
+        errors.append("Gpu/GpuStageSimulation.cs: the flame no longer steps through FlameMotion.StepV3, so the "
+                      "review clips and the shared law have diverged")
+    if "look.FlameMotionV3ForReview" not in gpu:
+        errors.append("Gpu/GpuStageSimulation.cs: the W2 flame step lost its review flag; the accepted v2 captures "
+                      "pin the constant-rise plume and must not move")
+    if "p.Vx += MathF.Sin(p.Age * 11 + p.Phase) * 40 * particleDt;" not in gpu:
+        errors.append("Gpu/GpuStageSimulation.cs: the shipped flame integrator changed; that path is pinned by the "
+                      "accepted captures, so the candidate belongs in FlameMotion.StepV3 instead")
+    return errors
+
+
+def scan_particle_flow_contract():
+    """W1's flow is one law, two integrators and one switch that defaults to off.
+
+    The shipped wisps and flames are pinned by the accepted ``wisps-v3``/``flames-v3`` captures, so the flow
+    may only run when the slider is raised: the engines keep their old arithmetic on the zero path, and both of
+    them call ``Stage/ParticleFlow.cs`` on the other one. This check is a drift detector for that shape — a
+    second copy of the wind in either renderer, or a setting nobody wired, is what it exists to catch.
+    """
+    errors = []
+    helper_path = ROOT / "Stage" / "ParticleFlow.cs"
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    gpu_path = ROOT / "Gpu" / "GpuStageSimulation.cs"
+    settings_path = ROOT / "Stage" / "PianoVisualSettings.cs"
+    look_path = ROOT / "Gpu" / "GpuLook.cs"
+    dock_path = ROOT / "Ui" / "MainWindow.Settings.cs"
+    for path in (helper_path, stage_path, gpu_path, settings_path, look_path, dock_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; it is part of the flow contract"]
+    helper = _code(helper_path.read_text(encoding="utf-8"))
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    gpu = _code(gpu_path.read_text(encoding="utf-8"))
+    settings = _code(settings_path.read_text(encoding="utf-8"))
+    look = _code(look_path.read_text(encoding="utf-8"))
+    dock = _code(dock_path.read_text(encoding="utf-8"))
+    for name in ("EntrainSeconds", "VerticalShare", "DiffusionRate", "Wind(", "Curl(", "Diffusion(", "Step("):
+        if name not in helper:
+            errors.append(f"Stage/ParticleFlow.cs: {name} is gone, so the flow's four parts no longer live in one law")
+    # Both renderers call the law; neither carries the numbers.
+    # The engine steps a wisp and a flame through one branch; the software stage keeps its two lists apart, so
+    # it has one call per list. Both counts are exact: a third call means a third copy of the law.
+    for path, text, gate, calls in (("Gpu/GpuStageSimulation.cs", gpu, "look.ParticleFlow > 0", 1),
+                                    ("Stage/PianoStage.cs", stage, "_visual.ParticleFlow > 0", 2)):
+        if text.count("ParticleFlow.Step(") != calls:
+            errors.append(f"{path}: expected exactly {calls} call(s) to ParticleFlow.Step, found {text.count('ParticleFlow.Step(')}")
+        if gate not in text:
+            errors.append(f"{path}: the flow step lost its '{gate}' gate, so raising the slider is not what turns it on")
+        for name in ("EntrainSeconds", "VerticalShare", "DiffusionRate"):
+            if name in text:
+                errors.append(f"{path}: carries the flow's {name} as well as calling it; the constant belongs in Stage/ParticleFlow.cs")
+        if "ParticleFlow.Turn" not in text:
+            errors.append(f"{path}: the per-particle phase is no longer folded through ParticleFlow.Turn")
+    if "public double ParticleFlow { get; set; }" not in settings:
+        errors.append("Stage/PianoVisualSettings.cs: the Flow setting is gone")
+    if "ParticleFlow = Math.Clamp(ParticleFlow, 0, 100);" not in settings:
+        errors.append("Stage/PianoVisualSettings.cs: ParticleFlow is not clamped with its own range")
+    if "ParticleFlow = P(s.ParticleFlow)" not in look:
+        errors.append("Gpu/GpuLook.cs: the engine never receives the flow slider")
+    if "nameof(PianoVisualSettings.ParticleFlow)" not in dock:
+        errors.append("Ui/MainWindow.Settings.cs: no row drives the flow slider")
+    return errors
+
+
+def scan_note_width_parity():
+    """One bar, one slider: the held-key bar and the falling note must take ``Note width`` as it is.
+
+    The slider runs 30-100. The software stage's held bar used to floor it at 60%, so a 30% preset drew a bar
+    twice as wide as its own falling notes - and twice as wide as the same preset on a GPU, where the engine has
+    always read the slider. ``NoteGeometry.BarWidth`` is now the one law for that slider; this scan fails if the
+    floor comes back, if either software path stops going through the helper, or if the engine stops reading the
+    same slider.
+    """
+    errors = []
+    geometry_path = ROOT / "Stage" / "NoteGeometry.cs"
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    gpu_path = ROOT / "Gpu" / "GpuStageSimulation.cs"
+    look_path = ROOT / "Gpu" / "GpuLook.cs"
+    for path in (geometry_path, stage_path, gpu_path, look_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; it is part of the note-width contract"]
+    geometry = _code(geometry_path.read_text(encoding="utf-8"))
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    gpu = _code(gpu_path.read_text(encoding="utf-8"))
+    look = _code(look_path.read_text(encoding="utf-8"))
+    if "internal static double BarWidth(double lane, double noteWidthPercent, double blackKeyWidth)" not in geometry:
+        errors.append("Stage/NoteGeometry.cs: BarWidth is gone, so the two software note paths no longer share a law")
+    if stage.count("NoteGeometry.BarWidth(lane, _visual.NoteWidth,") != 2:
+        errors.append("Stage/PianoStage.cs: the falling note and the held bar must both take NoteWidth through "
+                      "NoteGeometry.BarWidth (exactly two call sites)")
+    if "Math.Max(_visual.NoteWidth" in stage:
+        errors.append("Stage/PianoStage.cs: the held bar's 60% floor is back; it makes a thin preset draw a wide "
+                      "bar on the software stage and a thin one on the engine")
+    if "NoteGeometry.Width(lane, _visual.NoteWidth" in stage:
+        errors.append("Stage/PianoStage.cs: a note path passes the raw slider as a fraction again; use BarWidth")
+    if "NoteGeometry.Width(layout.Lane, look.NoteWidth," not in gpu:
+        errors.append("Gpu/GpuStageSimulation.cs: the engine stopped sizing its notes from look.NoteWidth")
+    if "NoteWidth = P(s.NoteWidth)" not in look:
+        errors.append("Gpu/GpuLook.cs: NoteWidth is no longer the slider divided by 100, so the engine and the "
+                      "software stage disagree about the unit")
+    return errors
+
+
+def scan_held_emission_parity():
+    """A held key must let off the same amount on both renderers.
+
+    The engine births ``ParticleAmount * 1.3`` embers and ``WispAmount * 4`` wisps a second for every sounding
+    key. The software stage had no sustained-ember channel and birthed wisps at ``WispAmount`` — a quarter of
+    the engine's — so one preset showed two twisting smoke strands and a stream of embers on a GPU machine and a
+    thin trickle on a bare key without one. ``Stage/HeldEmission.cs`` now holds both rates.
+
+    The engine keeps its own float expressions so the frames pinned by the particle evidence stay identical;
+    this check makes sure nobody changes those numbers without changing the shared helper, and that the fallback
+    still asks the helper instead of inventing a rate. ``EffectBudget`` already allows the two stages different
+    ceilings — that is a frame-time budget, not a smaller rate.
+    """
+    errors = []
+    helper_path = ROOT / "Stage" / "HeldEmission.cs"
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    gpu_path = ROOT / "Gpu" / "GpuStageSimulation.cs"
+    for path in (helper_path, stage_path, gpu_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; it is part of the held-emission contract"]
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    gpu = _code(gpu_path.read_text(encoding="utf-8"))
+    for name in ("Wisps", "Sparks"):
+        if f"HeldEmission.{name}(" not in stage:
+            errors.append(f"Stage/PianoStage.cs: nothing calls HeldEmission.{name}, so the fallback is not emitting "
+                          f"the engine's {name.lower()} rate")
+    for literal, what in (
+        ("look.WispAmount * 4f", "wisp density"),
+        ("look.ParticleAmount * 1.3f", "sustained-ember density"),
+    ):
+        if literal not in gpu:
+            errors.append(f"Gpu/GpuStageSimulation.cs: the held emitter's {what} changed away from '{literal}'; update "
+                          "Stage/HeldEmission.cs in the same commit or one renderer will emit less than the other")
+    for stale, what in (
+        ("_wispBudget[pitch] += _visual.WispAmount", "wisp budget that ignores the x4 rate"),
+        ("(int)_wispBudget[pitch]", "hand-rolled wisp credit instead of KeyEmissionBudget"),
+    ):
+        if stale in stage:
+            errors.append(f"Stage/PianoStage.cs: the old {what} is back; sustained emission goes through "
+                          "KeyEmissionBudget.Take with a HeldEmission rate")
+    if "KeyEmissionBudget.Take(ref _sparkBudget[pitch]" not in stage:
+        errors.append("Stage/PianoStage.cs: the sustained-ember channel is gone again; a held key must stream the "
+                      "selected burst family on the software stage too")
+    return errors
+
+
+# The eleven settings strings that are a user-visible choice in both renderers. The value lists live in
+# PianoVisualSettings; the option matrix (Diagnostics/OptionMatrixPlan.cs) copies them so a Windows capture run
+# can walk them without WPF. This table is the only place that knows the two are the same list.
+NUMERIC_OPTION_SETTINGS = {
+    "NoteWidth": "the width of a note and of a held bar",
+    "NoteFallSpeed": "how fast a note falls",
+    "FallingTrailIntensity": "how bright a falling trail is",
+    "ImpactWaveIntensity": "how bright a wave is",
+    "RingSize": "how far a wave grows",
+    "ParticleAmount": "how many particles a hit emits",
+    "ImpactFlashIntensity": "how bright a hit flash is",
+    "ReleaseIntensity": "how strong a release effect is",
+}
+
+OPTION_MATRIX_FAMILIES = {
+    "NoteStyle": "NoteStyles",
+    "FallingTrail": "FallingTrails",
+    "ImpactWave": "ImpactWaves",
+    "ImpactBurst": "ImpactBursts",
+    "ImpactMorph": "ImpactMorphs",
+    "ImpactFlashStyle": "ImpactFlashStyles",
+    "ReleaseEffect": "ReleaseEffects",
+    "AmbientEnergy": "AmbientEnergies",
+    "AmbientNature": "AmbientNatures",
+    "AmbientLight": "AmbientLights",
+    "AmbientCosmic": "AmbientCosmics",
+}
+
+
+def scan_preset_roundtrip():
+    """A saved look has to be the look that is loaded again.
+
+    ``PresetRoundTripReview`` applies every shipped preset through the dock's own path, writes it with the
+    product's writer, reads it back with the product's reader and asks both renderers for the same frame before
+    and after. That is only a claim about the product while it keeps walking the product's list and the
+    product's file path: this check fails when the review hardcodes a preset list, stops using
+    ``WritePresetFile``/``ReadPresetFile``, drops the property comparison, or when the dock's apply path grows a
+    step the review does not copy.
+    """
+    errors = []
+    paths = {
+        "review": ROOT / "Diagnostics" / "PresetRoundTripReview.cs",
+        "suite": ROOT / "Diagnostics" / "VerificationSuite.cs",
+        "ui": ROOT / "Ui" / "MainWindow.Settings.cs",
+        "settings": ROOT / "Stage" / "PianoVisualSettings.cs",
+        "presets": ROOT / "Stage" / "VisualPresets.cs",
+    }
+    for name, path in paths.items():
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the preset round trip needs it"]
+    review = _code(paths["review"].read_text(encoding="utf-8"))
+    suite = _code(paths["suite"].read_text(encoding="utf-8"))
+    ui = _code(paths["ui"].read_text(encoding="utf-8"))
+    settings = _code(paths["settings"].read_text(encoding="utf-8"))
+    presets = _code(paths["presets"].read_text(encoding="utf-8"))
+
+    for required, why in (
+        ("VisualPresets.BuiltIn", "the review stopped walking the built-in looks"),
+        ("CommunityPresets.All", "the review stopped walking the community shelf"),
+        ("VisualPresetStore.WritePresetFile(", "the review no longer saves through the product's preset writer"),
+        ("VisualPresetStore.ReadPresetFile(", "the review no longer reads through the product's preset reader"),
+        ("CopyFrom(item.Settings, keepBackgroundImage: true)", "the review no longer applies a preset the way the dock does"),
+        ("typeof(PianoVisualSettings).GetProperties()", "the review compares a hand-written list instead of every property"),
+        ("ExpectedPresets = 20", "the review no longer pins the number of shipped presets"),
+    ):
+        if required not in review:
+            errors.append(f"Diagnostics/PresetRoundTripReview.cs: {why}")
+    # Both failure modes have to stay failures: a changed byte and a changed property. The frame half is an
+    # exact comparison (tolerance 0 plus a byte compare), so a loosened tolerance would quietly weaken the claim
+    # the suite prints while the docs still say "byte-identical".
+    if "OptionMatrixPlan.ChangedPixels(a, b, tolerance: 0)" not in review or "SequenceEqual(b)" not in review:
+        errors.append("Diagnostics/PresetRoundTripReview.cs no longer compares the two frames byte for byte; "
+                      "'the same picture' after a save/load has to mean the same bytes, not the option matrix's "
+                      "2/255 tolerance")
+    if "if (changed != 0" not in review:
+        errors.append("Diagnostics/PresetRoundTripReview.cs no longer fails on a single changed pixel after the round trip")
+    # The file half and the dock half are two different claims: what came back from the file, and what the
+    # player's settings looked like after the dock applied it.
+    for required, why in (
+        ('"after the preset file", before, stored.Settings', "the review stopped comparing the settings read back from the file"),
+        ("\"through the dock's apply path\", before, after", "the review stopped comparing the dock's applied settings"),
+    ):
+        if required not in review:
+            errors.append(f"Diagnostics/PresetRoundTripReview.cs: {why}")
+    if "came back as" not in review:
+        errors.append("Diagnostics/PresetRoundTripReview.cs no longer names the property that changed, so a failure "
+                      "would only say that something moved")
+    if "WritePresetFile(before, null, item.Description)" not in review:
+        errors.append("Diagnostics/PresetRoundTripReview.cs no longer writes the preset's own description, so the "
+                      "envelope would not be exercised")
+
+    # The dock's apply path: three lines the review copies. If the product grows a fourth, the review has to
+    # grow it too, or it would be testing a path the user never takes.
+    for line, what in (
+        ("_visualSettings.CopyFrom(preset.Settings, keepBackgroundImage: true);", "the preset copy"),
+        ("_visualSettings.PresetName = preset.Name; _visualSettings.PresetModified = false;", "the name/modified reset"),
+        ('if (_visualSettings.BackgroundMode == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) _visualSettings.BackgroundMode = "Solid";',
+         "the image-background guard"),
+    ):
+        if line not in ui:
+            errors.append(f"Ui/MainWindow.Settings.cs: {what} in ApplyPreset changed; mirror it in "
+                          "Diagnostics/PresetRoundTripReview.cs so the review keeps testing the path a click takes")
+    if "settings.ApplyMigrations();" not in settings or "settings.Clamp();" not in settings:
+        errors.append("Stage/PianoVisualSettings.cs: FromJson no longer migrates and clamps what it reads, so the "
+                      "round-trip review would no longer cover the load path")
+    if "internal static PresetFileContent ReadPresetFile(string json)" not in presets:
+        errors.append("Stage/VisualPresets.cs: ReadPresetFile is gone or renamed; the review reads through it")
+    if '"--verify-preset-roundtrip-only"' not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs lost the --verify-preset-roundtrip-only route")
+    if "PresetRoundTripReview.Render(" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs does not call PresetRoundTripReview.Render, so the preset "
+                      "round trip never runs")
+    if "result.Presets == 20" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs no longer asserts twenty shipped presets")
+    return errors
+
+
+def scan_option_numeric():
+    """A slider has no list, so its plan has to come from the dock and the settings class.
+
+    ``OptionNumericPlan`` names nine numeric axes, three values each, and the review fails when two of those
+    values paint the same picture on either renderer. That claim is only worth something while the plan's range
+    is the product's range: this check reads every endpoint out of the dock's ``SliderRow`` call and the
+    settings class's ``Clamp`` and compares it with the plan. A slider whose range moves, or an axis added to the
+    plan without a slider, fails here on Linux before Windows renders a frame.
+    """
+    errors = []
+    paths = {
+        "plan": ROOT / "Diagnostics" / "OptionNumericPlan.cs",
+        "review": ROOT / "Diagnostics" / "OptionNumericReview.cs",
+        "settings": ROOT / "Stage" / "PianoVisualSettings.cs",
+        "ui": ROOT / "Ui" / "MainWindow.Settings.cs",
+        "suite": ROOT / "Diagnostics" / "VerificationSuite.cs",
+    }
+    for name, path in paths.items():
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the numeric option review needs it"]
+    plan = _code(paths["plan"].read_text(encoding="utf-8"))
+    review = _code(paths["review"].read_text(encoding="utf-8"))
+    settings = _code(paths["settings"].read_text(encoding="utf-8"))
+    ui = _code(paths["ui"].read_text(encoding="utf-8"))
+    suite = _code(paths["suite"].read_text(encoding="utf-8"))
+
+    number = r"(-?\d+(?:\.\d+)?)"
+    axes = re.findall(
+        r'new Axis\(\"([^\"]+)\",\s*\"([^\"]+)\",\s*\"([^\"]+)\",\s*\"([^\"]+)\",\s*OptionMatrixPlan\.Scene\.(\w+),\s*'
+        + number + r",\s*" + number + r",\s*\[(.*?)\]\)",
+        plan, re.S)
+    if len(axes) != 9:
+        errors.append(f"Diagnostics/OptionNumericPlan.cs must declare nine numeric axes; it declares {len(axes)}")
+    exempt_match = re.search(
+        r"EndpointExempt\s*\{\s*get;\s*\}\s*=\s*new HashSet<string>\(StringComparer\.Ordinal\)\s*\{([^}]*)\}", plan)
+    exempt = set(re.findall(r'\"([^\"]+)\"', exempt_match.group(1))) if exempt_match else set()
+    if not exempt:
+        errors.append("Diagnostics/OptionNumericPlan.cs lost its EndpointExempt set; the endpoint rule below has no "
+                      "way to state which axis may skip an end of its slider")
+    seen = set()
+    for axis, setting, family, family_value, scene, low, high, values in axes:
+        if axis in seen:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs declares the axis {axis!r} twice")
+        seen.add(axis)
+        if setting not in NUMERIC_OPTION_SETTINGS:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} names {setting!r}, which is not one of the "
+                          "numeric settings the dock exposes")
+            continue
+        slider = re.search(rf'SliderRow\([^;]*?nameof\(PianoVisualSettings\.{setting}\),\s*{number},\s*{number}', ui, re.S)
+        if not slider:
+            errors.append(f"Ui/MainWindow.Settings.cs no longer offers a slider for {setting}; the numeric plan would "
+                          "claim a range the dock never shows")
+        else:
+            declared_low, declared_high = slider.group(1), slider.group(2)
+            if float(declared_low) != float(low) or float(declared_high) != float(high):
+                errors.append(f"Diagnostics/OptionNumericPlan.cs captures {setting} over {low}..{high}, but the dock's "
+                              f"slider is {declared_low}..{declared_high}; move the plan with the slider")
+        clamp = re.search(rf"{setting}\s*=\s*Math\.Clamp\({setting},\s*{number},\s*{number}\)", settings)
+        if not clamp:
+            errors.append(f"Stage/PianoVisualSettings.cs no longer clamps {setting}; the plan's range has no product "
+                          "law behind it")
+        elif float(clamp.group(1)) > float(low) or float(clamp.group(2)) < float(high):
+            errors.append(f"Stage/PianoVisualSettings.cs clamps {setting} to {clamp.group(1)}..{clamp.group(2)}, which "
+                          f"is narrower than the plan's {low}..{high}; the capture would be filed under a value the "
+                          "product moved")
+        points = [float(point) for point in re.findall(number, values)]
+        if len(points) != 3 or points != sorted(set(points)):
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} needs three ascending distinct values; it has {points}")
+        if points and (min(points) < float(low) - 1e-9 or max(points) > float(high) + 1e-9):
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} shoots {points}, outside its own {low}..{high}")
+        # An axis may skip an endpoint only if the plan's own EndpointExempt set says so, and the exemption has to
+        # be honest in both directions: an exempt axis really skips one, a non-exempt one really takes one.
+        at_endpoint = any(abs(point - float(low)) < 1e-9 or abs(point - float(high)) < 1e-9 for point in points)
+        if axis in exempt and at_endpoint:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs exempts {axis!r} from the endpoint rule, but it samples "
+                          "an endpoint anyway; the exemption has gone stale")
+        if axis not in exempt and not at_endpoint:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} never samples an endpoint; a clamp at the "
+                          "end of the range would stay invisible")
+        # The arrangement family must exist and offer the value, so the numeric scene is a pinned one.
+        if f'new Family("{family}",' not in plan and f'"{family}"' not in plan:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} arranges itself through unknown family {family!r}")
+        if f'"{family_value}"' not in plan:
+            errors.append(f"Diagnostics/OptionNumericPlan.cs axis {axis!r} arranges through {family_value!r}, which it never names")
+
+    for axis in exempt - {declared[0] for declared in axes}:
+        errors.append(f"Diagnostics/OptionNumericPlan.cs exempts unknown axis {axis!r} from the endpoint rule")
+
+    for contract in (
+        ("OptionMatrixReview.CaptureWpf(", "the numeric review stopped using the flat matrix's WPF render path"),
+        ("OptionMatrixReview.CaptureGpu(", "the numeric review stopped using the flat matrix's engine render path"),
+        ("settings.Clamp()", "the numeric review no longer clamps before reading the value back"),
+        ("Math.Abs(drawn - value)", "the numeric review no longer proves it drew the value it files the capture under"),
+        ("MinimumChangedPixels", "the numeric review lost its pixel floor"),
+    ):
+        if contract[0] not in review:
+            errors.append(f"Diagnostics/OptionNumericReview.cs: {contract[1]}")
+    if '"--verify-option-numeric-only"' not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs lost the --verify-option-numeric-only route")
+    if "OptionNumericReview.Render(" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs does not call OptionNumericReview.Render, so the numeric review never runs")
+    if "Captures == 54" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs no longer asserts 54 numeric captures; nine axes at three "
+                      "values on two renderers is the whole plan")
+    if "OptionMatrixPlan.Scene.Held" not in _code((ROOT / "Diagnostics" / "OptionMatrixReview.cs").read_text(encoding="utf-8")):
+        errors.append("Diagnostics/OptionMatrixReview.cs lost the held scene's press, so the bar-width axis would "
+                      "capture a stage with nothing held")
+    return errors
+
+
+def scan_review_sheets():
+    """The contact sheet is the part of a review that is committed, so it has to be the whole review.
+
+    ``Diagnostics/ReviewSheet.cs`` lays the capture buffers out in one grid and, because it is plain arithmetic
+    over a byte array, ``ReviewSheetTests`` pins it on Linux. This check keeps the pieces around it honest: the
+    composer stays linked into the test project (or those checks silently stop running), each of the four N12
+    reviews composes a canvas, refuses a page that is missing captures, and writes the file the workflow copies,
+    and the workflow still copies those files into ``docs/evidence``.
+    """
+    errors = []
+    composer = ROOT / "Diagnostics" / "ReviewSheet.cs"
+    project = ROOT / "tests" / "PianoPath.Tests" / "PianoPath.Tests.csproj"
+    workflow = ROOT / ".github" / "workflows" / "build.yml"
+    for path in (composer, project, workflow):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the N12 contact sheets need it"]
+    if "Diagnostics\\ReviewSheet.cs" not in project.read_text(encoding="utf-8"):
+        errors.append("tests/PianoPath.Tests/PianoPath.Tests.csproj no longer links Diagnostics/ReviewSheet.cs; "
+                      "the sheet's layout, downscale and alpha handling are only checked while it compiles there")
+    reviews = {
+        "OptionMatrixReview.cs": "option-matrix/sheet-",
+        "OptionNumericReview.cs": "option-numeric/sheet.png",
+        "OptionPoseReview.cs": "option-pose/sheet-",
+        "PresetRoundTripReview.cs": "preset-roundtrip/sheet.png",
+        "RefractionReview.cs": "refraction/sheet-",
+        "ArMaterialReview.cs": "ar-material/sheet.png",
+    }
+    for name, page in reviews.items():
+        path = ROOT / "Diagnostics" / name
+        if not path.exists():
+            errors.append(f"Diagnostics/{name} is missing; the N12 contact sheets need it")
+            continue
+        code = _code(path.read_text(encoding="utf-8"))
+        if "new ReviewSheet.Canvas(" not in code:
+            errors.append(f"Diagnostics/{name} no longer composes a contact sheet; its pictures would only exist "
+                          "inside the run's artifact again")
+        # Either spelling counts: the N12 reviews compare the page's tile count with the captures they wrote,
+        # the N8 review compares it through the canvas it filled. Both refuse a page that lost a picture.
+        if "sheet.Tiles !=" not in code and "Count != tiles" not in code and "sheet.Finish()" not in code:
+            errors.append(f"Diagnostics/{name} no longer refuses a sheet that is missing captures")
+        if page not in code:
+            errors.append(f"Diagnostics/{name} no longer writes '{page}', which is what gets committed")
+    workflow_text = workflow.read_text(encoding="utf-8")
+    for needed in ("docs/evidence/n12-sheets", "option-matrix/sheet-wpf.png", "option-matrix/sheet-gpu-warp.png",
+                   "option-numeric/sheet.png", "preset-roundtrip/sheet.png", "option-pose/sheet-*.png",
+                   "docs/evidence/refraction-sheets", "refraction/sheet-wpf.png", "refraction/sheet-gpu-warp.png",
+                   "docs/evidence/ar-material-sheets", "ar-material/sheet.png"):
+        if needed not in workflow_text:
+            errors.append(f".github/workflows/build.yml no longer copies '{needed}' into docs/evidence, so that "
+                          "page would only exist inside the run's artifact")
+    if "git add docs/evidence/n12-sheets docs/evidence/refraction-sheets docs/evidence/ar-material-sheets" not in workflow_text:
+        errors.append(".github/workflows/build.yml no longer commits both evidence folders; a sheet the stage step "
+                      "copies but the save step forgets is deleted with the runner")
+    return errors
+
+
+def scan_option_pose():
+    """The AR/pose slice has to keep shooting the option surface the overlay can draw.
+
+    ``OptionPoseReview`` renders each axis twice — off and on — through three calibrated poses and fails when the
+    two frames differ by fewer than twelve pixels. That is only a claim about the product while the rows are
+    product values in two disjoint parts: this check reads the plan, keeps part 1 at five effect axes and part 2
+    at the two song-note axes plus four ambient layers, refuses a family in both parts or twice in one, and
+    keeps the capture count equal to three poses times the rows. It also keeps the review on the shared capture
+    driver and the suite on the route, so a family deleted from the plan cannot silently shrink the review.
+    """
+    errors = []
+    paths = {
+        "plan": ROOT / "Diagnostics" / "OptionMatrixPlan.cs",
+        "review": ROOT / "Diagnostics" / "OptionPoseReview.cs",
+        "suite": ROOT / "Diagnostics" / "VerificationSuite.cs",
+        "held": ROOT / "Diagnostics" / "HeldParticleControlPlan.cs",
+    }
+    for name, path in paths.items():
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the AR/pose slice needs it"]
+    plan = _code(paths["plan"].read_text(encoding="utf-8"))
+    review = _code(paths["review"].read_text(encoding="utf-8"))
+    suite = _code(paths["suite"].read_text(encoding="utf-8"))
+    held = _code(paths["held"].read_text(encoding="utf-8"))
+
+    # The families and their values, exactly as the flat matrix declares them.
+    declared = re.findall(
+        r'new Family\("([^\"]+)",\s*"([^\"]+)",\s*Scene\.(\w+),\s*\[(.*?)\],\s*"([^\"]+)"(?:,\s*"([^\"]+)")?\)',
+        plan, re.S)
+    families = {family_id: (setting, re.findall(r'"([^"]*)"', values), neutral)
+                for family_id, setting, _, values, neutral, _ in declared}
+
+    def rows(name, expected, what, one_per_family):
+        block = re.search(rf"{name}\s*\{{\s*get;\s*\}}\s*=\s*Array\.AsReadOnly\(new\[\]\s*\{{(.*?)\}}\);", plan, re.S)
+        if not block:
+            return None, [f"Diagnostics/OptionMatrixPlan.cs no longer declares {name}; {what}"]
+        found = re.findall(r'\("([^\"]+)",\s*"([^\"]+)"\)', block.group(1))
+        problems = []
+        if len(found) != expected:
+            problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} declares {len(found)} rows; {what} needs {expected}")
+        seen, families_seen = set(), set()
+        for family_id, value in found:
+            if (family_id, value) in seen:
+                problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} shoots {family_id}/{value!r} twice")
+            seen.add((family_id, value))
+            if one_per_family and family_id in families_seen:
+                problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} names the family {family_id!r} twice; part 2 "
+                                "shoots one value per family, so a second row would be a duplicate")
+            families_seen.add(family_id)
+            if family_id not in families:
+                problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} names unknown family {family_id!r}")
+                continue
+            setting, values, neutral = families[family_id]
+            if value not in values:
+                problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} shoots {family_id}/{value!r}, which "
+                                f"PianoVisualSettings.{setting} does not offer")
+            if value == neutral:
+                problems.append(f"Diagnostics/OptionMatrixPlan.cs {name} shoots {family_id} at its neutral value "
+                                f"{neutral!r}; the two captures would be the same picture by construction")
+        return found, problems
+
+    # Part 1 deliberately shoots two channels of one family (the morph particles and its flash), both against
+    # the same off state, so the one-row-per-family rule belongs to part 2 only.
+    part_one, problems = rows("PoseSelections", 5, "part 1 (the five effect axes drawn into the camera image)", False)
+    errors.extend(problems)
+    part_two, problems = rows("PoseSliceSelections", 6, "part 2 (the note material, the trail and the four ambient layers)", True)
+    errors.extend(problems)
+    if part_one and part_two:
+        overlap = {family_id for family_id, _ in part_one} & {family_id for family_id, _ in part_two}
+        if overlap:
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs shoots {sorted(overlap)} in both AR parts; part 2 is the "
+                          "rest of the option surface, not a second look at part 1")
+        expected_settings = {"NoteStyle", "FallingTrail", "AmbientEnergy", "AmbientNature", "AmbientLight", "AmbientCosmic"}
+        covered = {families[family_id][0] for family_id, _ in part_two if family_id in families}
+        if covered != expected_settings:
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs part 2 covers {sorted(covered)}; it has to cover exactly "
+                          f"{sorted(expected_settings)} — the two song-note axes and the four ambient layers")
+
+    # The review: three calibrated poses, the shared floor and count, and one capture driver.
+    if "HeldParticleControlPlan.Views.Where(view => view.OverCamera)" not in review or "poses.Length != 3" not in review:
+        errors.append("Diagnostics/OptionPoseReview.cs no longer requires the three calibrated poses from "
+                      "HeldParticleControlPlan.Views")
+    if "internal static IReadOnlyList<View> Views { get; }" not in held:
+        errors.append("Diagnostics/HeldParticleControlPlan.cs no longer publishes the calibrated views the AR/pose "
+                      "slice shoots; a new fixture would be an unreviewed pose")
+    floor = re.search(r"MinimumChangedPixels = (\d+)", review)
+    if not floor or floor.group(1) != "12":
+        errors.append("Diagnostics/OptionPoseReview.cs no longer keeps the 12-pixel floor of the flat matrix; a "
+                      "stray pixel is not a drawn option")
+    counts = {name: re.search(rf"private const int {name} = ([^;]+);", review) for name in ("ExpectedPart1", "ExpectedPart2")}
+    if not all(counts.values()):
+        errors.append("Diagnostics/OptionPoseReview.cs lost its per-part capture counts; a missing pose or family "
+                      "would have to name itself")
+    else:
+        if counts["ExpectedPart1"].group(1).strip() != "27":
+            errors.append("Diagnostics/OptionPoseReview.cs part 1 is no longer the 27 captures of three poses times "
+                          "(four off states and five values); update it with the docs and the suite")
+        if counts["ExpectedPart2"].group(1).strip() != "36":
+            errors.append("Diagnostics/OptionPoseReview.cs part 2 is no longer the 36 captures of three poses times "
+                          "six families off and on; update it with the docs and the suite")
+    if part_one and part_two:
+        rows_per_pose = len({family_id for family_id, _ in part_one}) + len(part_one) + 2 * len(part_two)
+        if 3 * rows_per_pose != 63:
+            errors.append(f"Diagnostics/OptionPoseReview.cs would write {3 * rows_per_pose} captures for the rows it "
+                          "shoots, not the 63 the suite asserts")
+    if "OptionMatrixReview.Settings(" not in review or "OptionMatrixPlan.ChangedPixels(" not in review:
+        errors.append("Diagnostics/OptionPoseReview.cs no longer shares the flat matrix's settings builder and pixel "
+                      "comparison; two copies would describe two different frames")
+    if "GpuStageRenderer.Create(forceWarp: true)" not in review or "!renderer.IsWarp" not in review:
+        errors.append("Diagnostics/OptionPoseReview.cs no longer pins itself to WARP; the artifact would claim "
+                      "hardware it never drew on")
+    if '"--verify-option-pose-only"' not in suite or "OptionPoseReview.Render(" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs lost the --verify-option-pose-only route or stopped calling "
+                      "OptionPoseReview.Render")
+    if "captures == 63" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs no longer asserts the 63 AR/pose captures")
+    for name in ("README.md", "README.en.md"):
+        readme = ROOT / name
+        if readme.exists() and "63 captures" not in readme.read_text(encoding="utf-8"):
+            errors.append(f"{name}: the --verify-option-pose-only row no longer states the 63 captures, so the "
+                          "documented size of the AR/pose slice has drifted from the review")
+    return errors
+
+def scan_option_matrix():
+    """Every option the settings offer is a picture, not only a word in a combo box.
+
+    The audit could say "chưa test riêng option X" for thirty-odd catalog rows because the suite exercised one
+    chosen style per family. ``--verify`` now walks the whole axis twice (WPF and D3D/WARP) at one fixed scene
+    and fails when a value draws nothing or two values paint the same frame. That claim is only worth anything
+    while the captured list is the settings list: this check keeps the plan's literal values equal, in order,
+    to the arrays the settings class validates against, and keeps every family wired from the plan through the
+    capture driver into the suite. Add a style to the product and this check fails until it has a capture.
+    """
+    errors = []
+    paths = {
+        "settings": ROOT / "Stage" / "PianoVisualSettings.cs",
+        "plan": ROOT / "Diagnostics" / "OptionMatrixPlan.cs",
+        "review": ROOT / "Diagnostics" / "OptionMatrixReview.cs",
+        "suite": ROOT / "Diagnostics" / "VerificationSuite.cs",
+    }
+    for name, path in paths.items():
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the option matrix needs it"]
+    settings = _code(paths["settings"].read_text(encoding="utf-8"))
+    plan = _code(paths["plan"].read_text(encoding="utf-8"))
+    review = _code(paths["review"].read_text(encoding="utf-8"))
+    suite = _code(paths["suite"].read_text(encoding="utf-8"))
+
+    offered = {}
+    for setting, array in OPTION_MATRIX_FAMILIES.items():
+        found = re.search(rf"string\[\] {array} = \[(.*?)\];", settings)
+        if not found:
+            errors.append(f"Stage/PianoVisualSettings.cs no longer declares {array}; the option matrix cannot know "
+                          f"which values {setting} accepts")
+            continue
+        offered[setting] = re.findall(r'\"([^\"]*)\"', found.group(1))
+
+    declared = re.findall(
+        r'new Family\("([^\"]+)",\s*"([^\"]+)",\s*Scene\.(\w+),\s*\[(.*?)\],\s*"([^\"]+)"(?:,\s*"([^\"]+)")?\)',
+        plan, re.S)
+    names = [setting for _, setting, _, _, _, _ in declared]
+    if len(declared) != len(OPTION_MATRIX_FAMILIES) or len(set(names)) != len(names):
+        errors.append("Diagnostics/OptionMatrixPlan.cs must declare exactly one family per settings axis "
+                      f"({', '.join(OPTION_MATRIX_FAMILIES)}); it declares {names or 'none'}")
+    for family_id, setting, scene, values, neutral, gate in declared:
+        if setting not in OPTION_MATRIX_FAMILIES:
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs family {family_id!r} names {setting!r}, which is not one "
+                          "of the eleven option axes the matrix verifies")
+            continue
+        planned = re.findall(r'\"([^\"]*)\"', values)
+        if setting in offered and planned != offered[setting]:
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs captures {setting} as {planned}, but "
+                          f"PianoVisualSettings.{OPTION_MATRIX_FAMILIES[setting]} offers {offered[setting]}; a new or "
+                          "renamed option needs a capture in the same commit")
+        if neutral not in planned:
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs family {family_id!r} keeps the neutral value {neutral!r}, "
+                          "which is not one of its own values")
+        if gate and setting not in ("ImpactBurst", "ImpactFlashStyle"):
+            errors.append(f"Diagnostics/OptionMatrixPlan.cs gives {setting} a visibility gate; only the families with "
+                          "no off value (burst, flash) need one")
+
+    for setting in OPTION_MATRIX_FAMILIES:
+        if f'case "{setting}":' not in review:
+            errors.append(f"Diagnostics/OptionMatrixReview.cs never applies {setting} to the settings it renders; the "
+                          "family would be captured as its baseline")
+    if "OptionMatrixPlan.Families" not in review or "OptionMatrixPlan.CapturedValues(" not in review:
+        errors.append("Diagnostics/OptionMatrixReview.cs no longer walks the plan; it would capture a hardcoded list")
+    if "OptionMatrixReview.Render(" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs does not call OptionMatrixReview.Render, so the matrix never runs")
+    if '"--verify-option-matrix-only"' not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs lost the --verify-option-matrix-only route")
+    errors.extend(scan_effect_channel_ownership())
+    return errors
+
+
+def scan_audit_matrix_claims():
+    """The audit may not still call an option untested once it has a picture.
+
+    §4.1–§4.8 of ``docs/EFFECT-COVERAGE-AUDIT.md`` was written before N12(b) existed, so fifty-odd rows said
+    "chưa test riêng option X" for choices the matrix had since captured. The fix is prose, and prose rots:
+    add a style, capture it, and the row can drift back. This check reads the plan the renderer actually walks
+    (never a second hand-written list) and holds both directions of the claim:
+
+    * a row naming a ``Setting="Value"`` the matrix captures must say ``N12(b)``;
+    * a row saying ``N12(b)`` must name a value on a matrix axis at all, so the claim points at something a
+      reader can check — a bare "đã cô lập" with no value in it is exactly the sentence that goes stale.
+
+    The value has to be spelled the way the product spells it, so a rename shows up here as a stale citation; a
+    row that explicitly rules a value out (``không có `Setting="Value"` ``) is read as a denial, not a claim.
+    """
+    audit_path = ROOT / "docs" / "EFFECT-COVERAGE-AUDIT.md"
+    plan_path = ROOT / "Diagnostics" / "OptionMatrixPlan.cs"
+    for path in (audit_path, plan_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the audit's evidence claims need it"]
+
+    plan = _code(plan_path.read_text(encoding="utf-8"))
+    axes = {}
+    for family_id, setting, _, values, neutral, gate in re.findall(
+            r'new Family\("([^\"]+)",\s*"([^\"]+)",\s*Scene\.(\w+),\s*\[(.*?)\],\s*"([^\"]+)"(?:,\s*"([^\"]+)")?\)',
+            plan, re.S):
+        declared = re.findall(r'"([^"]*)"', values)
+        axes[setting] = (declared, declared if gate else [v for v in declared if v != neutral], neutral)
+
+    audit = audit_path.read_text(encoding="utf-8")
+    rows = [line for line in audit.splitlines() if re.match(r"^\| `[a-z0-9.-]+` \|", line)]
+    if len(rows) < 80:
+        return [f"docs/EFFECT-COVERAGE-AUDIT.md shows {len(rows)} catalog rows; the audit lost its table"]
+
+    errors = []
+    isolated = 0
+    for row in rows:
+        entry = re.match(r"^\| `([^`]+)`", row).group(1)
+        cited = []
+        for setting, value in re.findall(r'`([A-Za-z]+)="([^"]*)"`', row):
+            if setting not in axes or f'không có `{setting}="{value}"`' in row:
+                continue
+            offered, captured, neutral = axes[setting]
+            if value not in offered:
+                errors.append(f"docs/EFFECT-COVERAGE-AUDIT.md row {entry!r} cites {setting}=\"{value}\", which "
+                              f"Diagnostics/OptionMatrixPlan.cs does not capture; the value was renamed or the row "
+                              "is quoting a setting the product does not have")
+                continue
+            cited.append((setting, value, value in captured))
+        if any(is_captured for _, _, is_captured in cited):
+            isolated += 1
+            if "N12(b)" not in row:
+                pairs = ", ".join(f"{setting}=\"{value}\"" for setting, value, ok in cited if ok)
+                errors.append(f"docs/EFFECT-COVERAGE-AUDIT.md row {entry!r} names {pairs}, which the N12(b) matrix "
+                              "captures, but the row never says so; it still reads like an untested option")
+        elif "N12(b)" in row and not cited:
+            errors.append(f"docs/EFFECT-COVERAGE-AUDIT.md row {entry!r} claims N12(b) without naming a "
+                          "Setting=\"Value\" on any axis the matrix captures; the claim cannot be checked")
+    if isolated < 50:
+        errors.append(f"only {isolated} audit rows cite a value the N12(b) matrix captures; the audit and the plan "
+                      "have drifted apart")
+    return errors
+
+
+def scan_refraction_contract():
+    """The N8 review may only promise what the shader and the software stage actually do.
+
+    ``NoteRefraction`` is deliberately two behaviours: the software stage paints a fringe for every material and
+    weights it per style, while the Direct3D shader reads ``NoteB.w`` in the satin sheen and in three material
+    branches only. ``docs/NOTE-EFFECTS-ACTION-PLAN.md`` §3.6 calls that difference intentional, so the evidence
+    has to say *which* materials move on *which* renderer — and that list is a fact about the shader, not a
+    choice. This check derives it from ``StageShaders.hlsl`` by reading the material branches the way the shader
+    reads them, and compares it with the list ``RefractionReview`` asserts against at runtime. Change a branch
+    and the review fails on the first capture; forget the list and this fails without Windows.
+
+    It also keeps the review reading the product's own material list (a copy would drift), keeps the three
+    levels and the 36-capture count pinned, and keeps the suite on the route that CI actually runs.
+    """
+    errors = []
+    paths = {
+        "review": ROOT / "Diagnostics" / "RefractionReview.cs",
+        "settings": ROOT / "Stage" / "PianoVisualSettings.cs",
+        "shader": ROOT / "Gpu" / "StageShaders.hlsl",
+        "stage": ROOT / "Stage" / "PianoStage.cs",
+        "suite": ROOT / "Diagnostics" / "VerificationSuite.cs",
+        "matrix": ROOT / "Diagnostics" / "OptionMatrixReview.cs",
+    }
+    for name, path in paths.items():
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the N8 refraction evidence needs it"]
+    review = _code(paths["review"].read_text(encoding="utf-8"))
+    settings = _code(paths["settings"].read_text(encoding="utf-8"))
+    stage = _code(paths["stage"].read_text(encoding="utf-8"))
+    suite = _code(paths["suite"].read_text(encoding="utf-8"))
+    matrix = _code(paths["matrix"].read_text(encoding="utf-8"))
+    shader = paths["shader"].read_text(encoding="utf-8")
+
+    if "PianoVisualSettings.NoteStyles" not in review:
+        errors.append("Diagnostics/RefractionReview.cs no longer reads PianoVisualSettings.NoteStyles; a copied "
+                      "list of materials is how the page and the product drift apart")
+    if '"CrystalOutline"' in review:
+        errors.append("Diagnostics/RefractionReview.cs names a material itself; the six materials come from the "
+                      "settings class, so a rename or a new style cannot leave a stale row on the page")
+    levels = re.search(r"Levels \{ get; \} = \[([^\]]*)\]", review)
+    if not levels or [int(value) for value in re.findall(r"\d+", levels.group(1))] != [0, 50, 100]:
+        errors.append("Diagnostics/RefractionReview.cs no longer shoots NoteRefraction at 0/50/100; the page is "
+                      "the acceptance evidence for that slider's travel")
+    if "ExpectedCaptures = 36" not in review:
+        errors.append("Diagnostics/RefractionReview.cs no longer pins 36 captures (six materials × three levels "
+                      "× two renderers), so a material could drop off the page unnoticed")
+
+    declared = re.search(r"GpuConsumers \{ get; \} = new HashSet<string>\(StringComparer\.Ordinal\)\s*\{(.*?)\};",
+                         review, re.S)
+    if not declared:
+        errors.append("Diagnostics/RefractionReview.cs no longer declares which materials consume NoteB.w on the "
+                      "GPU; that set is the other half of the claim")
+        consumers = set()
+    else:
+        consumers = set(re.findall(r'"([^"]+)"', declared.group(1)))
+
+    styles = re.findall(r'"([^"]+)"', re.search(r"string\[\] NoteStyles = \[(.*?)\];", settings, re.S).group(1)) \
+        if re.search(r"string\[\] NoteStyles = \[(.*?)\];", settings, re.S) else []
+    if len(styles) != 6:
+        errors.append(f"Stage/PianoVisualSettings.cs lists {len(styles)} note materials; the refraction page pins six")
+
+    # Read the material function the shader actually shades with, then ask each branch whether it reads NoteB.w.
+    # The file declares the function before it defines it, so take the last match that is followed by a brace
+    # before a semicolon — the definition — and read to the first closing brace back at column zero.
+    start = None
+    for match in re.finditer(r"float4 ShadeNoteMaterial\(NoteMaterialInput v\)", shader):
+        brace, semi = shader.find("{", match.end()), shader.find(";", match.end())
+        if brace >= 0 and (semi < 0 or brace < semi):
+            start = match.start()
+    if start is None:
+        errors.append("Gpu/StageShaders.hlsl no longer has ShadeNoteMaterial; the refraction contract points at it")
+        shader_styles = set()
+    else:
+        body = shader[start:shader.find("\n}\n", start)]
+        thresholds = {"0.5": "Solid", "1.5": "Neon", "2.5": "Glass", "3.5": "Fire", "4.5": "Gem",
+                      "5.5": "CrystalOutline"}
+        markers = [(match.start(), match.group(1)) for match in re.finditer(r"else if \(style < ([0-9.]+)\)", body)]
+        shader_styles = set()
+        for index, (position, threshold) in enumerate(markers):
+            block = body[position:markers[index + 1][0] if index + 1 < len(markers) else len(body)]
+            if "NoteB.w" in block and threshold in thresholds:
+                shader_styles.add(thresholds[threshold])
+        if "if (satin)" in body and "NoteB.w" in body[:markers[0][0]]:
+            # The satin sheen is shared by Solid and Glass, and only by them.
+            shader_styles.update({"Solid", "Glass"})
+    if consumers != shader_styles:
+        errors.append("Diagnostics/RefractionReview.cs expects NoteB.w to be consumed by "
+                      f"{sorted(consumers) or 'nothing'}, but Gpu/StageShaders.hlsl consumes it in "
+                      f"{sorted(shader_styles) or 'no material branch'}; the N8 page would promise the wrong pixels")
+
+    if "!satin && _visual.NoteRefraction > 0" not in stage:
+        errors.append("Stage/PianoStage.cs no longer draws the soft fringe under `!satin && _visual.NoteRefraction > 0`; "
+                      "the review asserts that every material moves on WPF because of that line")
+    if "BaseSettings" not in review or "internal static PianoVisualSettings BaseSettings" not in matrix:
+        errors.append("Diagnostics/RefractionReview.cs no longer starts from OptionMatrixReview.BaseSettings(); a "
+                      "second copy of the pinned scene is how two reviews end up describing different frames")
+    for route in ("--verify-refraction-only", "VerifyRefraction(reviewOutput!)", "RefractionReview.Render("):
+        if route not in suite:
+            errors.append(f"Diagnostics/VerificationSuite.cs lost '{route}', so the refraction review never runs")
+    return errors
+
+
+def scan_ar_material_review():
+    """The AR material page may only claim what the typed contract says about each material.
+
+    ``EffectContracts`` keeps the AR bindings of the note materials at ``Unverified`` because no review ever
+    compared two AR frames of one material. ``ArMaterialReview`` is that review, and its whole value is that it
+    walks the contract instead of a copy of it: the materials come from ``NoteMaterialPilot``, the settings from
+    the parameters those contracts declare, and what each cell is expected to do from the contract's own
+    ``GpuStage`` binding — a material whose shader branch ignores a setting must ignore it in AR too, because the
+    quad is shaded by the same function. This check keeps that wiring honest without a Windows machine: the driven
+    setting names equal the contract's, every one of them has an ``Apply`` case, the review names no material
+    itself, and the suite keeps both the route and the call.
+    """
+    errors = []
+    review_path = ROOT / "Diagnostics" / "ArMaterialReview.cs"
+    contract_path = ROOT / "Stage" / "Effects" / "EffectContracts.cs"
+    suite_path = ROOT / "Diagnostics" / "VerificationSuite.cs"
+    for path in (review_path, contract_path, suite_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the N16 AR material page needs it"]
+    review = _code(review_path.read_text(encoding="utf-8"))
+    contracts = _code(contract_path.read_text(encoding="utf-8"))
+    suite = _code(suite_path.read_text(encoding="utf-8"))
+
+    if "EffectContractCatalog.NoteMaterialPilot" not in review:
+        errors.append("Diagnostics/ArMaterialReview.cs no longer reads EffectContractCatalog.NoteMaterialPilot; a "
+                      "copied material list is how the page and the contract drift apart")
+
+    declared = []
+    for list_name in ("SolidParameters", "GemParameters", "CrystalOutlineParameters"):
+        block = re.search(rf"{list_name} = Array\.AsReadOnly\(new\[\]\s*\{{(.*?)\}}\);", contracts, re.S)
+        if not block:
+            errors.append(f"Stage/Effects/EffectContracts.cs no longer declares {list_name}; the AR material page "
+                          "reads its settings from there")
+            continue
+        declared.extend(re.findall(r'(?:Percentage|Boolean)\("([^"]+)"', block.group(1)))
+    contract_settings = set(declared)
+    if len(contract_settings) < 6:
+        errors.append(f"Stage/Effects/EffectContracts.cs declares only {sorted(contract_settings)} for the note "
+                      "materials; the AR page pins the six settings it can drive")
+
+    driven = re.search(r"Known = \[([^\]]*)\]", review)
+    driven_names = set(re.findall(r'"([^"]+)"', driven.group(1))) if driven else set()
+    if driven_names != contract_settings:
+        errors.append("Diagnostics/ArMaterialReview.cs drives "
+                      f"{sorted(driven_names)} but the contract declares {sorted(contract_settings)}; a setting "
+                      "that is declared and not driven (or driven and not declared) makes the page a partial claim")
+
+    applied = set(re.findall(r'case "([^"]+)":', review))
+    missing = contract_settings - applied
+    if missing:
+        errors.append(f"Diagnostics/ArMaterialReview.cs has no Apply/Read case for {sorted(missing)}; the setting "
+                      "would be shot at whatever the settings class keeps")
+
+    for material in ("Solid", "Gem", "CrystalOutline"):
+        if f'"{material}"' in review:
+            errors.append(f"Diagnostics/ArMaterialReview.cs names the material {material!r} itself; materials, "
+                          "their settings and their expected AR binding all have to come from the contract")
+
+    if "Bindings.GpuStage" not in review or "EffectParameterBindingState.Ignored" not in review:
+        errors.append("Diagnostics/ArMaterialReview.cs no longer derives the expected binding from the contract's "
+                      "GpuStage state; it would be asserting a hope instead of the contract")
+
+    for route in ("--verify-ar-material-only", "VerifyArMaterial(reviewOutput!)", "ArMaterialReview.Render("):
+        if route not in suite:
+            errors.append(f"Diagnostics/VerificationSuite.cs lost '{route}', so the AR material review never runs")
+    return errors
+
+
+def scan_ar_effect_family_review():
+    """The AR effect-family page may only shoot families and settings the typed contract declares.
+
+    N17 measures the effect families the contract keeps at ``Unverified`` on the overlay. Its value is that it
+    walks the contract instead of a copy of it: the driven family ids and scenes are a table in the review,
+    but every setting it drives is read from that family's own parameters, and the far end of a percentage
+    comes from the declared maximum. What the contract cannot say is which of the layer's counters proves a
+    family drew something - or which scene a family's lifecycle needs - so those two tables are written by
+    hand, and this check keeps them from drifting: the witnesses have to name exactly the driven families,
+    every declared setting needs an ``Apply``/``Read`` case, the counters have to exist on the renderer, and
+    every driven id has to exist in the contract at all.
+
+    It also keeps the route, the call and the CI step, so a page that stops running fails the fast lane
+    instead of quietly leaving those families Unverified forever.
+    """
+    errors = []
+    review_path = ROOT / "Diagnostics" / "ArEffectFamilyReview.cs"
+    contract_path = ROOT / "Stage" / "Effects" / "EffectContracts.cs"
+    suite_path = ROOT / "Diagnostics" / "VerificationSuite.cs"
+    renderer_path = ROOT / "Gpu" / "GpuStageRenderer.cs"
+    workflow_path = ROOT / ".github" / "workflows" / "build.yml"
+    for path in (review_path, contract_path, suite_path, renderer_path, workflow_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; the N17 AR effect-family page needs it"]
+    review = _code(review_path.read_text(encoding="utf-8"))
+    contracts = _code(contract_path.read_text(encoding="utf-8"))
+    suite = _code(suite_path.read_text(encoding="utf-8"))
+    renderer = _code(renderer_path.read_text(encoding="utf-8"))
+    workflow = workflow_path.read_text(encoding="utf-8")
+
+    if "EffectContractCatalog.AllFamilies" not in review:
+        errors.append("Diagnostics/ArEffectFamilyReview.cs no longer resolves its families through "
+                      "EffectContractCatalog.AllFamilies; a copied list of parameters is how the page and the "
+                      "contract drift apart")
+
+    driven = re.findall(r'\("([a-z][a-z.\-]+)", Stage\.(\w+)\)', review)
+    if not driven:
+        return errors + ["Diagnostics/ArEffectFamilyReview.cs no longer declares which families it drives; the "
+                         "page would shoot nothing"]
+    driven_ids = {name for name, _ in driven}
+    scenes = {name: scene for name, scene in driven}
+
+    declared_settings = set()
+    for family in sorted(driven_ids):
+        anchor = contracts.find(f'"{family}"')
+        if anchor < 0:
+            errors.append(f"the AR effect review drives '{family}', which Stage/Effects/EffectContracts.cs does "
+                          "not declare; the page would shoot a family nobody owns")
+            continue
+        start = contracts.find("Array.AsReadOnly(new[]", anchor)
+        stop = contracts.find("}),", start) if start >= 0 else -1
+        if start < 0 or stop < 0:
+            errors.append(f"Stage/Effects/EffectContracts.cs declares '{family}' without a parameter list; the "
+                          "review reads its settings from there")
+            continue
+        declared_settings.update(re.findall(r'(?:ArProjected)?(?:Boolean|Percentage|Choice)\("([^"]+)"',
+                                            contracts[start:stop]))
+
+    witnesses = set(re.findall(r'"([a-z][a-z\-]*\.[a-z\-]+)" => renderer\.', review))
+    if witnesses != driven_ids:
+        errors.append("Diagnostics/ArEffectFamilyReview.cs witnesses "
+                      f"{sorted(witnesses)} but drives {sorted(driven_ids)}; a family without a witness counter is "
+                      "a column whose pictures nobody checked were drawn")
+
+    applied = set(re.findall(r'case "([^"]+)":', review))
+    missing = declared_settings - applied
+    if missing:
+        errors.append(f"Diagnostics/ArEffectFamilyReview.cs has no Apply/Read case for {sorted(missing)}; the "
+                      "setting would be shot at whatever the settings class keeps")
+
+    for family in sorted(driven_ids):
+        anchor = contracts.find(f'"{family}"')
+        start = contracts.find("Array.AsReadOnly(new[]", anchor) if anchor >= 0 else -1
+        stop = contracts.find("}),", start) if start >= 0 else -1
+        if start < 0 or stop < 0:
+            continue
+        for choice in re.findall(r'Choice\("([^"]+)"', contracts[start:stop]):
+            if f'"{choice}" => settings.' not in review:
+                errors.append(f"'{family}' declares the choice {choice}, but the review never reads it back; a "
+                              "value the settings class silently replaced would be shot under the wrong caption")
+
+    for counter in set(re.findall(r"renderer\.(Ar[A-Za-z]+Count)", review)):
+        if f"internal int {counter} =>" not in renderer:
+            errors.append(f"Diagnostics/ArEffectFamilyReview.cs reads renderer.{counter}, which GpuStageRenderer "
+                          "no longer exposes; the witness would not compile")
+
+    if "Bindings" in review or "EffectBackendState" in review:
+        errors.append("Diagnostics/ArEffectFamilyReview.cs reads a binding state; the contract keeps these "
+                      "families Unverified, so the page records pixels and claims nothing")
+
+    for route in ("--verify-ar-effect-only", "VerifyArEffect(reviewOutput!);", "ArEffectFamilyReview.Render("):
+        if route not in suite:
+            errors.append(f"Diagnostics/VerificationSuite.cs lost '{route}', so the AR effect-family review never runs")
+    expected_cells = len(driven) * 3
+    if f"Assert(cells == {expected_cells}" not in suite:
+        errors.append(f"Diagnostics/VerificationSuite.cs no longer pins the {expected_cells} AR effect-family "
+                      f"cells ({len(driven)} families x 3 rows); the page would pass with columns silently missing")
+
+    if "AR effect-family review (N17)" not in workflow or "--verify-ar-effect-only" not in workflow:
+        errors.append(".github/workflows/build.yml no longer runs --verify-ar-effect-only, so a crash in the "
+                      "review takes the whole suite down instead of naming itself")
+    # The step turns the suite's PASS line into a notice annotation so the measured counts are readable without
+    # downloading the artifact. That match is a literal prefix, so renaming the suite's line silently kills the
+    # annotation - which is exactly what happened between rounds 2 and 5, and nobody noticed until a number was needed
+    # from it. The workflow's prefix has to be a prefix the suite actually prints.
+    notice = re.search(r"-like 'PASS ([^'*]+)\*'", workflow)
+    if not notice:
+        errors.append(".github/workflows/build.yml no longer turns the N17 PASS line into a notice annotation; the "
+                      "measured counts would only exist in an artifact")
+    elif f"PASS {notice.group(1)}" not in suite:
+        errors.append(f".github/workflows/build.yml waits for a PASS line starting 'PASS {notice.group(1)}', which "
+                      "Diagnostics/VerificationSuite.cs no longer prints; the N17 notice annotation would silently "
+                      "disappear and the measured counts with it")
+
+    if "docs/evidence/ar-effect-sheets" not in workflow:
+        errors.append(".github/workflows/build.yml no longer stages docs/evidence/ar-effect-sheets; the page's "
+                      "committed pictures would never reach the repository")
+
+    # The summary table is the only place a reader can see all the families at once, so it is also the easiest place
+    # for the document to drift away from the code: a family added to the review, or dropped from it, would leave a
+    # table that still looks complete. The table's family column has to name exactly the driven set, once each.
+    parity_path = ROOT / "docs" / "AR-EFFECT-PARITY.md"
+    if not parity_path.exists():
+        errors.append("docs/AR-EFFECT-PARITY.md is missing; the N17 review's summary table lives there")
+        return errors
+    parity = parity_path.read_text(encoding="utf-8")
+    table = {}
+    for line in parity.splitlines():
+        match = re.match(r"^\|\s*(\d+)\s*\|\s*`([a-z][a-z.\-]+)`\s*\|", line)
+        if match:
+            table[match.group(2)] = int(match.group(1))
+    if set(table) != driven_ids:
+        errors.append("docs/AR-EFFECT-PARITY.md's summary table lists "
+                      f"{sorted(table)} but the review drives {sorted(driven_ids)}; a reader would see a table that "
+                      "looks complete while a family is missing from it")
+    elif sorted(table.values()) != list(range(1, len(table) + 1)):
+        errors.append("docs/AR-EFFECT-PARITY.md's summary table is numbered "
+                      f"{sorted(table.values())}; the rows have to stay 1..{len(table)} so a reader can count them")
+    return errors
+
+
+def scan_ar_value_pilot_contract():
+    """N17V has to read its quads from N17's witness table, not from the particle counter.
+
+    Twelve attempts to widen the value pilot were reverted as "off↔low < 12 px" failures, but the
+    CI annotations say eleven of them died on ``<family> low drew no quads``: the pilot asked the
+    particle counter about a hold bar, a beam, a flash or a shimmer. This guard keeps the delegation,
+    the driven settings, the asserted cell count, both READMEs/plan and the workflow's own fail-fast
+    step in step, so the next family added to the pilot cannot silently be measured by a counter that
+    never saw it — or wait an hour for the full suite to say so.
+    """
+    return value_pilot_contract.check(value_pilot_contract.collect())
+
+
+def scan_effect_channel_ownership():
+    """An option must draw on its own, not behind another layer's switch.
+
+    The first N12(b) run failed on the shipping stage: Shatter, Melt and Bounce are particles and both ring
+    releases are rings, while the stage drew those lists only when ``ShowEmbers`` / ``ShowImpactRings`` were
+    on — so a user who chose a morph or a release effect could get nothing at all even though the GPU stage
+    drew it. ``Stage/Effects/EffectChannel.cs`` tags each effect with the channel that spawned it and the
+    three draw paths skip only layer-owned effects behind their own switch. That ownership is the whole
+    value of the fix, so it is pinned here: an edit that re-gates a list, or spawns a morph/release effect
+    without a tag, fails on Linux before Windows ever renders a frame.
+    """
+    errors = []
+    channel_path = ROOT / "Stage" / "Effects" / "EffectChannel.cs"
+    stage_path = ROOT / "Stage" / "PianoStage.cs"
+    if not channel_path.exists():
+        return ["Stage/Effects/EffectChannel.cs is missing; the morph and release channels lost their owner"]
+    if not stage_path.exists():
+        return ["Stage/PianoStage.cs is missing; the option matrix cannot verify a stage that does not exist"]
+    channel = _code(channel_path.read_text(encoding="utf-8"))
+    stage = _code(stage_path.read_text(encoding="utf-8"))
+    for owner, number in (("Layer", 0), ("Morph", 1), ("Release", 2)):
+        if not re.search(rf"const\s+byte\s+{owner}\s*=\s*{number}\s*;", channel):
+            errors.append(f"Stage/Effects/EffectChannel.cs must keep {owner} = {number}: the GPU ring channels use "
+                          "the same numbering, so the two renderers cannot disagree about who owns an effect")
+    if "OwnsItsDraw" not in channel:
+        errors.append("Stage/Effects/EffectChannel.cs lost OwnsItsDraw, the one rule the draw paths share")
+    # A list that is skipped because of a layer switch must skip only the effects that switch owns.
+    for owner, switch, what in (
+        ("particle", "ShowEmbers", "particles"),
+        ("ring", "ShowImpactRings", "rings"),
+        ("flash", "ShowImpactFlash", "flashes"),
+    ):
+        if f"!EffectChannel.OwnsItsDraw({owner}.Channel) && !_visual.{switch}" not in stage:
+            errors.append(f"Stage/PianoStage.cs no longer skips only layer-owned {what} when {switch} is off; a "
+                          "chosen morph or release effect would hide behind another layer's switch again")
+        if f"EffectChannel.OwnsItsDraw({owner}.Channel)" not in stage:
+            errors.append(f"Stage/PianoStage.cs does not ask EffectChannel.OwnsItsDraw({owner}.Channel), so the "
+                          f"{what} list is drawn or skipped as a whole and one channel can silence another")
+    if "KeyRingChannelGain.Resolve(ring.Channel" not in stage:
+        errors.append("Stage/PianoStage.cs no longer resolves a ring's brightness through KeyRingChannelGain; a "
+                      "morph ring would follow the wave slider and a release ring would be dimmed twice")
+    # Every spawn site of the two self-owning families must carry its tag, or the effect it spawns stays
+    # hidden by ShowEmbers / ShowImpactRings / ShowImpactFlash.
+    for owner, expected in (("Morph", 6), ("Release", 6)):
+        found = stage.count(f"Channel = EffectChannel.{owner}")
+        if found != expected:
+            errors.append(f"Stage/PianoStage.cs tags {found} {owner.lower()} effect(s) with EffectChannel.{owner}, "
+                          f"expected {expected}; a new or removed morph/release branch must be tagged and captured")
     return errors
 
 
@@ -2004,6 +3229,22 @@ def main():
     errors.extend(scan_readme())
     errors.extend(scan_markdown_tables())
     errors.extend(scan_gpu_overlay_evidence())
+    errors.extend(scan_wisp_motion_contract())
+    errors.extend(scan_stage_clock_contract())
+    errors.extend(scan_flame_motion_contract())
+    errors.extend(scan_particle_flow_contract())
+    errors.extend(scan_held_emission_parity())
+    errors.extend(scan_note_width_parity())
+    errors.extend(scan_option_matrix())
+    errors.extend(scan_option_numeric())
+    errors.extend(scan_option_pose())
+    errors.extend(scan_audit_matrix_claims())
+    errors.extend(scan_refraction_contract())
+    errors.extend(scan_ar_material_review())
+    errors.extend(scan_ar_effect_family_review())
+    errors.extend(scan_ar_value_pilot_contract())
+    errors.extend(scan_preset_roundtrip())
+    errors.extend(scan_review_sheets())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
@@ -2025,9 +3266,28 @@ def main():
     print(f"checked the string tables against one another, against the {keys_used} keys the sources print ({keys_inventory} in the inventory) and against the sources that hold them")
     print("checked the release version of PianoPath.csproj against the installer, both READMEs, both changelogs and every source that prints it")
     print("checked every Markdown table's delimiter row, and the claim about what is still a WPF layer over a GPU frame against the engine that draws it")
+    print("checked that the wisp sway lives in one curve and that the stage, the AR quads and the alignment review all draw it")
+    print("checked that the AR hold-family page drives the contract's five families, one switch and one range per family, and that CI runs and stages it")
+    print("checked that slow motion scales the particles on both renderers and leaves the held bar, rings and flashes on the real clock")
+    print("checked that the held-key flame keeps the engine's law on the software stage instead of a plume pinned to the key")
+    print("checked that W1's flow stays one law called by both integrators, and that the slider gates it instead of replacing the shipped stream")
+    print("checked that a held key lets off the engine's amount of embers and wisps on both renderers, ceilings aside")
+    print("checked that the falling note and the held bar size themselves from one Note width slider, with no floor of their own")
+    print("checked that every option the settings offer is captured by the N12(b) matrix on both renderers, off state included")
+    print("checked that the effect audit no longer calls an option untested once the matrix has a picture of it")
+    print("checked that the refraction page promises exactly the materials the shader reads NoteB.w in, on both renderers")
+    print("checked that the AR material page walks the typed contract for its materials, settings and expected bindings")
+    print("checked that every numeric slider the plan shoots is the dock's own range, clamped by the settings class, sampled at both ends")
+    print("checked that every shipped preset is saved and reopened through the product's own preset file and applies the dock's own path")
+    print("checked that the four N12 reviews still compose one contact sheet each, that a sheet refuses to be missing a capture, and that the workflow commits it")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")
+    print("checked that the N17V value pilot borrows N17's witness table, drives handled settings, "
+          "keeps the off-vs-mid gate, keeps the choice switches, release scene and wave pin, "
+          "declares pinned/unshot coverage from the contract catalogue, "
+          "pins its cell count, agrees with both READMEs and the plan, "
+          "and still has its own fail-fast CI step, plus the Live Stage value pilot")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:

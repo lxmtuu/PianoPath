@@ -766,6 +766,15 @@ internal static partial class VerificationSuite
         Assert(FrameBudget.All.All(budget => budget.P95LimitMs > 0 && budget.Description.Length > 20),
             "Every budget needs a limit and a sentence saying what the scene draws, so a report can be read without opening the source.");
 
+        // N9's matrix is a measurement, not a gate: eighteen cells, none of them budgeted, and the gate's own
+        // lookup must never resolve one of them.
+        Assert(FrameBudget.Detail.Count == 18 && FrameBudget.Detail.All(cell => cell.P95LimitMs == 0 && cell.NoteCount > 0),
+            "The note-density matrix is three sizes by three note counts by the two effect states, and no cell carries a budget.");
+        Assert(FrameBudget.Detail.Select(cell => cell.Scene).Distinct().Count() == 18
+            && FrameBudget.FindDetail("notes-1440p-60-fx") is { NoteCount: 60, NoteEffects: true }
+            && FrameBudget.Find("notes-1440p-60-fx") is null,
+            "Every detail cell needs its own id, found without regard to case, and it must stay out of the gate's table.");
+
         // ---- percentiles: nearest rank, and the ordering a reader checks first -------------------------
         var hundred = new List<double>();
         for (var i = 1; i <= 100; i++) hundred.Add(i);

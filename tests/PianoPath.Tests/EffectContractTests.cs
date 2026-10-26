@@ -120,25 +120,32 @@ public sealed class EffectContractTests
 
         // Solid and Gem consume every look setting on both stage renderers. Captured WPF PNG/GPU tap frames
         // verify the material family is preserved in Recording, not every parameter's individual binding.
+        // N16 (docs/AR-MATERIAL-PARITY.md) then shot each setting through the AR overlay of each material: a
+        // setting the branch reads moved the frame past the twelve-pixel floor and is Applied in AR, while the
+        // glow stays Unverified because its halo lies outside the rectangle the quad is cut to.
+        static EffectParameterBindingState ArBinding(EffectParameterContract parameter) =>
+            parameter.SettingName == "NoteGlow"
+                ? EffectParameterBindingState.Unverified
+                : EffectParameterBindingState.Applied;
         Assert.All(solid.Parameters.Concat(gem.Parameters), parameter =>
         {
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.WpfStage);
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.GpuStage);
             Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.Recording);
-            Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.ArOverlay);
+            Assert.Equal(ArBinding(parameter), parameter.Bindings.ArOverlay);
         });
         Assert.All(crystal.Parameters.Where(parameter => parameter.SettingName != "NoteRefraction"), parameter =>
         {
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.WpfStage);
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.GpuStage);
             Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.Recording);
-            Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.ArOverlay);
+            Assert.Equal(ArBinding(parameter), parameter.Bindings.ArOverlay);
         });
         var crystalRefraction = crystal.Parameters.Single(parameter => parameter.SettingName == "NoteRefraction");
         Assert.Equal(EffectParameterBindingState.Applied, crystalRefraction.Bindings.WpfStage);
         Assert.Equal(EffectParameterBindingState.Ignored, crystalRefraction.Bindings.GpuStage);
         Assert.Equal(EffectParameterBindingState.Unverified, crystalRefraction.Bindings.Recording);
-        Assert.Equal(EffectParameterBindingState.Unverified, crystalRefraction.Bindings.ArOverlay);
+        Assert.Equal(EffectParameterBindingState.Ignored, crystalRefraction.Bindings.ArOverlay);
     }
 
     [Fact]
@@ -193,6 +200,14 @@ public sealed class EffectContractTests
         {
             Assert.Equal(EffectParameterBindingState.Ignored, parameter.Bindings.WpfStage);
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.GpuStage);
+        });
+
+        // AR draws these on its own note quads rather than on the stage roll: trail and ghosts on the
+        // projected path, the pulse and the shimmer on both (GpuArLayer.AddSongNote). None is Unsupported.
+        Assert.All(EffectContractCatalog.FallingFxPilot, contract =>
+        {
+            Assert.Equal(EffectBackendState.Unverified, contract.Capabilities.ArOverlay.State);
+            Assert.All(contract.Parameters, parameter => Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.ArOverlay));
         });
 
         Assert.All(EffectContractCatalog.FallingFxPilot, contract => Assert.All(
@@ -256,10 +271,13 @@ public sealed class EffectContractTests
             "impact.wave", "impact.flash", "impact.burst", "impact.morph",
             "hold.bar", "hold.breath", "hold.vibration", "hold.color-cycle", "hold.arc",
             "atmosphere.beams", "particles.sparks", "particles.wisps", "particles.flames", "release.fx",
+            // Drawn on AR note quads, but not by every path: trails and ghosts need the saved pose, the pulse and
+            // the shimmer ride on the note quad itself. No per-value AR matrix covers them yet.
+            "falling.trail", "falling.pulse", "falling.shimmer",
         };
         Assert.Equal(6, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native));
-        Assert.Equal(14, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified));
-        Assert.Equal(4, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported));
+        Assert.Equal(17, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified));
+        Assert.Equal(1, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported));
         foreach (var family in EffectContractCatalog.AllFamilies)
         {
             var expectedState = nativeInAr.Contains(family.Id) ? EffectBackendState.Native
@@ -290,9 +308,15 @@ public sealed class EffectContractTests
             .Parameters.Single(parameter => parameter.SettingName == "PetalAmount").Maximum!.Value);
         Assert.All(EffectContractCatalog.NoteMaterialPilot, material =>
         {
+            // The capability stays Unverified on purpose: N16 covers one pose, one value per setting and WARP,
+            // which is parameter-delivery evidence, not the value/lifecycle coverage a Native claim needs.
             Assert.Equal(EffectBackendState.Unverified, material.Capabilities.ArOverlay.State);
             Assert.Null(material.Capabilities.ArOverlay.FallbackId);
-            Assert.All(material.Parameters, parameter => Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.ArOverlay));
+            Assert.All(material.Parameters, parameter => Assert.Equal(
+                parameter.SettingName == "NoteGlow" ? EffectParameterBindingState.Unverified
+                : parameter.SettingName == "NoteRefraction" && material.Id == "note.material.crystal-outline"
+                    ? EffectParameterBindingState.Ignored
+                    : EffectParameterBindingState.Applied, parameter.Bindings.ArOverlay));
         });
     }
 

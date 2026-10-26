@@ -19,6 +19,42 @@ và không được lặp lại ở đây; tài liệu kế hoạch phát triể
 
 ## Unreleased
 
+### Hiệu ứng
+- **Lửa ở phím đang giữ** trên máy không có GPU giờ là dòng hạt nguội dần đúng luật của engine (49 hạt/giây/phím ở mặc định, trắng → vàng → cam → đỏ), thay cho một chùm ellipse đứng yên dán lên đầu phím.
+- **Wisp và ember khi giữ phím** ở bản phần mềm phát đúng mật độ của engine và lắc theo cùng một đường cong — trước đây bản phần mềm chỉ phát một phần tư số wisp, không có ember, và cộng dao động vào vận tốc nên hạt vẫn trôi khi xem slow-motion.
+- **Note morph, hiệu ứng nhả và flash** tự vẽ theo đúng công tắc của chúng: chọn Shatter, Melt, Absorb, Bounce, Star morph, Snap Back hay Echo Rings vẫn thấy hiệu ứng dù đã tắt *Enable impact wave*, *Impact flash* hay *Sparks* — trước đây các lựa chọn đó được nhận nhưng không vẽ gì.
+- Thẻ **Note morph** trong Settings luôn hiện đủ lựa chọn, và thanh **Morph intensity** chỉ hiện khi đã chọn một kiểu morph.
+- **Coherent flow** (Settings → Particles → Wisps): một luồng gió chung cuốn wisp và lửa đang giữ đi cùng nhau thay vì mỗi hạt lượn theo pha riêng — dòng hẹp hơn, cong như một khối và nở dần theo tuổi hạt. Mặc định **0** nên mọi preset đang có vẽ y như trước; kéo lên để bật.
+
+### Sửa lỗi
+- **Bề rộng nốt dưới 60%** giờ vẽ thanh giữ phím đúng bằng nốt rơi trên cả hai đường render: bản phần mềm từng kẹp thanh giữ phím ở 60% nên cùng một preset cho thanh rộng gấp đôi nốt rơi cùng cao độ — và rộng gấp đôi so với máy có GPU, nơi slider luôn được đọc đúng.
+- Nhịp mô phỏng hạt tách khỏi nhịp khung hình: cùng một preset cho cùng một chuyển động ở 60 Hz, 144 Hz và khi xuất video, thay vì nhanh dần theo tần số quét.
+
+### Kiểm chứng
+- **Toàn bộ 17 family hiệu ứng AR có trang ảnh kiểm chứng** (`--verify-ar-effect-only`: bốn tờ `held` / `approach` /
+  `impact` / `release`, **51 khung**, mỗi family chụp trong đúng cảnh mà vòng đời của nó cần). Đợt này thêm
+  `falling.trail` và `falling.shimmer` vào cảnh Approach; cả hai đã có assertion riêng từ trước, nên đây là việc **đóng
+  trang** chứ không phải tìm ra điều mới. Ba chỗ trong chính cái trang phải sửa để chứa được chúng: family không có
+  công tắc boolean thì bị tắt bằng **choice mà renderer coi là tắt** (`FallingTrail` None); boolean không phải công tắc
+  của family chỉ được ghim **bật** khi family không vẽ được nếu thiếu nó (hôm nay đúng một trường hợp, `ShowImpactRings`),
+  còn lại ghim **tắt** — nếu ghim `FallingGhost` bật thì khung sẽ có cả bóng nốt tương lai; và hàng "đầu xa" **không
+  được trùng khung tham chiếu**, nên `falling.trail` đo `FallingTrailLength` 100 (so với 55) thay vì
+  `FallingTrailIntensity` — vốn đã ở 100 trong look xuất phát. Cổng thứ năm bắt đúng trường hợp đó: `far` ↔ `rest` phải
+  ≥ 12 px. Số của đợt này: `falling.trail` **1 300 / 2 267 px** (hộp bao 32 × 61 → 40 × 106, cùng bề rộng, dài gần gấp
+  đôi), `falling.shimmer` **659 / 973 px** — cột mỏng nhất của cảnh Approach, vì sheen là một dải sáng nằm **bên trong**
+  thân nốt chứ không phải hình mới; shimmer có thêm counter riêng (`ArNoteShimmerQuadCount`, chỉ để chẩn đoán, không
+  đổi pixel nào). Mười lăm family của các đợt trước không đổi một pixel. Đây là **trang ảnh**, không phải lật trạng
+  thái: contract typed vẫn để cả 17 family là `Unverified`.
+- **Trần hạt của lớp AR giờ được đọc ra, và nó bắt được hai cột.** Mỗi khung của trang ghi thêm **số hạt còn sống
+  cạnh số hạt layer thực vẽ** (`demand` / `quads` trong manifest, cột "Hạt sống / đã vẽ" trên trang HTML, đuôi
+  `(capped: N alive / M drawn)` trong dòng PASS). Đây là phép **quan sát** thuần: hook chỉ đọc rồi được gỡ trong
+  `finally`, không đổi một pixel nào — 51 ô giữ nguyên từng con số. Nó tìm ra `particles.wisps` (**480** sống / **192**
+  vẽ) và cả `particles.sparks` (**264** / **192**), tức là cột sparks từ bốn đợt trước vẫn được in như một phép đo
+  `ParticleAmount` trong khi thực ra nó đọc trần của lớp AR. Wisp 480 chứ không phải 1 674 như tích phân trạng thái
+  dừng, vì cảnh Held chỉ giữ 0,4 s; cả hai con số đều nằm trên trần, và tài liệu giữ cả hai thay vì chọn con số đẹp hơn.
+- **Ma trận vòng đời đủ 17 family (N17L full).** `--verify-ar-lifecycle-only` mở rộng pilot 6 khung thành **78 khung** `ar-lifecycle/` (9 tờ, mỗi tờ một mốc): Held 8 family ×2 (0,40 s/1,00 s), Approach 3×2 (0,25 s/0,50 s), Impact 5×3 (0,05 s/0,20 s/0,35 s), Release 1×2 (0,40 s/0,60 s), mỗi mốc `off↔on` cùng pose/camera/seed `ar-oblique` WARP. Cổng `≥12 px` cho T0/T1; T2 `impact.flash` được phép `<12 px` vì flash chỉ sống 0,26 s (đã hết hạn), các family khác phải còn vẽ (`quads>0`, `≥500 px` đè lên camera). Đây là **trang ảnh**, không lật binding — pilot 6 khung đã xanh, full 78 khung defer khỏi full suite (tràn ngăn xếp nếu chạy 51+9+12+6+78 cùng lúc) và chỉ chạy cô lập cho tới khi bench RTX 4050 cho thấy còn ngân sách p95 < 16 ms.
+- **Ba cột stage cho cùng câu hỏi, nhưng không có trần 192.** `--verify-stage-effect-only` chụp lại `particles.wisps` / `particles.flames` / `particles.sparks` trên **Live Stage** (cùng timing/cùng seed/cùng một-family-một-cột, nhưng vẽ bằng `GpuStageRenderer` stage path, trần **24 000** nên `demand == quads` ở cả hai đầu). Trên stage, `WispAmount` 150 cho **480/480** hạt sống/vẽ và `ParticleAmount` 120 cho **264/264**, pixel đổi giữa `off` và `far` tăng **hàng nghìn** (không còn bị cắt ở 85 px / 1 775 px của AR). Hai bản đo cùng đúng: AR báo **"trần"**, stage báo **"slider còn sống"**, và không bản nào đề xuất nâng trần AR.
+
 ## 2.2.0 — 2026-10-18
 
 ### AR overlay

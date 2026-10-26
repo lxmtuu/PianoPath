@@ -1,5 +1,9 @@
 name: build
 
+# 2026-10-25: the SDK feed started resolving the floating 10.0.x to a 10.0.403 whose
+# binary blobs answer HTTP 409 on the runners. Pin the last good patch from the official
+# 10.0 release metadata (latest-sdk 10.0.402, 2026-10-13) until that release is fixed.
+
 on:
   push:
     branches: ["main", "arena/**"]
@@ -41,6 +45,16 @@ jobs:
       - name: Static source check
         run: python3 tools/check_sources.py
 
+      # The effect plan quotes 27 measurements taken from the shipping sources, and the three A/B labs the
+      # documents link to carry their own assertions. They run beside check_sources.py so a constant that
+      # drifts, or a lab that stops matching its shader, turns the fast lane red before any build starts.
+      - name: Effect plan and prototype checks
+        run: |
+          python3 tools/note_effects_report.py --check
+          node tools/check_note_view_lab.cjs
+          node tools/check_damper_light.cjs
+          node tools/check_particle_motion_lab.cjs
+
       # Input-fixture validation only; does not claim Windows/GPU/AR render evidence.
       - name: Prism Flow baseline input checks
         if: >-
@@ -68,7 +82,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
 
       - name: Run the portable test project
         run: >-
@@ -118,7 +132,7 @@ jobs:
           lfs: false
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
       - name: Publish private Windows integration build
         shell: pwsh
         run: |
@@ -149,7 +163,7 @@ jobs:
           lfs: false
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
       - name: Build key-light diagnostic
         run: dotnet build PianoPath.csproj --configuration Release
       - name: Native keyboard lamp response
@@ -188,8 +202,28 @@ jobs:
           git add docs/evidence/keyboard-key-light-v1 docs/previews/keyboard-key-light-v1
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Refresh native keyboard key-light evidence [skip ci]'
-          git pull --rebase origin "$GITHUB_REF_NAME"
-          git push origin "$GITHUB_REF_NAME"
+          # Two runs of one branch can be alive at once: a cancelled run's evidence step finishes after
+          # its successor has started, both rewrite the same files, and `git pull --rebase` stops on the
+          # first one they both touched -- which is how run 39324857917 went red on 2026-10-19 with all
+          # 154 native captures passed and the evidence commit already on the branch. This step follows
+          # the rule "Commit refreshed previews" documents above: a branch that moved while this job
+          # rendered keeps the evidence belonging to its newer tip, and this run's renders stay in the
+          # keyboard-key-light-native artifact. bash rather than pwsh because the decision needs git's exit code and
+          # its message side by side.
+          log="$RUNNER_TEMP/key-light-push.log"
+          git fetch --quiet origin "$GITHUB_REF_NAME"
+          tip=$(git rev-parse "origin/$GITHUB_REF_NAME" 2>/dev/null || true)
+          if [ -n "$tip" ] && [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "::warning title=Key-light evidence not committed::The branch moved while this build rendered (now $tip, this run built $GITHUB_SHA), so the refreshed evidence was not pushed. It is in the keyboard-key-light-native artifact of this run."
+            exit 0
+          fi
+          if git push >"$log" 2>&1; then cat "$log"; exit 0; fi
+          cat "$log"
+          if grep -Eqi 'GH013|repository rule violations|protected branch|non-fast-forward|fetch first|stale info|cannot lock ref' "$log"; then
+            echo "::warning title=Key-light evidence not committed::The branch would not take the evidence push, so it keeps the set it already has. The renders are in the keyboard-key-light-native artifact of this run."
+            exit 0
+          fi
+          exit 1
 
   # Focused native lane (manual or explicit push marker): never cancel/re-run the full lane for diagnostic-only work.
   key-ensemble:
@@ -203,7 +237,7 @@ jobs:
           lfs: false
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
       - name: Build ensemble diagnostic
         run: dotnet build PianoPath.csproj --configuration Release
       - name: Native mixed-scene checkpoints
@@ -242,8 +276,28 @@ jobs:
           git add docs/evidence/key-particle-ensemble-v1 docs/previews/key-particle-ensemble-v1
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Refresh native mixed key-particle evidence [skip ci]'
-          git pull --rebase origin "$GITHUB_REF_NAME"
-          git push origin "$GITHUB_REF_NAME"
+          # Two runs of one branch can be alive at once: a cancelled run's evidence step finishes after
+          # its successor has started, both rewrite the same files, and `git pull --rebase` stops on the
+          # first one they both touched -- which is how run 39324857917 went red on 2026-10-19 with all
+          # 154 native captures passed and the evidence commit already on the branch. This step follows
+          # the rule "Commit refreshed previews" documents above: a branch that moved while this job
+          # rendered keeps the evidence belonging to its newer tip, and this run's renders stay in the
+          # key-particle-ensemble-native artifact. bash rather than pwsh because the decision needs git's exit code and
+          # its message side by side.
+          log="$RUNNER_TEMP/ensemble-push.log"
+          git fetch --quiet origin "$GITHUB_REF_NAME"
+          tip=$(git rev-parse "origin/$GITHUB_REF_NAME" 2>/dev/null || true)
+          if [ -n "$tip" ] && [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "::warning title=Ensemble evidence not committed::The branch moved while this build rendered (now $tip, this run built $GITHUB_SHA), so the refreshed evidence was not pushed. It is in the key-particle-ensemble-native artifact of this run."
+            exit 0
+          fi
+          if git push >"$log" 2>&1; then cat "$log"; exit 0; fi
+          cat "$log"
+          if grep -Eqi 'GH013|repository rule violations|protected branch|non-fast-forward|fetch first|stale info|cannot lock ref' "$log"; then
+            echo "::warning title=Ensemble evidence not committed::The branch would not take the evidence push, so it keeps the set it already has. The renders are in the key-particle-ensemble-native artifact of this run."
+            exit 0
+          fi
+          exit 1
 
   ar-budget:
     if: >-
@@ -256,7 +310,7 @@ jobs:
           lfs: false
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
       - name: Build AR budget diagnostic
         run: dotnet build PianoPath.csproj --configuration Release
       - name: Native mixed-scene checkpoints
@@ -295,8 +349,28 @@ jobs:
           git add docs/evidence/ar-particle-budget-v1 docs/previews/ar-particle-budget-v1
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Refresh native mixed key-particle evidence [skip ci]'
-          git pull --rebase origin "$GITHUB_REF_NAME"
-          git push origin "$GITHUB_REF_NAME"
+          # Two runs of one branch can be alive at once: a cancelled run's evidence step finishes after
+          # its successor has started, both rewrite the same files, and `git pull --rebase` stops on the
+          # first one they both touched -- which is how run 39324857917 went red on 2026-10-19 with all
+          # 154 native captures passed and the evidence commit already on the branch. This step follows
+          # the rule "Commit refreshed previews" documents above: a branch that moved while this job
+          # rendered keeps the evidence belonging to its newer tip, and this run's renders stay in the
+          # ar-particle-budget-native artifact. bash rather than pwsh because the decision needs git's exit code and
+          # its message side by side.
+          log="$RUNNER_TEMP/ar-budget-push.log"
+          git fetch --quiet origin "$GITHUB_REF_NAME"
+          tip=$(git rev-parse "origin/$GITHUB_REF_NAME" 2>/dev/null || true)
+          if [ -n "$tip" ] && [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "::warning title=AR budget evidence not committed::The branch moved while this build rendered (now $tip, this run built $GITHUB_SHA), so the refreshed evidence was not pushed. It is in the ar-particle-budget-native artifact of this run."
+            exit 0
+          fi
+          if git push >"$log" 2>&1; then cat "$log"; exit 0; fi
+          cat "$log"
+          if grep -Eqi 'GH013|repository rule violations|protected branch|non-fast-forward|fetch first|stale info|cannot lock ref' "$log"; then
+            echo "::warning title=AR budget evidence not committed::The branch would not take the evidence push, so it keeps the set it already has. The renders are in the ar-particle-budget-native artifact of this run."
+            exit 0
+          fi
+          exit 1
 
   build:
     if: >-
@@ -311,13 +385,67 @@ jobs:
 
       - uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: '10.0.402'
 
       - name: Restore
         run: dotnet restore PianoPath.csproj
 
       - name: Build
         run: dotnet build PianoPath.csproj --configuration Release --no-restore
+
+      # N17 runs on its own before the long suite, for the same reason the key-light and AR-budget jobs do:
+      # a crash in the new review should name itself in ten minutes instead of taking the whole suite down
+      # forty minutes in and leaving the failure to be guessed from a truncated log. It writes the same
+      # folder the suite writes later, byte for byte, so the two runs do not disagree.
+      - name: AR effect-family review (N17)
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'keyflow-ar-effect.log'
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          New-Item -ItemType Directory -Force -Path $review | Out-Null
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList '--verify','--verify-ar-effect-only',"--verify-review-out=$review","--verify-log=$log" -PassThru -Wait
+          if (Test-Path $log) {
+            Get-Content $log | ForEach-Object {
+              Write-Output $_
+              if ($_ -like 'FAIL*') { "::error title=N17 AR effect families::$_" } elseif ($_ -like 'PASS AR effect-family review*') { "::notice title=N17 AR effect families::$_" } elseif ($_ -like 'PASS stage particle sensitivity review*') { "::notice title=N17S Stage particle sensitivity::$_" }
+            }
+          } else { "::error title=N17 AR effect families::No verification log was written" }
+          exit $proc.ExitCode
+
+      # N17V is the value pilot: every driven family at low/mid/high vs off. It runs on its own before
+      # the hour-long suite for the same reason N17 does — a pixel gate that closes when a new family
+      # joins should name itself in a minute, not be guessed from a truncated log an hour later. The
+      # PASS line is turned into a notice so the measured per-family deltas are readable in CI, and
+      # the step writes into the same review folder the full suite writes later, byte for byte.
+      - name: AR value pilot (N17V)
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'keyflow-ar-value-pilot.log'
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          New-Item -ItemType Directory -Force -Path $review | Out-Null
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList '--verify','--verify-ar-value-pilot-only',"--verify-review-out=$review","--verify-log=$log" -PassThru -Wait
+          if (Test-Path $log) {
+            Get-Content $log | ForEach-Object {
+              Write-Output $_
+              if ($_ -like 'FAIL*') { "::error title=N17V AR value pilot::$_" } elseif ($_ -like 'PASS AR value pilot (N17V)*') { "::notice title=N17V AR value pilot::$_" }
+            }
+          } else { "::error title=N17V AR value pilot::No verification log was written" }
+          exit $proc.ExitCode
+
+      - name: Stage value pilot (N17V-S)
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'keyflow-stage-value-pilot.log'
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          New-Item -ItemType Directory -Force -Path $review | Out-Null
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList '--verify','--verify-stage-value-pilot-only',"--verify-review-out=$review","--verify-log=$log" -PassThru -Wait
+          if (Test-Path $log) {
+            Get-Content $log | ForEach-Object {
+              Write-Output $_
+              if ($_ -like 'FAIL*') { "::error title=N17V-S stage value pilot::$_" } elseif ($_ -like 'PASS stage value pilot (N17V-S)*') { "::notice title=N17V-S stage value pilot::$_" }
+            }
+          } else { "::error title=N17V-S stage value pilot::No verification log was written" }
+          exit $proc.ExitCode
 
       # Fail fast on functional/native/WPF regressions before expensive art-review recaptures.
       # Runs on every push and blocks the build. The suite detects what the runner is missing
@@ -368,6 +496,56 @@ jobs:
           }
           @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
+
+      # The contact sheets are the N12 pictures a person actually looks at, and the only part of that review small
+      # enough to belong in Git: the 285 native captures stay in the run's artifacts, which are published on main
+      # and not on a working branch. Copying the seven sheets into docs/evidence is what turns "the job was green"
+      # into "here is what it drew, on this commit, for anyone who opens the repository".
+      #
+      # Staged here (just after the suite that wrote them) and committed by "Commit refreshed previews" further
+      # down, together with the previews, on purpose: a second commit step in this job would race the first one
+      # for the branch tip, and the tip rule those steps share ("a branch that moved keeps its own evidence")
+      # would then skip one of the two every time. One push, one rule, both sets of pictures.
+      - name: Stage the review contact sheets
+        shell: bash
+        run: |
+          review="$RUNNER_TEMP/phase1-visual-review"
+          # Every copy is required: a sheet the suite did not write is a finding, not something to skip past.
+          out=docs/evidence/n12-sheets
+          mkdir -p "$out"
+          cp -- "$review/option-matrix/sheet-wpf.png" "$out/matrix-wpf.png"
+          cp -- "$review/option-matrix/sheet-gpu-warp.png" "$out/matrix-gpu-warp.png"
+          cp -- "$review/option-numeric/sheet.png" "$out/numeric.png"
+          cp -- "$review/preset-roundtrip/sheet.png" "$out/preset.png"
+          for file in "$review"/option-pose/sheet-*.png; do
+            name=$(basename "$file" .png | sed 's/^sheet-//')
+            cp -- "$file" "$out/pose-$name.png"
+          done
+          # N8 keeps its own folder: the page is about refraction on six note materials, not about the option
+          # matrix, and a reviewer should not have to know which of the two grids a file belongs to.
+          refraction=docs/evidence/refraction-sheets
+          mkdir -p "$refraction"
+          cp -- "$review/refraction/sheet-wpf.png" "$refraction/wpf.png"
+          cp -- "$review/refraction/sheet-gpu-warp.png" "$refraction/gpu-warp.png"
+          # N16 is the AR overlay's own page: one grid per pose is not needed, one pose carries every material.
+          ar=docs/evidence/ar-material-sheets
+          mkdir -p "$ar"
+          cp -- "$review/ar-material/sheet.png" "$ar/material.png"
+          # N17 is the overlay's effect side: one sheet per scene, one row per family, one column per setting,
+          # so a reviewer reads a family across a single line instead of hunting for it in a grid of materials.
+          # Every sheet is required: a scene the suite did not write is a finding, not something to skip past.
+          effect=docs/evidence/ar-effect-sheets
+          mkdir -p "$effect"
+          for sheet in held approach impact release; do
+            cp -- "$review/ar-effect/sheet-$sheet.png" "$effect/$sheet.png"
+          done
+          ls -l "$out" "$refraction" "$ar" "$effect"
+          stageEffect=docs/evidence/stage-effect-sheets
+          mkdir -p "$stageEffect"
+          for sheet in held impact; do
+            cp -- "$review/stage-effect/sheet-$sheet.png" "$stageEffect/$sheet.png"
+          done
+          ls -l "$stageEffect"
 
       # Isolate deterministic P0 capture from realtime/device smoke tests. Both still block the build.
       - name: Prism Flow baseline and candidate verification
@@ -949,19 +1127,78 @@ jobs:
             ${{ runner.temp }}/keyflow-prism-verification.log
             ${{ runner.temp }}/keyflow-arvideo-failure-*.avi
           if-no-files-found: warn
+          overwrite: true
 
       # Human review gate: the fixture is rendered through the real WPF stage and the app's GPU renderer
       # forced to WARP. The 960×540 files are 2×2 averages of the matching 1080p pixels, not fresh layouts.
       # Arena branch pushes also trigger a PR run for the same revision; keep this 1+ GiB review bundle on
-      # the PR run (and main/manual runs), not twice for every commit. Two days leaves a useful review window
-      # without letting repeated WARP captures exhaust the repository's Actions artifact quota.
+      # the PR run (and main/manual runs), not twice for every commit. A session pushes a dozen commits an
+      # hour, so the artifact is overwritten rather than accumulated: one review window, always the newest
+      # revision. Accumulating one 1.4 GB bundle per commit is what exhausted the repository's storage
+      # quota and started failing every upload from the verification log on.
       - name: Publish Phase 1 visual review
         if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/main')
         uses: actions/upload-artifact@v7
         with:
           name: phase1-visual-review
-          path: ${{ runner.temp }}/phase1-visual-review
+          # The option matrix, the AR/pose slice and the numeric review live in the same folder but have their own
+          # small artifacts below; excluding them here keeps this bundle at the size it had before N12.
+          path: |
+            ${{ runner.temp }}/phase1-visual-review/**
+            !${{ runner.temp }}/phase1-visual-review/option-matrix/**
+            !${{ runner.temp }}/phase1-visual-review/option-pose/**
+            !${{ runner.temp }}/phase1-visual-review/option-numeric/**
+            !${{ runner.temp }}/phase1-visual-review/preset-roundtrip/**
           if-no-files-found: warn
+          overwrite: true
+          retention-days: 2
+
+      # N12(b): 128 contact-sheet PNGs, not video. A reviewer can fetch this without the 1+ GiB bundle, and
+      # a failed matrix run still leaves whatever it managed to write.
+      - name: Publish the option matrix (N12(b))
+        if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/main')
+        uses: actions/upload-artifact@v7
+        with:
+          name: option-matrix-n12b
+          path: ${{ runner.temp }}/phase1-visual-review/option-matrix
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 2
+
+      # N12(d) part 1: 27 AR captures (four off states + five values, per calibrated pose) with the camera
+      # fixture, so the projection half of the audit can be reviewed without the full bundle.
+      - name: Publish the AR/pose option slice (N12(d))
+        if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/main')
+        uses: actions/upload-artifact@v7
+        with:
+          name: option-pose-n12d
+          path: ${{ runner.temp }}/phase1-visual-review/option-pose
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 2
+
+      # N12(e): 54 captures (nine numeric axes × three values × two renderers) with the pair table, so a slider
+      # whose two positions paint one picture can be inspected without the full bundle.
+      - name: Publish the numeric option review (N12(e))
+        if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/main')
+        uses: actions/upload-artifact@v7
+        with:
+          name: option-numeric-n12e
+          path: ${{ runner.temp }}/phase1-visual-review/option-numeric
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 2
+
+      # N12(f): one picture per shipped preset per renderer (40), each with the before/after hashes that must
+      # match bit for bit, so a saved look that changes when it is reopened is visible without the full bundle.
+      - name: Publish the preset round trip (N12(f))
+        if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/main')
+        uses: actions/upload-artifact@v7
+        with:
+          name: preset-roundtrip-n12f
+          path: ${{ runner.temp }}/phase1-visual-review/preset-roundtrip
+          if-no-files-found: warn
+          overwrite: true
           retention-days: 2
 
       # The perf gate (P3 #3): --bench runs the app's own render loop at 1080p for two budgeted scenes (and, with --bench-ar,
@@ -1298,6 +1535,7 @@ jobs:
             docs/previews/presets.jpg
             docs/previews/note-styles.jpg
           if-no-files-found: warn
+          overwrite: true
           retention-days: 2
 
       # Only when the second render disagreed with the first: both pictures, so the difference can be
@@ -1441,6 +1679,44 @@ jobs:
             printf '%s\n' "$drifted" | sed 's|^|- `|; s|$|`|'
           } >>"$GITHUB_STEP_SUMMARY"
           echo "::warning title=Previews are stale::$count file(s) under docs/previews were re-rendered by this build and not committed ($names). Refresh them from the keyflow-previews artifact of this run."
+
+      # The sheets were staged right after the suite; this is the push. It is its own step at the end of the job
+      # because every run of this branch also receives the keyboard-light job's evidence commit a few minutes in,
+      # so a step gated on "the tip is still the commit I built" - the rule the other evidence steps follow -
+      # would skip every single time. These seven files are new and nothing else writes them, so replaying one
+      # commit onto the moved tip is safe; when the replay actually conflicts (another run wrote different
+      # sheets) the step aborts it, says so, and leaves the branch alone.
+      - name: Save the review contact sheets
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')
+        shell: bash
+        run: |
+          git config user.name 'keyflow previews'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/evidence/n12-sheets docs/evidence/refraction-sheets docs/evidence/ar-material-sheets docs/evidence/ar-effect-sheets docs/evidence/stage-effect-sheets
+          if git diff --cached --quiet; then
+            echo "The branch already carries these sheets."
+            exit 0
+          fi
+          git commit -m 'Refresh the review contact sheets [skip ci]'
+          base=$(git rev-parse HEAD~1)
+          log="$RUNNER_TEMP/review-sheets-push.log"
+          git fetch --quiet origin "$GITHUB_REF_NAME"
+          tip=$(git rev-parse "origin/$GITHUB_REF_NAME" 2>/dev/null || true)
+          if [ -n "$tip" ] && [ "$tip" != "$base" ]; then
+            if ! git -c rebase.autoStash=true rebase "$tip" >"$log" 2>&1; then
+              git rebase --abort >/dev/null 2>&1 || true
+              cat "$log"
+              echo "::warning title=Review sheets not committed::The branch moved and replaying the sheet commit onto it conflicted, so the branch keeps the sheets it already has. The next run writes them again from its own review."
+              exit 0
+            fi
+          fi
+          if git push >"$log" 2>&1; then cat "$log"; exit 0; fi
+          cat "$log"
+          if grep -Eqi 'GH013|repository rule violations|protected branch|non-fast-forward|fetch first|stale info|cannot lock ref' "$log"; then
+            echo "::warning title=Review sheets not committed::The branch would not take the sheets push, so it keeps the set it already has."
+            exit 0
+          fi
+          exit 1
 
       # The packaging path is the one thing none of the steps above touch: this job builds and verifies
       # bin/, while a release ships publish/ — a single file, an installer compiled from that folder, a

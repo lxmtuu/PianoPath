@@ -180,6 +180,18 @@ internal sealed class GpuLook
         copy.FlameArtV3ForReview=enabled;
         return copy;
     }
+    /// <summary>
+    /// W2 motion candidate for the held flame, kept apart from the accepted v2 look: buoyant rise, drag and
+    /// a cooling swell (<see cref="FlameMotion.StepV3"/>). It is only set by the motion review, so the static
+    /// light-isolation captures and every shipped frame keep the constant-rise plume.
+    /// </summary>
+    internal bool FlameMotionV3ForReview { get; private set; }
+    internal GpuLook WithFlameMotionV3ForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();
+        copy.FlameMotionV3ForReview=enabled;
+        return copy;
+    }
     internal GpuLook WithWispV3ForReview(bool enabled)
     {
         var copy=(GpuLook)MemberwiseClone();
@@ -232,6 +244,8 @@ internal sealed class GpuLook
     public float WispHeight { get; init; } = .55f;
     public float WispWidth { get; init; } = .4f;
     public float WispTurbulence { get; init; } = .55f;
+    /// <summary>W1's flow slider, 0..1; zero leaves the shipped wisp and flame integrators untouched.</summary>
+    public float ParticleFlow { get; init; }
     public float WispGlow { get; init; } = .8f;
     public float FlameIntensity { get; init; } = .7f;
     public float FlameHeight { get; init; } = .6f;
@@ -317,6 +331,8 @@ internal sealed class GpuLook
     public bool AudioReactive { get; init; }
     public float AudioReactiveAmount { get; init; }
     public float PedalGlowIntensity { get; init; }
+    /// <summary>Set when the player or the system asked for less motion: the AR damper's idle breath is off.</summary>
+    public bool ReducedMotion { get; init; }
 
     // ---- colours (sRGB 0..1) ----
     public Vector3 BackgroundColor { get; init; }
@@ -418,7 +434,7 @@ internal sealed class GpuLook
             HeldParticleArt = s.HeldParticleArt || s.UpgradedParticleEffects,
             UpgradedParticleEffects = s.UpgradedParticleEffects,
             WispAmount = (float)s.WispAmount, WispSpeed = (float)s.WispSpeed, WispHeight = P(s.WispHeight), WispWidth = P(s.WispWidth),
-            WispTurbulence = P(s.WispTurbulence), WispGlow = P(s.WispGlow),
+            WispTurbulence = P(s.WispTurbulence), WispGlow = P(s.WispGlow), ParticleFlow = P(s.ParticleFlow),
             FlameIntensity = P(s.FlameIntensity), FlameHeight = P(s.FlameHeight), FlameNoteColor = s.FlameColorMode == "Note",
 
             ShowKeys = s.ShowKeys && !overCamera, AnimateKeys = s.AnimateKeys, ShowKeyFelt = s.ShowKeyFelt, ShowKeyShadow = s.ShowKeyShadow, ShowHalo = s.ShowHalo, HaloIntensity = P(s.HaloIntensity),
@@ -443,6 +459,7 @@ internal sealed class GpuLook
             BloomIntensity = P(s.BloomIntensity), BloomSize = P(s.BloomSize),
             CameraZoom = P(s.CameraZoom), CameraOffset = P(s.CameraOffset), CameraParallax = P(s.CameraParallax),
             TempoSync = s.TempoSync, TempoSyncAmount = P(s.TempoSyncAmount), PedalGlow = s.PedalGlow, PedalGlowIntensity = P(s.PedalGlowIntensity),
+            ReducedMotion = s.ReducedMotion,
             AudioReactive = s.AudioReactive, AudioReactiveAmount = P(s.AudioReactiveAmount),
 
             BackgroundColor = ParseHex(s.BackgroundColor, Vector3.Zero),

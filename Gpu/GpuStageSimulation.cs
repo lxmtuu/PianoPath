@@ -57,7 +57,7 @@ internal readonly struct GpuSceneLayout
 /// </summary>
 internal sealed partial class GpuStageSimulation
 {
-    internal const int MaxParticles = 24000;
+    internal const int MaxParticles = EffectBudget.GpuParticleCap;
     /// <summary>The keyboard being drawn (<see cref="KeyboardLayout.Active"/>); read on the render thread, one reference at a time.</summary>
     private static int FirstPitch => KeyboardLayout.Active.FirstPitch;
     private static int KeyCount => KeyboardLayout.Active.KeyCount;
@@ -105,6 +105,7 @@ internal sealed partial class GpuStageSimulation
     private readonly float[] _press = new float[128], _glow = new float[128], _heat = new float[128], _spill = new float[128], _keyHold = new float[128];
     private readonly double[] _sparkBudget = new double[128], _wispBudget = new double[128], _flameBudget = new double[128];
     private readonly bool[] _active = new bool[128];
+    private readonly float[] _damperTick = new float[128];
     private readonly Vector3[] _keyColor = new Vector3[128];
     private readonly Random _random;
     private double _time;
@@ -160,9 +161,15 @@ internal sealed partial class GpuStageSimulation
     internal bool IsActive(int pitch) => pitch is >= 0 and < 128 && _active[pitch];
     internal Vector3 HorizonColor { get; private set; }
     internal float Activity => _activity;
-    private float _pedalBoost = 1;
-    /// <summary>Pedal Glow: 1, or up to 2 while the sustain pedal is down (eased so the glow swells and settles).</summary>
+    private float _pedalBoost = 1, _sustainLift;
+    /// <summary>Pedal Glow: 1, or up to 2 while the sustain pedal is down, following the shared smoothed lift.</summary>
     internal float PedalBoost => _pedalBoost;
+    /// <summary>The damper's lift after the shared attack/release smoother; the AR strip and Pedal Glow read it.</summary>
+    internal float SustainLift => _sustainLift;
+    /// <summary>One key's damper value (held or pedal-lifted) after its faster 30/40 ms tick smoother.</summary>
+    internal float DamperTick(int pitch) => pitch is >= 0 and < 128 ? _damperTick[pitch] : 0;
+    /// <summary>Seconds of rendered time on the simulation clock; the AR damper's idle breath reads it.</summary>
+    internal double Clock => _time;
     private float _energy;
     /// <summary>Audio reactive: 1, or more after a run of note onsets (the software stage's EnergyBoost envelope).</summary>
     internal float EnergyBoost => _look.AudioReactive ? 1 + _energy * _look.AudioReactiveAmount : 1;
@@ -203,12 +210,25 @@ internal sealed partial class GpuStageSimulation
         _count = 0; _rings.Clear(); _flashes.Clear(); _trails.Clear(); _arImpacts.Clear();
         _risingMidiNotes.Clear(); _arRisingMidiNotes.Clear(); _livePresses.Clear();
         Array.Clear(_press); Array.Clear(_glow); Array.Clear(_heat); Array.Clear(_active);
+        Array.Clear(_damperTick);
         Array.Clear(_spill); Array.Clear(_keyHold); Array.Clear(_keyColor); Array.Clear(KeyColors);
         Array.Clear(_sparkBudget); Array.Clear(_wispBudget); Array.Clear(_flameBudget);
         _noteTrails.Clear(); _noteLabels.Clear(); _shimmerBars.Clear(); _landings.Clear();
         _releaseNotes = null; _releaseScanPos = 0; _releaseScanIndex = 0;
         _activity = _energy = _beatPulse = 0; _pedalBoost = 1; HorizonColor = Vector3.Zero;
         ParticlesBorn = EmitterParticlesBorn = 0;
+    }
+
+    /// <summary>
+    /// One W1 step for a single particle: the engine stores floats, the law works in doubles, and the conversion
+    /// happens in one place so the software stage's doubles and these floats feed the law identical inputs.
+    /// </summary>
+    private void StepFlow(ref float x, ref float y, ref float vx, ref float vy, float phase, float dt, GpuLook look)
+    {
+        double px = x, py = y, pxv = vx, pyv = vy;
+        ParticleFlow.Step(ref px, ref py, ref pxv, ref pyv, phase / ParticleFlow.Turn, _time, dt,
+            look.VectorField * 100.0, look.FieldScale, look.EvolutionSpeed, look.ParticleFlow);
+        x = (float)px; y = (float)py; vx = (float)pxv; vy = (float)pyv;
     }
 
     /// <summary>Advances the simulation by one rendered frame.</summary>
@@ -242,6 +262,9 @@ internal sealed partial class GpuStageSimulation
         // The physics slow-motion control belongs to particles; the stage clock, notes and ambient layers
         // must keep their real tempo so changing it cannot slow the whole composition.
         _time += frameDt;
+        // One smoothed lift drives the pedal lights and the per-key damper cells.
+        _sustainLift = (float)ArDampers.Smooth(_sustainLift, input.SustainLevel, frameDt);
+        _pedalBoost = look.PedalGlow ? 1 + look.PedalGlowIntensity * _sustainLift : 1;
         _beatPulse = look.TempoSync ? input.BeatPulse : 0;
         _simWidth = Math.Max(1, sceneWidth);
         var layout = new GpuSceneLayout(_simWidth, (float)input.StageHeightDip, look.KeyboardFraction);
@@ -306,6 +329,8 @@ internal sealed partial class GpuStageSimulation
             _press[pitch] += (target - _press[pitch]) * (1 - MathF.Exp(-frameDt * (target > _press[pitch] ? 38 : 16)));
             _glow[pitch] = _active[pitch] ? Math.Max(_glow[pitch], Math.Min(1, _glow[pitch] + frameDt * 12)) : Math.Max(0, _glow[pitch] - frameDt * 3.2f);
             _heat[pitch] = _active[pitch] ? Math.Min(1, _heat[pitch] + frameDt * 7) : Math.Max(0, _heat[pitch] - frameDt * 2.4f);
+            _damperTick[pitch] = (float)ArDampers.SmoothTick(_damperTick[pitch],
+                ArDampers.TickTarget(_active[pitch], _sustainLift), frameDt);
             totalGlow += _glow[pitch];
             horizon += _keyColor[pitch] * _glow[pitch];
         }
@@ -318,8 +343,6 @@ internal sealed partial class GpuStageSimulation
             _spill[pitch] = Math.Min(1, spill);
         }
         _activity = Math.Min(1, totalGlow / 4);
-        var pedalTarget = look.PedalGlow && input.Sustain ? 1 + look.PedalGlowIntensity : 1;
-        _pedalBoost += (pedalTarget - _pedalBoost) * (1 - MathF.Exp(-frameDt * 10));
         _energy *= MathF.Exp(-2.2f * frameDt);
         // the theme's halo colour, as the software stage paints it, warmed a little by the keys that sound
         HorizonColor = ToLinear(totalGlow > .01f ? Vector3.Lerp(look.HaloColor, horizon / totalGlow, .35f * Math.Min(1, totalGlow)) : look.HaloColor);
@@ -441,6 +464,15 @@ internal sealed partial class GpuStageSimulation
             ref var p = ref _particles[i];
             p.Age += particleDt;
             if (p.Age >= p.Life) { _particles[i] = _particles[--_count]; continue; }
+            if (look.ParticleFlow > 0 && (p.Wisp || (p.Shape == Shape.Flame && !look.FlameMotionV3ForReview)))
+            {
+                // W1: the held stream is carried by Stage/ParticleFlow.cs instead of its own sine — the same law
+                // the software stage calls, so the two renderers bend the same way. Zero flow never reaches here,
+                // which is what keeps the accepted wisps/flames captures byte-identical.
+                StepFlow(ref p.X, ref p.Y, ref p.Vx, ref p.Vy, p.Phase, particleDt, look);
+                if (p.Wisp) p.Vy *= MathF.Exp(-.35f * particleDt);
+                continue;
+            }
             if (p.Wisp)
             {
                 p.Y += p.Vy * particleDt;
@@ -450,6 +482,11 @@ internal sealed partial class GpuStageSimulation
             }
             if (p.Shape == Shape.Flame)
             {
+                if (look.FlameMotionV3ForReview)
+                {
+                    FlameMotion.StepV3(ref p.X, ref p.Y, ref p.Vx, ref p.Vy, ref p.Size, p.Age, p.Phase, particleDt);
+                    continue;
+                }
                 p.X += p.Vx * particleDt; p.Y += p.Vy * particleDt;
                 p.Vx += MathF.Sin(p.Age * 11 + p.Phase) * 40 * particleDt;
                 continue;
@@ -537,16 +574,20 @@ internal sealed partial class GpuStageSimulation
         _arImpacts.Add(new GpuArImpact(clamped, 0, Math.Clamp(strength, 0, 1), color));
         _glow[clamped] = Math.Max(_glow[clamped], Math.Min(1, .6f + strength * .4f));
         _energy = Math.Min(1.5f, _energy + .22f * strength); // audio reactive envelope attack
-        // wave channel
-        if (look.ShowImpactRings && look.ImpactWave != "None" && look.RingSizeRaw > 0 && _rings.Count < 96)
-            _rings.Add(new Ring { X = x, Y = y, Life = .55f, Strength = strength, Color = color, Pitch = clamped, Kind = (byte)(look.ImpactWave switch { "Shockwave" => 1, "Ripple" => 2, _ => 0 }), Channel = 0, Origin = 0 });
-        // flash channel: the anamorphic flare, a lightning strike or a plasma ball
-        if (look.ShowImpactFlash && look.ImpactFlashIntensity > 0 && _flashes.Count < 48)
+        // wave channel: at the ceiling the oldest wave leaves, so the newest hit always shows (EffectBudget).
+        if (look.ShowImpactRings && look.ImpactWave != "None" && look.RingSizeRaw > 0)
         {
+            if (_rings.Count >= EffectBudget.GpuRingCap) _rings.RemoveAt(0);
+            _rings.Add(new Ring { X = x, Y = y, Life = .55f, Strength = strength, Color = color, Pitch = clamped, Kind = (byte)(look.ImpactWave switch { "Shockwave" => 1, "Ripple" => 2, _ => 0 }), Channel = 0, Origin = 0 });
+        }
+        // flash channel: the anamorphic flare, a lightning strike or a plasma ball; same oldest-leaves rule
+        if (look.ShowImpactFlash && look.ImpactFlashIntensity > 0)
+        {
+            if (_flashes.Count >= EffectBudget.GpuFlashCap) _flashes.RemoveAt(0);
             if (look.ImpactFlashStyle == 0)
-                _flashes.Add(new Flash { X = x, Y = y, Life = .38f, Size = layout.Lane * StageLightCurves.ImpactSizeBoost(strength) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * StageLightCurves.ImpactDynamic(strength), Strength = strength, Pitch = clamped, Channel = 0, Origin = 0 });
+                _flashes.Add(new Flash { X = x, Y = y, Life = (float)EffectBudget.FlareLifeSeconds, Size = layout.Lane * StageLightCurves.ImpactSizeBoost(strength) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * StageLightCurves.ImpactDynamic(strength), Strength = strength, Pitch = clamped, Channel = 0, Origin = 0 });
             else
-                _flashes.Add(new Flash { X = x, Y = y, Life = .26f, Color = color, Strength = strength, Style = (byte)look.ImpactFlashStyle, Intensity = look.ImpactFlashIntensity, Pitch = clamped, Channel = 0, Origin = 0 });
+                _flashes.Add(new Flash { X = x, Y = y, Life = (float)EffectBudget.StyledFlashLifeSeconds, Color = color, Strength = strength, Style = (byte)look.ImpactFlashStyle, Intensity = look.ImpactFlashIntensity, Pitch = clamped, Channel = 0, Origin = 0 });
         }
         SpawnImpactMorph(clamped, x, y, color, strength);
         if (!look.ShowEmbers || look.ParticleAmount < 1) return;
@@ -630,7 +671,8 @@ internal sealed partial class GpuStageSimulation
         var look = input.Look;
         // Over the camera, the AR layer owns song notes in both flat and projected modes; suppress stage-space notes and trails.
         if (!look.ShowNotes || !onStage) return;
-        var noteWidth = layout.Lane * look.NoteWidth;
+        var noteWidth = (float)NoteGeometry.Width(layout.Lane, look.NoteWidth,
+            NoteGeometry.BlackKeyWidth(layout.Width, layout.Keys.WhiteCount));
         var hitY = layout.HitY;
         const float landingWindow = .55f;
         if (songNotes && input.Playing && input.Notes.Count > 0)
@@ -647,7 +689,7 @@ internal sealed partial class GpuStageSimulation
                     var note = list[i];
                     if (note.Start > latestStart) break;
                     if (!OnKeyboard(note.Pitch) || note.End < input.Position - 1) continue;
-                    var height = (float)Math.Clamp(note.Duration * speed - look.NoteGap, look.NoteMinLength, hitY * .9);
+                    var height = (float)NoteGeometry.Height(note.Duration, speed, look.NoteGap, look.NoteMinLength);
                     var played = note.Played; var missed = note.Missed;
                     var color = played ? new Vector3(82 / 255f, 237 / 255f, 208 / 255f) : missed ? new Vector3(1f, 83 / 255f, 113 / 255f) : look.NoteColor(note.Pitch, note.Track);
                     if (look.VelocityColor && !played && !missed) color = Vector3.Lerp(color, VelocityTint(note.Velocity / 127f), look.VelocityColorAmount);
@@ -743,7 +785,7 @@ internal sealed partial class GpuStageSimulation
     private Vector3 AddNote(GpuInstanceList<GpuNoteInstance> notes, GpuLook look, float x, float y, float w, float h, Vector3 color, float opacity, bool sounding, int pitch, int seed, float direction, float holdBar, float brightness)
     {
         if (sounding && look.HoldColorCycle) color = Vector3.Lerp(color, ColorFromHue(Hue188(pitch) + _time * look.HoldColorCycleSpeed * 3), .8f);
-        if (look.FallingPulse && !sounding) opacity *= .62f + .38f * MathF.Sin((float)_time * (1.5f + look.FallingPulseRate * 9) + pitch * .7f);
+        if (look.FallingPulse && !sounding) opacity *= .62f + .38f * MathF.Sin((float)_time * (float)MotionBudget.PulseAngularRate(look.FallingPulseRate) + pitch * .7f);
         if (look.RainbowTrail) color = ColorFromHue(_time * look.RainbowHueSpeed + pitch * 9);
         var linear = ToLinear(color) * brightness;
         notes.Add(new GpuNoteInstance
@@ -848,8 +890,9 @@ internal sealed partial class GpuStageSimulation
                     var px = x;
                     if (p.Wisp)
                     {
-                        var amp = (5 + look.WispTurbulence * 26) * (.45f + look.WispWidth) * MathF.Min(1, p.Age * 1.6f);
-                        px += MathF.Sin(p.Age * (3 + look.WispTurbulence * 5) + p.Phase) * amp;
+                        // W1 replaces the draw-time sway with motion that is already in the velocity: adding the
+                        // old curve on top would re-scatter the stream the flow just made coherent.
+                        if (look.ParticleFlow <= 0) px += WispMotion.Offset(look.WispTurbulence, look.WispWidth, p.Age, p.Phase);
                     }
                     sprites.Add(new GpuSpriteInstance
                     {
@@ -968,8 +1011,7 @@ internal sealed partial class GpuStageSimulation
                     var gain = glowGain;
                     if (p.Wisp)
                     {
-                        var amp = (5 + look.WispTurbulence * 26) * (.45f + look.WispWidth) * MathF.Min(1, p.Age * 1.6f);
-                        px += MathF.Sin(p.Age * (3 + look.WispTurbulence * 5) + p.Phase) * amp;
+                        if (look.ParticleFlow <= 0) px += WispMotion.Offset(look.WispTurbulence, look.WispWidth, p.Age, p.Phase);
                         gain = .6f + p.Glow * 1.6f;
                         fade = MathF.Min(1, u * 6) * (1 - u);
                     }
@@ -1011,12 +1053,13 @@ internal sealed partial class GpuStageSimulation
         if (look.ShowHalo)
         {
             var c = ToLinear(look.HaloColor) * (.5f + look.HaloIntensity * .9f) * (1 + _activity * .6f) * GlowBoost;
-            sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.Width / 2, hitY, layout.Width / 2, 6), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 3.2f, 0) });
+            var haloY = hitY - (look.PedalGlow ? 5 * _sustainLift : 0);   // same rise as the WPF line, in stage DIPs
+            sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.Width / 2, haloY, layout.Width / 2, 6), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 3.2f, 0) });
             if (look.HaloPulse && look.HaloPulseIntensity > 0) AddHaloPulses(sprites, look, layout);
         }
         if (look.ShowKeys && look.KeyLabels > 0) AddKeyLabels(sprites, look, layout);
-        foreach (var label in _noteLabels) AddNoteLabel(sprites, look, label);
-        foreach (var bar in _shimmerBars) AddNoteShimmer(sprites, look, bar);
+        foreach (var label in _noteLabels) AddNoteLabel(sprites, look, label, layout.HitY);
+        foreach (var bar in _shimmerBars) AddNoteShimmer(sprites, look, bar, layout.HitY);
     }
 
     /// <summary>
@@ -1025,9 +1068,10 @@ internal sealed partial class GpuStageSimulation
     /// colour-cycling look shimmers in its current hue. Two bands at different speeds give the surface
     /// depth; the additive pass over the note turns them into moving gloss.
     /// </summary>
-    private void AddNoteShimmer(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, NoteTrail n)
+    private void AddNoteShimmer(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, NoteTrail n, float hitY)
     {
-        var strength = look.NoteShimmerAmount * Math.Clamp(n.Opacity, 0, 1);
+        var strength = look.NoteShimmerAmount * Math.Clamp(n.Opacity, 0, 1)
+            * (float)NoteGeometry.EnterFade(n.Y + n.H * .5, hitY);
         if (strength <= .01f || n.W < 5 || n.H < 6) return;
         var e = (float)_time;
         var center = n.Y + n.H * .5f;

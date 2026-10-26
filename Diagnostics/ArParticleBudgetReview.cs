@@ -65,7 +65,7 @@ internal static class ArParticleBudgetReview
                 "Stage/PianoStage.Gpu.cs","Camera/ArParticleBillboard.cs","Camera/ArCameraPose.cs","Camera/Ar3DNoteProjection.cs",
                 "Diagnostics/KeyParticleFixtures.cs","Diagnostics/HeldParticleControlPlan.cs","Diagnostics/KeyParticleEnsemblePlan.cs",
                 "Diagnostics/KeyParticleEnsembleReview.cs","Diagnostics/ArParticleBudgetReview.cs","docs/samples/ar-keyboard-topdown.png"];
-            File.WriteAllText(Path.Combine(output,"manifest.json"),JsonSerializer.Serialize(new{schema=1,family="ar-particle-budget",reviewOnly=true,defaultEnabled=false,cap=192,
+            File.WriteAllText(Path.Combine(output,"manifest.json"),JsonSerializer.Serialize(new{schema=1,family="ar-particle-budget",reviewOnly=true,defaultEnabled=false,cap=384,
                 sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA")??"workspace",adapter=renderer.AdapterName,width=640,height=360,fps=30,seed=KeyParticleEnsemblePlan.Seed,
                 baselineRevision="79930e52cb3773f02d9e8e59be2c111236917227",recipes=KeyParticleEnsemblePlan.Recipes,palettes=KeyParticleEnsemblePlan.Palettes,
                 checkpoints=KeyParticleEnsemblePlan.Checkpoints,notes=KeyParticleEnsemblePlan.Notes,pedalOnFrame=24,pedalOffFrame=54,
@@ -93,10 +93,10 @@ internal static class ArParticleBudgetReview
         {
             if(trace is null || trace.Fair!=(mode=="fair"))throw new InvalidDataException("Missing actual budget trace.");
             keys=trace.Eligible.Select(e=>e.Particle.Pitch+128*e.Particle.Origin).ToArray();selected=trace.Selected;
-            var expected=mode=="fair"?ArParticleBudget.Select(trace.Eligible.Select(e=>new ArParticleBudget.Candidate(e.Particle.Pitch,e.Particle.Origin)).ToArray(),192)
-                :Enumerable.Range(0,Math.Min(192,keys.Length)).ToArray();
+            var expected=mode=="fair"?ArParticleBudget.Select(trace.Eligible.Select(e=>new ArParticleBudget.Candidate(e.Particle.Pitch,e.Particle.Origin)).ToArray(),384)
+                :Enumerable.Range(0,Math.Min(384,keys.Length)).ToArray();
             if(!expected.SequenceEqual(selected))throw new InvalidDataException("Selector did not use the declared policy.");
-            if(selected.Length!=Math.Min(192,keys.Length) || selected.Distinct().Count()!=selected.Length || !selected.SequenceEqual(selected.Order()))throw new InvalidDataException("Cap/subset/order violation.");
+            if(selected.Length!=Math.Min(384,keys.Length) || selected.Distinct().Count()!=selected.Length || !selected.SequenceEqual(selected.Order()))throw new InvalidDataException("Cap/subset/order violation.");
             var wanted=selected.Select(i=>trace.Eligible[i].Quad).ToArray();
             var emitted=actual.Skip(trace.Start).Take(selected.Length).ToArray();
             if(Hash(JsonSerializer.SerializeToUtf8Bytes(wanted,Json))!=Hash(JsonSerializer.SerializeToUtf8Bytes(emitted,Json)) || renderer.ArParticleFxCount!=selected.Length)
@@ -119,14 +119,14 @@ internal static class ArParticleBudgetReview
         if(fast is not null && (fast.Shot.PixelSha256!=a.PixelSha256 || fast.Shot.PacketHash!=a.PacketHash || fast.Shot.RawHash!=a.RawHash))throw new InvalidDataException("Instrumented legacy is not the original fast-path output.");
         if(a.RawHash!=b.RawHash || a.RawParticles!=b.RawParticles || a.KeyHash!=b.KeyHash || a.Packets!=b.Packets || a.NonParticleHash!=b.NonParticleHash || a.EligibleHash!=b.EligibleHash || !a.EligibleKeys.SequenceEqual(b.EligibleKeys))
             throw new InvalidDataException("Selection trial altered state, eligibility, non-particle packets or count.");
-        if((!ar || a.EligibleKeys.Length<=192) && (a.PacketHash!=b.PacketHash || a.PixelSha256!=b.PixelSha256))throw new InvalidDataException("Under-cap or Stage output changed.");
-        if(ar && a.EligibleKeys.Length>192)
+        if((!ar || a.EligibleKeys.Length<=384) && (a.PacketHash!=b.PacketHash || a.PixelSha256!=b.PixelSha256))throw new InvalidDataException("Under-cap or Stage output changed.");
+        if(ar && a.EligibleKeys.Length>384)
         {
             var present=a.EligibleKeys.Select(k=>k/128).Distinct().ToArray();
             foreach(var role in present)
             {
                 var pitches=a.EligibleKeys.Where(k=>k/128==role).Select(k=>k%128).Distinct().ToArray();
-                if(pitches.Length*present.Length<=192 && pitches.Any(p=>!b.Selected.Any(i=>b.EligibleKeys[i]==p+role*128)))throw new InvalidDataException("Eligible role/pitch is still starved.");
+                if(pitches.Length*present.Length<=384 && pitches.Any(p=>!b.Selected.Any(i=>b.EligibleKeys[i]==p+role*128)))throw new InvalidDataException("Eligible role/pitch is still starved.");
             }
         }
     }

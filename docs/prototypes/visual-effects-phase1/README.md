@@ -5,9 +5,10 @@ This is a **design-only HTML canvas mock**, not PianoPath UI and not an app rend
 From the repository root, run:
 
 ```bash
-python3 -m http.server 8000 --bind 0.0.0.0 --directory docs
+python3 tools/serve_prototypes.py --port 8080
 ```
 
-Then open `http://localhost:8000/prototypes/visual-effects-phase1/`. The page has three target looks, a fixed scene scrubber, play/pause, and a same-frame A/B comparison. Selecting **AR · future** is intentionally disabled; it does not open a camera or imply calibration support.
+Then open `http://localhost:8080/docs/prototypes/visual-effects-phase1/` (the same server also carries the
+particle lab at `/` and the note-view lab at `/note-view-lab/`). The page has three target looks, a fixed scene scrubber, play/pause, and a same-frame A/B comparison. Selecting **AR · future** is intentionally disabled; it does not open a camera or imply calibration support.
 
 Design decisions and approval checklist: [`../../VISUAL-EFFECTS-DESIGN-BIBLE.md`](../../VISUAL-EFFECTS-DESIGN-BIBLE.md) and [`../../VISUAL-EFFECTS-STUDIO-WIREFRAME.md`](../../VISUAL-EFFECTS-STUDIO-WIREFRAME.md).

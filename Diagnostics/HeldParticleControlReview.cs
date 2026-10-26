@@ -166,13 +166,17 @@ internal static class HeldParticleControlReview
                             SampleHash(raw),SampleHash(eligible),SampleHash(packed));
                         if (variant.Particles && (entry.Load=="low" || scene.Family=="flames"))
                         {
-                            if (eligible.Count>=192 || coverage.PackedHash!=coverage.EligibleHash
+                            if (eligible.Count>=384 || coverage.PackedHash!=coverage.EligibleHash
                                 || coverage.Packed.Any(r=>r.Count==0))
                                 throw new InvalidDataException($"Sub-cap fixture lost an eligible pitch/particle: {id}");
                         }
-                        if (variant.Particles && overCamera && scene.Family=="wisps" && entry.Load=="normal"
-                            && (eligible.Count<=192 || packed.Count!=192))
-                            throw new InvalidDataException($"Normal wisp chord no longer exercises the existing AR cap: {id}");
+                        if (variant.Particles && overCamera && scene.Family=="wisps" && entry.Load=="normal")
+                        {
+                            // Cap 384: normal chord 304 < 384 is now sub-cap (was capped at 192). Keep sub-cap invariant.
+                            if (eligible.Count>=384 || coverage.PackedHash!=coverage.EligibleHash
+                                || coverage.Packed.Any(r=>r.Count==0))
+                                throw new InvalidDataException($"Sub-cap fixture lost an eligible pitch/particle (384 cap): {id}");
+                        }
                         var populationKey=$"{scene.Family}/{entry.Load}/{scene.Palette.Id}/{variant.Particles}";
                         if (populations.TryGetValue(populationKey,out var previous) && previous!=coverage.RawHash)
                             throw new InvalidDataException($"Lighting/output altered simulated population: {id}");
@@ -286,7 +290,7 @@ internal static class HeldParticleControlReview
                 views=HeldParticleControlPlan.Views.Select(v => new {v.Id, corners=v.Corners?.Select(c => new {c.X,c.Y})}),
                 sheetOrder=isolateLight ? "two quartets: particles off/on; TL neither, TR tint, BL spill, BR both; native pixels"
                     : "top-left neither; top-right light-only; bottom-left particles-only; bottom-right combined; native pixels, no resizing",
-                coverageMethod=isolateLight ? "Raw live pool; Stage-eligible alpha >.003 surface candidates; actually packed Stage/AR callbacks. Absolute-age bins 0/.2/.4 seconds; not screen-space visibility. Sorted sample hashes (pitch,age,life); AR cap unchanged at 192." : null,
+                coverageMethod=isolateLight ? "Raw live pool; Stage-eligible alpha >.003 surface candidates; actually packed Stage/AR callbacks. Absolute-age bins 0/.2/.4 seconds; not screen-space visibility. Sorted sample hashes (pitch,age,life); AR cap 384." : null,
                 metric="8-bit display RGB differences only; >4 footprint is not brightness, quality or an additive decomposition.",
                 geometryMethod=isolateLight ? "Actual packed corners in output pixels; edge lengths and center-Y range, not visible shader area. Candidate preserves geometry hash exactly." : null,
                 captureCount=count,sceneCount=scenes.Count,scenes

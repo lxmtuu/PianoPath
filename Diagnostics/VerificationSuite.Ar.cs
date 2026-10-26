@@ -10,12 +10,14 @@ namespace PianoPath;
 internal static partial class VerificationSuite
 {
     /// <summary>
-    /// Pins AR support to its evidence grade: six screen-space ambient families are Native, 14 S5 families
-    /// remain Unverified despite sampled calibrated-3D WARP checks (the full choice/value matrix is incomplete),
-    /// four unprojected families stay Unsupported, and note-material capability/parameter bindings remain
-    /// Unverified although the shared shader renders on camera-facing quads. The WARP checks sample styles,
-    /// not a full parameter matrix. VerifyArOverlayCapturedFrames checks ambient/suppression; VerifyArNoteProjection
-    /// exercises selected S5 and note-material paths.
+    /// Pins AR support to its evidence grade: six screen-space ambient families are Native, 17 families that do
+    /// reach the camera remain Unverified despite sampled calibrated-3D WARP checks (the full choice/value matrix
+    /// is incomplete) — that now includes the three falling families, which ride on AR's own note quads rather
+    /// than on the stage roll — and the backdrop star field is the single Unsupported family, because its stars
+    /// live in the background pass that a camera backdrop skips. Note-material capability/parameter bindings
+    /// remain Unverified although the shared shader renders on camera-facing quads. The WARP checks sample
+    /// styles, not a full parameter matrix. VerifyArOverlayCapturedFrames checks ambient/suppression;
+    /// VerifyArNoteProjection exercises selected S5 and note-material paths.
     /// </summary>
     private static void VerifyArOverlayExclusions()
     {
@@ -29,13 +31,14 @@ internal static partial class VerificationSuite
             "impact.wave", "impact.flash", "impact.burst", "impact.morph",
             "hold.bar", "hold.breath", "hold.vibration", "hold.color-cycle", "hold.arc",
             "atmosphere.beams", "particles.sparks", "particles.wisps", "particles.flames", "release.fx",
+            "falling.trail", "falling.pulse", "falling.shimmer",
         };
         var families = EffectContractCatalog.AllFamilies;
         Assert(families.Count == 24, "AR classification should cover all 24 typed effect families.");
         Assert(families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native) == 6
-                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified) == 14
-                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported) == 4,
-            "AR evidence must distinguish six verified screen-space families, 14 unverified S5 projections and four unsupported unprojected families.");
+                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified) == 17
+                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported) == 1,
+            "AR evidence must distinguish six verified screen-space families, 17 unverified projected families and the one family AR never draws (the backdrop star field).");
         Assert(nativeInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native).Select(family => family.Id)),
             "Only the four ambient layers, shooting stars and petals are verified Native over the camera.");
         Assert(unverifiedInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified).Select(family => family.Id)),
@@ -68,10 +71,14 @@ internal static partial class VerificationSuite
             Assert(material.Capabilities.ArOverlay.State == EffectBackendState.Unverified
                     && material.Capabilities.ArOverlay.FallbackId is null,
                 $"{material.Id} uses the shared material shader on AR quads, but its AR support remains Unverified.");
-            Assert(material.Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
-                $"{material.Id} must keep per-setting AR bindings Unverified until their values are covered.");
+            Assert(material.Parameters.All(parameter => parameter.Bindings.ArOverlay
+                    == (parameter.SettingName == "NoteGlow" ? EffectParameterBindingState.Unverified
+                        : parameter.SettingName == "NoteRefraction" && material.Id == "note.material.crystal-outline"
+                            ? EffectParameterBindingState.Ignored
+                            : EffectParameterBindingState.Applied)),
+                $"{material.Id} must carry exactly the per-setting AR bindings the N16 camera-quad matrix measured.");
         }
-        Results.Add("PASS AR contract classification: six screen-space ambient families are Native; 14 calibrated S5 projection families remain Unverified after sampled WARP checks because the full style/value/parameter matrix is incomplete; four unprojected families stay Unsupported; note materials use the shared shader on camera-facing quads but their support and parameter bindings remain Unverified.");
+        Results.Add("PASS AR contract classification: six screen-space ambient families are Native; 17 projected families remain Unverified after sampled WARP checks because the full style/value/parameter matrix is incomplete, including the falling trail, pulse and shimmer that AR draws on its own note quads; the backdrop star field stays Unsupported because the background pass is skipped over a camera backdrop; note materials use the shared shader on camera-facing quads, and N16's per-setting camera-quad matrix now backs an Applied/Ignored binding for each of their parameters while the material capability itself stays Unverified.");
     }
 
     /// <summary>
@@ -358,7 +365,8 @@ internal static partial class VerificationSuite
         (string What, (double X, double Y) At)[] shouldStay =
         [
             ("G5, far from any held key", KeyPoint(layout.CenterX(79), .85)),
-            ("the air above C4", KeyPoint(layout.CenterX(60), -.3)),
+            // D2: a held key legitimately lights its own damper cell and pin, so the air probe sits past both.
+            ("the air above C4's damper pin", KeyPoint(layout.CenterX(60), -.55)),
         ];
         foreach (var (what, at) in shouldStay)
             Assert(Change(at) <= 2, $"Only held keys light up: {what} changed by {Change(at)}.");
@@ -666,7 +674,7 @@ internal static partial class VerificationSuite
             }
             foreach (var (name, at) in new[] { ("C4 front", At(layout.CenterX(60), .85)), ("C#4 black key", At(layout.CenterX(61), .3)), ("E4 front", At(layout.CenterX(64), .85)) })
                 Assert(Change(at) > 25, $"A held key must be tinted in a take of {what}: {name} changed by {Change(at)}.");
-            foreach (var (name, at) in new[] { ("D4 front", At(layout.CenterX(62), .85)), ("G5 front", At(layout.CenterX(79), .85)), ("the air above C4", At(layout.CenterX(60), -.3)), ("the sky", ((int)sky.X, (int)sky.Y)) })
+            foreach (var (name, at) in new[] { ("D4 front", At(layout.CenterX(62), .85)), ("G5 front", At(layout.CenterX(79), .85)), ("the air above C4's damper pin", At(layout.CenterX(60), -.55)), ("the sky", ((int)sky.X, (int)sky.Y)) })
                 Assert(Change(at) <= 4, $"Only held keys light up in a take of {what}: {name} changed by {Change(at)}.");
         }
         Assert(loop.CameraAge.Frames >= 3 && loop.CameraAge.WorstMilliseconds >= 80, $"The render loop should have counted the pictures it drew ({loop.CameraAge.Frames} frames, worst {loop.CameraAge.WorstMilliseconds:0} ms).");
@@ -1879,16 +1887,25 @@ internal static partial class VerificationSuite
         // sustain level 0..1 and takes the look's halo colour; Lite must never draw it.
         var damperDown = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true), 8);
         var damperStripCount = renderer.ArDamperStripCount;
-        var damperUp = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: false), 8);
+        // D2 adds one cell per lifted key and one pin per cell (its stroke plus the 2 px crossbar).
+        var damperCellCount = renderer.ArDamperCellCount;
+        var damperTickCount = renderer.ArDamperTickCount;
+        // Long enough for the pedal-only cells to fall: the one held key must keep its cell and pin.
+        var damperUp = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: false), 30);
+        var damperHeldCells = renderer.ArDamperCellCount;
+        var damperHeldTicks = renderer.ArDamperTickCount;
         var damperLiftPixels = ChangedPixels(damperUp, damperDown, threshold: 4);
         RenderFrames(PressFeed(false, .6f, ArQualityTier.Lite, sustain: true), 4);
-        Assert(damperStripCount == 1 && damperLiftPixels > 20 && renderer.ArDamperStripCount == 0,
-            $"Sustain must lift the damper strip over the key back edge at Standard and the strip must vanish at Lite ({damperLiftPixels} changed pixels at Standard, {renderer.ArDamperStripCount} strips at Lite).");
+        Assert(damperStripCount == 1 && damperCellCount > 0 && damperTickCount == damperCellCount * 2
+                && damperHeldCells == 1 && damperHeldTicks == 2
+                && damperLiftPixels > 20 && renderer.ArDamperStripCount == 0 && renderer.ArDamperCellCount == 0,
+            $"Sustain must lift the damper strip over the key back edge at Standard and draw a cell with a pin for every key; the panel must keep one cell and two pin quads for the held key after the pedal is released; the strip with its cells must vanish at Lite ({damperLiftPixels} changed pixels at Standard, {damperCellCount} cells and {damperTickCount} pin quads, {damperHeldCells} held cells and {damperHeldTicks} pin quads after release, {renderer.ArDamperStripCount} strips and {renderer.ArDamperCellCount} cells at Lite).");
 
         // The strip follows the player's choice too (2026-10-12): the toggle removes its quad entirely, and a Custom
         // colour mode repaints the same strip away from the look's halo family.
         var stripOff = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true, showStrip: false), 8);
-        Assert(renderer.ArDamperStripCount == 0, "The damper strip toggle must remove the strip quad.");
+        Assert(renderer.ArDamperStripCount == 0 && renderer.ArDamperCellCount == 0 && renderer.ArDamperTickCount == 0,
+            "The damper strip toggle must remove the strip quad and every per-key cell and pin.");
         var damperColorLook = settings.Clone();
         damperColorLook.ArDamperStripColorMode = "Custom";
         damperColorLook.ArDamperStripColor = "#00C8FF";

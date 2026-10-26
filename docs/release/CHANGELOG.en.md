@@ -20,6 +20,45 @@ section and are not repeated here; the internal development roadmap is not part 
 
 ## Unreleased
 
+### Effects
+- **The held-key flame** on machines without a GPU is now the engine's own stream of cooling motes (49 per second per key at the default, white → yellow → orange → red) instead of a motionless ellipse plume pinned to the key top.
+- **Held wisps and embers** now leave the software renderer at the engine's density and sway on the same curve — before, the software path emitted a quarter of the wisps, had no ember channel, and added the sway to velocity, so the motes kept drifting in slow motion.
+- **Note morph, release effects and the morph flash** now draw under their own switch: Shatter, Melt, Absorb, Bounce, Star morph, Snap Back and Echo Rings appear even with *Enable impact wave*, *Impact flash* or *Sparks* off — before, those choices were accepted and then drew nothing.
+- The **Note morph** card in Settings always offers its choices, and **Morph intensity** only appears once a morph is selected.
+- **Coherent flow** (Settings → Particles → Wisps): one wind carries held wisps and flames together instead of each mote waving on its own phase — a narrower stream that bends as a body and widens as its motes age. It defaults to **0**, so every existing preset draws exactly as before; raise it to turn the new flow on.
+
+### Fixes
+- **Note widths below 60%** now draw the held-key bar exactly as wide as the falling note on both renderers: the software stage used to floor the held bar at 60%, so one preset produced a bar twice as wide as its own falling note — and twice as wide as the same preset on a GPU machine, which has always read the slider.
+- Particle pacing is decoupled from the frame rate: one preset now moves the same at 60 Hz, 144 Hz and in an exported video, instead of speeding up with the refresh rate.
+
+### Verification
+- **All seventeen AR effect families now have a review sheet** (`--verify-ar-effect-only`: four sheets, `held` /
+  `approach` / `impact` / `release`, **51 frames**, each family shot in the scene its own lifecycle needs). This round
+  adds `falling.trail` and `falling.shimmer` to the Approach scene; both were already asserted on their own, so this
+  closes the page rather than finding something new. Three things in the page itself had to be fixed to hold them:
+  a family with no boolean switch is switched off by **the choice the renderer treats as off** (`FallingTrail` None);
+  a boolean that is not the family's switch is pinned **on** only when the family cannot be drawn without it (today
+  exactly one, `ShowImpactRings`) and **off** otherwise — pinning `FallingGhost` on would have put future-note echoes
+  in the frame; and a far row **may not repeat the reference frame**, so `falling.trail` measures
+  `FallingTrailLength` 100 (against 55) instead of `FallingTrailIntensity`, which the starting look already holds at
+  100. A fifth gate catches exactly that: `far` against `rest` must move ≥ 12 px. This round's numbers:
+  `falling.trail` **1 300 / 2 267 px** (box 32 × 61 → 40 × 106 — same width, nearly twice as long), `falling.shimmer`
+  **659 / 973 px**, the thinnest column of the Approach scene, because its sheen is a band **inside** the note body
+  rather than a new shape; the shimmer also gains a counter of its own (`ArNoteShimmerQuadCount`, diagnostics only, no
+  pixel changes). The fifteen families from earlier rounds did not change by a single pixel. This is a **sheet of
+  pictures**, not a status flip: the typed contract still lists all seventeen families as `Unverified`.
+- **The AR layer's particle ceiling is now read out, and it caught two columns.** Every frame of the sheet now also
+  records **how many particles were alive against how many the layer actually drew** (`demand` / `quads` in the
+  manifest, an "alive / drawn" column on the HTML index, a `(capped: N alive / M drawn)` tail in the PASS line). This
+  is pure **observation**: the hook only reads and is removed in a `finally`, so no pixel moved — all 51 cells keep
+  their exact numbers. It found `particles.wisps` (**480** alive / **192** drawn) and `particles.sparks` (**264** /
+  **192**), which means the sparks column has been printed for four rounds as a measurement of `ParticleAmount` while
+  it was really reading the AR layer's cap. Wisps report 480 rather than the 1 674 of the steady-state integral
+  because the Held scene only holds for 0.4 s; both numbers sit above the cap, and the document keeps both instead of
+  choosing the prettier one.
+- **Full lifecycle matrix for 17 families (N17L full).** `--verify-ar-lifecycle-only` extends the 6-frame pilot to **78 frames** in `ar-lifecycle/` (9 sheets, one per milestone): Held 8×2 (0.40 s/1.00 s), Approach 3×2 (0.25 s/0.50 s), Impact 5×3 (0.05 s/0.20 s/0.35 s), Release 1×2 (0.40 s/0.60 s), each milestone off↔on at same pose/camera/seed `ar-oblique` WARP. Gates ≥12 px for T0/T1; T2 `impact.flash` may be <12 px because flash only lives 0.26 s (expired), other families must still draw (quads>0, ≥500 px over camera). This is a **page**, not a binding flip — 6-frame pilot already green, full 78 deferred from the full suite (stack overflow with 51+9+12+6+78 together) and isolated-only until RTX 4050 bench shows p95 < 16 ms budget remains.
+- **Three stage columns for the same question, but without the 192 cap.** `--verify-stage-effect-only` re-shoots `particles.wisps` / `particles.flames` / `particles.sparks` on the **Live Stage** (same timing/seed/one-family-per-column, but drawn through the `GpuStageRenderer` stage path, cap **24,000** so `demand == quads` at both ends). On stage, `WispAmount` 150 yields **480/480** alive/drawn and `ParticleAmount` 120 yields **264/264**, and the off-to-far pixel deltas grow into the **thousands** (no longer clipped at the AR 85 px / 1,775 px). Both measurements are true: AR reports **cap**, stage reports **slider still alive**, and neither proposes raising the AR cap.
+
 ## 2.2.0 — 2026-10-18
 
 ### AR overlay

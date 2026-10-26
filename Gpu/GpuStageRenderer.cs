@@ -406,11 +406,12 @@ internal sealed class GpuStageRenderer : IDisposable
 
     /// <summary>How many quads the last frame drew into the AR layer; verification reads it.</summary>
     internal int ArQuadCount => _arList.Count;
-    /// <summary>The AR list minus the scene elements (damper strip, alignment guides): the count every per-note/per-key
-    /// assertion means by AR quads. Both counters answer the last built frame, so an idle layer must never subtract
-    /// more than the list holds.</summary>
+    /// <summary>The AR list minus the scene elements (damper strip, cells, ticks, alignment guides): the count every
+    /// per-note/per-key assertion means by AR quads. All counters answer the last built frame, so an idle layer must
+    /// never subtract more than the list holds.</summary>
     internal int ArObjectQuadCount => Math.Max(0,
-        _arList.Count - Math.Min(_arList.Count, _arLayer.DamperStripCount + _arLayer.AlignmentGuideCount));
+        _arList.Count - Math.Min(_arList.Count,
+            _arLayer.DamperStripCount + _arLayer.DamperCellCount + _arLayer.DamperTickCount + _arLayer.AlignmentGuideCount));
     /// <summary>How many song-note quads the AR layer built, excluding key tint and Live Stage light spill.</summary>
     internal int ArShapeCount => _arLayer.ShapeCount;
     internal int AmbientCount => _ambientList.Count;
@@ -422,11 +423,15 @@ internal sealed class GpuStageRenderer : IDisposable
     internal int ArLiveBarCount => _arLayer.LiveBarCount;
     internal int ArRisingMidiNoteCount => _arLayer.RisingMidiNoteCount;
     internal int ArNoteTrailQuadCount => _arLayer.NoteTrailQuadCount;
+    /// <summary>Sheen quads drawn inside existing AR note bodies; the shimmer family's own witness.</summary>
+    internal int ArNoteShimmerQuadCount => _arLayer.NoteShimmerQuadCount;
     internal int ArGhostNoteQuadCount => _arLayer.GhostNoteQuadCount;
     internal int ArLandingGlowCount => _arLayer.LandingGlowCount;
     internal int ArNoteLabelCount => _arLayer.NoteLabelCount;
     internal int ArImpactLightCount => _arLayer.ImpactLightCount;
     internal int ArDamperStripCount => _arLayer.DamperStripCount;
+    internal int ArDamperCellCount => _arLayer.DamperCellCount;
+    internal int ArDamperTickCount => _arLayer.DamperTickCount;
     /// <summary>How many alignment-check guide quads the last calibrated frame drew; verification reads it.</summary>
     internal int ArAlignmentGuideCount => _arLayer.AlignmentGuideCount;
     internal int ArNoteLightCount => _arLayer.NoteLightCount;
@@ -754,8 +759,10 @@ internal sealed class GpuStageRenderer : IDisposable
             RimColor = new Vector4(GpuStageSimulation.ToLinear(look.HaloColor), 40 + look.HorizonGlow * 260),
             Post = new Vector4(look.ShaderExposure, look.ShaderFilmic ? 1 : 0, 1, 1),
             // threshold 1.8: the lit white keys reach about 1.4 and must not bloom (their blur greys the
-            // black keys); notes, sparks, flares and pressed keys are emissive and sit well above it
-            Post2 = new Vector4(look.Chroma ? 0 : look.Vignette * .9f, look.BloomIntensity * .85f, 1.8f, .8f / 255f),
+            // black keys); notes, sparks, flares and pressed keys are emissive and sit well above it. The
+            // damper strip's D3 ignition reads the same constant, so it wakes up at a known lift.
+            Post2 = new Vector4(look.Chroma ? 0 : look.Vignette * .9f, look.BloomIntensity * .85f,
+                (float)ArDampers.BloomThreshold, .8f / 255f),
             SceneFx = new Vector4(look.ShowBackground && !look.Chroma ? BackgroundMotionId(look.BackgroundMotion) : 0,
                 look.BackgroundMotionAmount, look.BackgroundMotionSpeed, simulation.Activity),
             SceneFxColor = new Vector4(GpuStageSimulation.ToLinear(look.BackgroundMotionColor), 1),

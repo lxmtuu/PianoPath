@@ -276,7 +276,7 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
   tất cả `Clamp()`, round-trip JSON, preset-safe. Mặc định giữ nguyên look cũ
   (Ring 100, Flash tắt) nên preset hiện có không đổi một pixel.
 - **Renderer** (`PianoStage`): `Impact()` điều phối 3 kênh burst/wave/flash;
-  `DrawShockwave` (lõi nóng + viền sáng), `DrawImpactFlashes` (flare ~180 ms);
+  `DrawShockwave` (lõi nóng + viền sáng), `DrawImpactFlashes` (flare 380 ms, Lightning/Plasma 260 ms — chung với GPU từ P1);
   size/brightness theo lực nhấn; trần 64 waves + 32 flashes; `HasActiveEffects`
   và `ClearTransient` bao đủ.
 - **UI** (trang Particles): card mới **IMPACT · WAVE & FLASH** — toggle + Choice +

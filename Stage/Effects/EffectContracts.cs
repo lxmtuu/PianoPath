@@ -262,8 +262,10 @@ internal sealed record EffectContract(
     /// material-specific read-back checks in <c>VerifyPngSequenceRecorder</c>, <c>VerifyGpuNotePassQueries</c>
     /// and <c>VerifyGpuNoteMaterials</c> (WPF PNG files and GPU <c>GpuRecordingTap</c> frames). Individual
     /// parameter-to-recording bindings remain Unverified. AR passes known style IDs to the shared material
-    /// shader on camera-facing quads, but AR material capability and parameter bindings remain Unverified
-    /// until an AR-specific style/value matrix is reviewed.
+    /// shader on camera-facing quads; N16's per-setting AR matrix (docs/AR-MATERIAL-PARITY.md) read those
+    /// bindings back, so the parameter profiles below say Applied or Ignored. The AR capability itself stays
+    /// Unverified: one pose, one value per setting and WARP frames are not the value/lifecycle coverage a
+    /// Native claim asks for.
     /// </summary>
 internal static class EffectContractCatalog
 {
@@ -273,10 +275,18 @@ internal static class EffectContractCatalog
     private static readonly EffectParameterBindingProfile NativeParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
-    // AR uses the shared shader path, but no per-setting AR evidence currently supports Applied/Ignored claims.
+    // AR uses the shared shader path. N16 (docs/AR-MATERIAL-PARITY.md) held pose, camera, scene and seed, moved
+    // one setting at a time, and counted the pixels that changed in the AR frame of each piloted material: every
+    // setting a material's shader branch reads moved the picture past the twelve-pixel floor, and the one it does
+    // not read - Crystal Outline's refraction - moved nothing. The binding is therefore Applied per setting.
     private static readonly EffectParameterBindingProfile ArMaterialParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
-        EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Applied);
+    // The AR quad is cut to the note body, and the glow's halo lies outside it: N16 measured 3999-9841 changed
+    // pixels on the quad's rounded corners but read that as a record of what the shader does, not as a binding a
+    // reviewer can see. Claiming Applied here would say the overlay draws the halo, which it does not.
+    private static readonly EffectParameterBindingProfile ArGlowParameterBindings =
+        ArMaterialParameterBindings with { ArOverlay = EffectParameterBindingState.Unverified };
     private static readonly EffectParameterBindingProfile ArAmbientParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Applied);
@@ -291,9 +301,15 @@ internal static class EffectContractCatalog
     private static readonly EffectParameterBindingProfile GpuOnlyParameterBindings = new(
         EffectParameterBindingState.Ignored, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
+    // The shimmer is GPU-only, but "GPU-only" is not "stage-only": AddSongNote feeds NoteShimmer to the AR
+    // note quads on both the flat and the projected path (Gpu/GpuArLayer.cs AddNoteShimmer call).
+    private static readonly EffectParameterBindingProfile GpuOnlyArNoteParameterBindings =
+        GpuOnlyParameterBindings with { ArOverlay = EffectParameterBindingState.Unverified };
+    // AR shades with the same branch the GPU stage does, so a setting the GPU ignores is ignored on the quad
+    // too: N16 shot Crystal Outline's refraction in AR and it moved exactly 0 pixels, as on the GPU stage.
     private static readonly EffectParameterBindingProfile WpfOnlyRefractionBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Ignored,
-        EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
     private static readonly EffectCostAssessment UnmeasuredCost = new(EffectCostState.Unmeasured);
 
     // Manual-review record of the physical-adapter probe (2026-10-07, AMD Radeon(TM) Graphics, iGPU):
@@ -319,7 +335,7 @@ internal static class EffectContractCatalog
     private static readonly IReadOnlyList<EffectParameterContract> SolidParameters = Array.AsReadOnly(new[]
     {
         Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
-        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArGlowParameterBindings),
         Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
         Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
         Percentage("NoteRefraction", 0, 100, ArMaterialParameterBindings),
@@ -329,7 +345,7 @@ internal static class EffectContractCatalog
     private static readonly IReadOnlyList<EffectParameterContract> GemParameters = Array.AsReadOnly(new[]
     {
         Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
-        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArGlowParameterBindings),
         Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
         Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
         Percentage("NoteRefraction", 0, 100, ArMaterialParameterBindings),
@@ -339,11 +355,16 @@ internal static class EffectContractCatalog
     private static readonly IReadOnlyList<EffectParameterContract> CrystalOutlineParameters = Array.AsReadOnly(new[]
     {
         Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
-        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArGlowParameterBindings),
         Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
         Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
-        // WPF paints the crystal's refraction fringe; the GPU branch does not consume it. AR binding remains Unverified.
+        // Crystal Outline is the one family where the GPU ignores NoteRefraction: that branch reads NoteB.y for
+        // its rim and NoteB.x for its tint, while WPF draws both a fringe and a sheen from the same setting.
+        // Gem, Solid, Satin and Glass do read NoteB.w, so this profile belongs to the family, not to the parameter.
         Percentage("NoteRefraction", 0, 100, WpfOnlyRefractionBindings),
+        // Notes3D is deliberately not declared: this branch never reads NoteC.y, the channel the 3D switch
+        // travels on, and N16 measured 0 changed pixels for it on the Crystal Outline AR quad. The review still
+        // shoots the setting for this material so the omission is shown to be real, not a row the page forgot.
     });
 
     /// <summary>The intentionally narrow pilot. Add other families only after their own evidence review.</summary>
@@ -501,9 +522,15 @@ internal static class EffectContractCatalog
     /// both renderers; the shimmer is the one GPU-only member — the WPF stage never reads
     /// <c>NoteShimmer</c> (verified by source inspection), so it is Unsupported there rather than silently
     /// claimed. Motion classification is honest: trails and ghosts derive from the note's own travel, while
-    /// the pulse and the shimmer twinkle on their own clock (IntrinsicAnimation). The AR overlay does not draw
-    /// the stage note roll (<c>GpuLook.ShowNotes</c> false over camera, then <c>BuildNotes</c> returns), so all
-    /// three are Unsupported there; calibrated AR note quads are a separate flat-quad path. Costs all Unmeasured.
+    /// the pulse and the shimmer twinkle on their own clock (IntrinsicAnimation).
+    ///
+    /// <para>The AR column used to say Unsupported for all three, which was true when the overlay was
+    /// flat-only. It is not any more: <c>GpuArLayer.AddSongNote</c> applies <c>FallingPulse</c> and adds the
+    /// shimmer on the flat and the projected path alike, so those two are <c>Unverified</c> — the code paths
+    /// exist and the WARP checks in <c>VerifyArNoteProjection</c> touch them, but no per-value matrix does.
+    /// Trail and ghosts are <c>Unverified</c> too, drawn only when the saved 3D pose is present: the flat
+    /// overlay builds note bodies and nothing else, and that is what the AR card says out loud
+    /// (<see cref="ArOmittedEffects"/>). Costs all Unmeasured.</para>
     /// </summary>
     internal static IReadOnlyList<EffectFamilyContract> FallingFxPilot { get; } = Array.AsReadOnly(new[]
     {
@@ -513,13 +540,14 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Choice("FallingTrail"),
-                Percentage("FallingTrailIntensity", 0, 100),
-                Percentage("FallingTrailLength", 0, 100),
-                Boolean("FallingGhost"),
-                Percentage("FallingGhostAmount", 0, 100),
+                Choice("FallingTrail", ArProjectedParameterBindings),
+                Percentage("FallingTrailIntensity", 0, 100, ArProjectedParameterBindings),
+                Percentage("FallingTrailLength", 0, 100, ArProjectedParameterBindings),
+                Boolean("FallingGhost", ArProjectedParameterBindings),
+                Percentage("FallingGhostAmount", 0, 100, ArProjectedParameterBindings),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            // Projected notes only: the flat overlay draws note bodies, so trail and ghosts need the pose.
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -528,10 +556,11 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("FallingPulse"),
-                Percentage("FallingPulseRate", 0, 100),
+                Boolean("FallingPulse", ArProjectedParameterBindings),
+                Percentage("FallingPulseRate", 0, 100, ArProjectedParameterBindings),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            // AddSongNote applies the pulse to AR's own note quads on both the flat and the projected path.
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -540,10 +569,11 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("NoteShimmer", GpuOnlyParameterBindings),
-                Percentage("NoteShimmerAmount", 0, 100, GpuOnlyParameterBindings),
+                Boolean("NoteShimmer", GpuOnlyArNoteParameterBindings),
+                Percentage("NoteShimmerAmount", 0, 100, GpuOnlyArNoteParameterBindings),
             }),
-            new EffectCapabilityProfile(Unsupported, Native, Native, Unsupported),
+            // AddNoteShimmer is called from AddSongNote, so AR draws it on both paths as well.
+            new EffectCapabilityProfile(Unsupported, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
     });
@@ -712,6 +742,10 @@ internal static class EffectContractCatalog
                 Boolean("ShowStars"),
                 Percentage("StarDensity", 0, 100),
             }),
+            // AR Unsupported is not a style choice: Stars() is called only from PsBackground, and the background
+            // pass is skipped whenever the camera is the backdrop or the output is a chroma frame
+            // (Gpu/GpuStageRenderer.cs, "if (!alphaOutput && !cameraActive)"). VerifyArOverlayCapturedFrames
+            // already proves it: turning ShowStars on leaves the camera composite byte-identical.
             new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),

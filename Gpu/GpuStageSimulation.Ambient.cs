@@ -53,7 +53,7 @@ internal sealed partial class GpuStageSimulation
         // Unlike petals and stars, a note trail is aligned to scene-space note coordinates. Until that effect has its own
         // scene-to-image projection, drawing it in this flat pass over a camera would put the glow in the wrong place.
         if (!sceneOverlayOverCamera)
-            foreach (var trail in _noteTrails) AddNoteTrail(list, look, trail);
+            foreach (var trail in _noteTrails) AddNoteTrail(list, look, trail, layout.HitY);
     }
 
     private static void AddLanes(GpuInstanceList<GpuSpriteInstance> list, GpuSceneLayout layout)
@@ -507,9 +507,12 @@ internal sealed partial class GpuStageSimulation
     }
 
     /// <summary>Falling phase, trail channel: Glow, Sparkles, Speed Lines, Blur, Ribbon, Rainbow or Stream behind a note.</summary>
-    private void AddNoteTrail(GpuInstanceList<GpuSpriteInstance> list, GpuLook look, NoteTrail t)
+    private void AddNoteTrail(GpuInstanceList<GpuSpriteInstance> list, GpuLook look, NoteTrail t, float hitY)
     {
-        var strength = look.FallingTrailIntensity * t.Opacity;
+        // The trail hangs off the note's leading end, so it fades with that end rather than with the note's
+        // top: a long bar keeps its trail once its head is past the entrance band.
+        var strength = look.FallingTrailIntensity * t.Opacity
+            * (float)NoteGeometry.EnterFade(t.Rising ? t.Y + t.H : t.Y, hitY);
         if (strength <= .01f) return;
         var length = Math.Max(8, t.H * look.FallingTrailLength + 10);
         // the trail drags behind the motion: above the note while falling, below it while rising

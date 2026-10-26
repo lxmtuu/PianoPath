@@ -69,7 +69,7 @@ struct ArQuadInstance
     float4 B;            // x2, y2, x3, y3: front-right and front-left corners (output px)
     float4 W;            // the four corner weights of the projective map
     float4 Color;        // rgb linear, a = opacity
-    float4 Misc;         // note: x=sounding, y=seed, w=hold-bar; z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam, 8 note shimmer, 9 note trail, 10 note label, 11 damper strip
+    float4 Misc;         // note: x=sounding, y=seed, w=hold-bar; z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam, 8 note shimmer, 9 note trail, 10 note label, 11 damper strip (y=ignition), 12 damper cell/tick (y=1 flat stroke, x=rim alpha)
 };
 
 struct KeyInstance
@@ -971,16 +971,38 @@ float4 PsArQuad(ArQuadOut i) : SV_Target
     }
     if (kind > 10.5 && kind < 11.5)
     {
-        // The damper strip (roadmap §14.3, the Dampers element): a soft glowing line glued to the key back edge.
-        // uv.y runs from the fallboard side (0) to the key edge (1): a hot core hugs the key edge while a broad
-        // halo falls away across the strip; the two u ends feather so the line never hard-cuts at the frame.
-        float feather = 1.0 - i.Uv.y;
-        float core = exp(-feather * feather * 38.0) * 2.1;
-        float halo = exp(-feather * 5.0) * 0.55;
+        // The damper strip (roadmap section 14.3, the Dampers element): a soft glowing line glued to the key back edge.
+        // uv.y runs from the fallboard side (0) to the key edge (1). Misc.x is the lift, Misc.w the hot core's
+        // position (ArDampers.CorePositionFor); a faint contact line fades in on the edge as the core leaves, so
+        // the strip reads as a damper rising rather than a line merely getting thicker. The u ends feather.
+        // Misc.y is the D3 ignition: 1 with the pedal up, 2.4 at full lift, so the hottest core crosses the
+        // composite's 1.8 bloom prefilter only once the pedal is well into its travel.
+        float corePos = saturate(i.Misc.w);
+        float lift = saturate(i.Misc.x);
+        float ignite = max(i.Misc.y, 1.0);
+        float d = i.Uv.y - corePos;
+        float core = exp(-d * d * 38.0) * 2.1 * ignite;
+        float edge = 1.0 - i.Uv.y;
+        float halo = exp(-edge * 5.0) * 0.55;
+        // The contact line only fades in as the core leaves, so the pedal-up strip keeps its old look.
+        float contact = exp(-edge * edge * 90.0) * 0.25 * smoothstep(0.0, 0.15, lift);
         float ends = smoothstep(0.0, 0.004, i.Uv.x) * (1.0 - smoothstep(0.996, 1.0, i.Uv.x));
-        float gain = (core + halo) * ends;
+        float gain = (core + halo + contact) * ends;
         float alpha = saturate(gain * 0.5) * i.Color.a;
         return float4(i.Color.rgb * gain * i.Color.a, alpha);
+    }
+    if (kind > 11.5 && kind < 12.5)
+    {
+        // A per-key damper cell or its pin: Color.a is the body opacity, Misc.x the brighter 2 px band along
+        // uv.y = 0 (the cell's back edge, facing the notes) and Misc.y = 1 marks a flat stroke that has no rim.
+        // fwidth turns the band into two output pixels at any projection scale, so every cell matches.
+        float2 uvPerPixel = max(fwidth(i.Uv), float2(1e-6, 1e-6));
+        float rimMask = 1.0 - smoothstep(0.0, 2.0 * uvPerPixel.y, i.Uv.y);
+        float rim = saturate(i.Misc.x) * (1.0 - saturate(i.Misc.y));
+        float body = i.Color.a;
+        // The band composites over the body exactly as the prototype drew two rectangles.
+        float alpha = body + rim * (1.0 - body) * rimMask;
+        return float4(i.Color.rgb * alpha, alpha);
     }
 
     // Unknown future quad kinds remain readable; note bodies above use the shared SDF material.
@@ -1045,7 +1067,11 @@ float4 PsNote(NoteOut note) : SV_Target
     material.Color = note.Color;
     material.Misc = note.Misc;
     material.SceneY = note.SceneY;
-    return ShadeNoteMaterial(material);
+    float4 shaded = ShadeNoteMaterial(material);
+    // N7: the first 6% of the fall height is a linear alpha ramp, so a bar slides in from the top
+    // instead of popping in at full opacity. The software stage masks the same band (NoteGeometry).
+    float enter = saturate(note.SceneY / max(ScreenTime.w * 0.06, 1.0));
+    return float4(shaded.rgb * enter, shaded.a * enter);
 }
 
 float4 ShadeNoteMaterial(NoteMaterialInput v)
@@ -1742,7 +1768,7 @@ float4 SpriteShape(SpriteOut v)
         float grad = lerp(v.Params.z, v.Params.y, v.Local.y * 0.5 + 0.5);
         return float4(c * a * grad * mask, 0.0);
     }
-    // 16: the watermark strip — the whole line of text lives in MarkTex; the instance colour tints it.
+    // 16: the watermark strip - the whole line of text lives in MarkTex; the instance colour tints it.
     float2 markUv = v.Local * 0.5 + 0.5;
     float mark = MarkTex.SampleLevel(LinearClamp, markUv, 0).a;
     return float4(c * a * mark, a * mark);
