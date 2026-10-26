@@ -43,6 +43,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import value_pilot_contract  # noqa: E402  (same directory as this script)
+import hardware_signoff_contract  # noqa: E402  (same directory as this script)
 
 
 def _raw_string(text: str, i: int):
@@ -2123,6 +2124,16 @@ def scan_ar_effect_family_review():
     return errors
 
 
+def scan_ar_hardware_signoff_contract():
+    """The tier switch, its JSON evidence, the runbook, the validator and CI have to agree.
+
+    WARP is not a graphics card. This guard keeps --bench-tier from becoming a flag that produces two
+    identically-Standard reports, keeps the binding at Unverified until a human signs the evidence, and
+    keeps the script that reads that evidence honest about what it can and cannot prove.
+    """
+    return hardware_signoff_contract.check(hardware_signoff_contract.collect())
+
+
 def scan_ar_value_pilot_contract():
     """N17V has to read its quads from N17's witness table, not from the particle counter.
 
@@ -3243,6 +3254,7 @@ def main():
     errors.extend(scan_ar_material_review())
     errors.extend(scan_ar_effect_family_review())
     errors.extend(scan_ar_value_pilot_contract())
+    errors.extend(scan_ar_hardware_signoff_contract())
     errors.extend(scan_preset_roundtrip())
     errors.extend(scan_review_sheets())
     errors.extend(scan_previews_folder())
@@ -3288,6 +3300,8 @@ def main():
           "declares pinned/unshot coverage from the contract catalogue, "
           "pins its cell count, agrees with both READMEs and the plan, "
           "and still has its own fail-fast CI step, plus the Live Stage value pilot")
+    print("checked that --bench-tier reaches the settings, AR input and JSON, that legacy baselines still "
+          "read, that the sign-off validator refuses WARP, and that the binding stays Unverified")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:

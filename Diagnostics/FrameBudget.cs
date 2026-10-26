@@ -211,6 +211,8 @@ internal sealed class FrameBenchReport
     internal string Scene { get; init; } = "";
     internal string Preset { get; init; } = "";
     internal string Description { get; init; } = "";
+    /// <summary>The AR quality tier this scene was measured at. Reports written before --bench-tier existed were all Standard, so a missing field reads back as Standard rather than as an unknown tier.</summary>
+    internal string ArTier { get; init; } = "Standard";
     internal int Width { get; init; }
     internal int Height { get; init; }
     internal int Frames { get; init; }
@@ -249,6 +251,8 @@ internal sealed class FrameBenchRun
     internal bool Warp { get; init; }
     internal bool SoftwareAdapter { get; init; }
     internal double ShaderCompileMs { get; init; }
+    /// <summary>The tier the whole run was measured at (see <c>--bench-tier</c>). Read from the root of old reports too; a report without it was Standard.</summary>
+    internal string ArTier { get; init; } = "Standard";
     internal IReadOnlyList<FrameBenchReport> Scenes { get; init; } = [];
 
     /// <summary>True when any scene on a machine the budgets apply to went over its limit.</summary>
@@ -277,7 +281,12 @@ internal sealed class FrameBenchRun
         if (before is null || !before.Measured)
             return (FrameTrend.Unknown, 0, $"the scene '{scene.Scene}' has no previous measurement to compare with");
         // Comparing a WARP number with a graphics-card one, or 1080p with 4K, would produce a percentage that
-        // describes the two machines rather than the code between them.
+        // describes the two machines rather than the code between them. A Lite baseline against an Ultra run
+        // is the same mistake in a new form: the tiers draw different effect families, so the delta would
+        // describe --bench-tier rather than a code change. A report from before the flag existed is Standard.
+        if (!string.Equals(previous.ArTier, ArTier, StringComparison.Ordinal))
+            return (FrameTrend.Unknown, 0,
+                $"the scene '{scene.Scene}' was measured at AR tier {previous.ArTier} last time and {ArTier} this time, so the two runs are not comparable");
         if (previous.SoftwareAdapter != SoftwareAdapter || before.Width != scene.Width || before.Height != scene.Height)
             return (FrameTrend.Unknown, 0,
                 $"the scene '{scene.Scene}' was measured at {before.Width}×{before.Height} on {(previous.SoftwareAdapter ? "a software rasterizer" : "a graphics card")} last time " +
@@ -314,7 +323,7 @@ internal sealed class FrameBenchRun
     {
         var lines = new List<string>
         {
-            $"NOTE perf: Keyflow {AppVersion} · {(SoftwareAdapter ? "software rasterizer" : "graphics card")} {Adapter} · shaders compiled in {FrameBudget.Ms(ShaderCompileMs)} ms"
+            $"NOTE perf: Keyflow {AppVersion} · {(SoftwareAdapter ? "software rasterizer" : "graphics card")} {Adapter} · AR tier {ArTier} · shaders compiled in {FrameBudget.Ms(ShaderCompileMs)} ms"
         };
         if (Scenes.Count == 0) lines.Add("FAIL perf: no scene was measured");
         foreach (var scene in Scenes)
@@ -360,6 +369,9 @@ internal sealed class FrameBenchRun
             json.WriteBoolean("warp", Warp);
             json.WriteBoolean("softwareAdapter", SoftwareAdapter);
             json.WriteNumber("shaderCompileMs", Math.Round(ShaderCompileMs, 2));
+            // Schema stays 1: arTier is additive. A report written before --bench-tier existed was measured
+            // at Standard, which is exactly what TryParse supplies when the field is absent.
+            json.WriteString("arTier", ArTier);
             json.WriteStartArray("scenes");
             foreach (var scene in Scenes)
             {
@@ -367,6 +379,7 @@ internal sealed class FrameBenchRun
                 json.WriteString("scene", scene.Scene);
                 json.WriteString("preset", scene.Preset);
                 json.WriteString("description", scene.Description);
+                json.WriteString("arTier", scene.ArTier);
                 json.WriteNumber("width", scene.Width);
                 json.WriteNumber("height", scene.Height);
                 json.WriteNumber("frames", scene.Frames);
@@ -437,6 +450,9 @@ internal sealed class FrameBenchRun
                     Scene = Text(element, "scene"),
                     Preset = Text(element, "preset"),
                     Description = Text(element, "description"),
+                    // A report from before --bench-tier existed has no arTier field. It was measured at
+                    // Standard, so an empty read is Standard, not a blank tier that refuses comparison.
+                    ArTier = Text(element, "arTier") is { Length: > 0 } sceneTier ? sceneTier : "Standard",
                     Width = (int)Number(element, "width"),
                     Height = (int)Number(element, "height"),
                     Frames = (int)Number(element, "frames"),
@@ -472,6 +488,7 @@ internal sealed class FrameBenchRun
                 Warp = Flag(root, "warp"),
                 SoftwareAdapter = Flag(root, "softwareAdapter"),
                 ShaderCompileMs = Number(root, "shaderCompileMs"),
+                ArTier = Text(root, "arTier") is { Length: > 0 } runTier ? runTier : "Standard",
                 Scenes = measured
             };
             return run.Measured;

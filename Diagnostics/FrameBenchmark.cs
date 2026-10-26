@@ -30,6 +30,8 @@ internal static class FrameBenchmark
     internal const int ExitNoDevice = 2;
     /// <summary>Exit code when a budget that applies to this machine was exceeded.</summary>
     internal const int ExitOverBudget = 3;
+    /// <summary>Exit code when <c>--bench-tier</c> names a tier the AR overlay does not have.</summary>
+    internal const int ExitBadTier = 4;
 
     /// <summary>Runs the gate and returns the process exit code.</summary>
     internal static int Run(string[] args)
@@ -58,8 +60,27 @@ internal static class FrameBenchmark
         // and a hardware gate that silently measured the wrong GPU would be worse than no gate at all:
         // a name that matches none or several adapters fails the run instead of falling back.
         var adapterRequest = Value(args, "--bench-adapter=");
+        // --bench-tier=<Lite|Standard|Ultra> pins the AR overlay's quality tier for this run. Without it
+        // every benchmark measured Standard (the GpuArInput default), so a "two tier" hardware claim had
+        // no reproducible switch behind it. A name the catalogue does not know is a mistake, not Standard:
+        // fail before measuring a single frame, or the report would silently describe the wrong tier.
+        // This is a benchmark switch only — it never writes settings, presets or the binding catalogue.
+        var tierRequest = Value(args, "--bench-tier=");
+        var tier = ArQualityTier.Standard;
+        if (!string.IsNullOrWhiteSpace(tierRequest))
+        {
+            var match = ArQualityTiers.All.FirstOrDefault(name => string.Equals(name, tierRequest, StringComparison.OrdinalIgnoreCase));
+            if (match is null)
+            {
+                Console.WriteLine($"FAIL perf: --bench-tier must be one of {string.Join(", ", ArQualityTiers.All)} (got '{tierRequest}')");
+                return ExitBadTier;
+            }
+            tier = ArQualityTiers.TierOf(match);
+        }
         // --bench-ar adds the AR overlay scene to the run (and is a run of its own, with that one scene, when --bench is not there).
-        var withAr = args.Contains("--bench-ar");
+        // A tier request implies that scene: measuring a tier without drawing the overlay would write a report
+        // whose arTier describes nothing. With --bench alone it joins the two budgeted looks as a third scene.
+        var withAr = args.Contains("--bench-ar") || !string.IsNullOrWhiteSpace(tierRequest);
         var gate = args.Contains("--bench") || args.Any(argument => argument.StartsWith("--bench=", StringComparison.Ordinal));
         // --bench-detail adds N9's eighteen note-density scenes: a matrix, not a gate, so it is never in the CI
         // run. Alone it measures only that matrix; beside --bench it runs after the budgeted scenes.
@@ -89,7 +110,7 @@ internal static class FrameBenchmark
             // only uploads it. The real stage always sets it, so the measured scene has it too.
             feed.LabelAtlas = PianoStage.GpuGlyphAtlas;
             var software = FrameBudget.IsSoftwareAdapter(loop.IsWarp, loop.AdapterName);
-            foreach (var budget in budgets) scenes.Add(RunScene(loop, feed, budget, notes, frames, software));
+            foreach (var budget in budgets) scenes.Add(RunScene(loop, feed, budget, notes, frames, software, tier));
             var run = new FrameBenchRun
             {
                 TakenUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
@@ -98,6 +119,7 @@ internal static class FrameBenchmark
                 Warp = loop.IsWarp,
                 SoftwareAdapter = software,
                 ShaderCompileMs = loop.ShaderCompileMilliseconds,
+                ArTier = ArQualityTiers.NameOf(tier),
                 Scenes = scenes
             };
             foreach (var line in run.LogLines(previous)) Console.WriteLine(line);
@@ -119,7 +141,7 @@ internal static class FrameBenchmark
         if (!loop.WaitUntilStarted(TimeSpan.FromSeconds(60)) || loop.Error is not null) return null;
         feed.LabelAtlas = PianoStage.GpuGlyphAtlas;
         var software = FrameBudget.IsSoftwareAdapter(loop.IsWarp, loop.AdapterName);
-        return RunScene(loop, feed, budget, MainWindow.CreateDemoSong(), frames, software);
+        return RunScene(loop, feed, budget, MainWindow.CreateDemoSong(), frames, software, ArQualityTier.Standard);
     }
 
     /// <summary>
@@ -127,11 +149,15 @@ internal static class FrameBenchmark
     /// the first frame on a brand-new software device costs seconds while WARP generates code for the shaders,
     /// and paying that once per scene would measure the driver's compiler more than the stage.
     /// </summary>
-    private static FrameBenchReport RunScene(GpuRenderLoop loop, GpuStageFeed feed, FrameBudget budget, IReadOnlyList<NoteEvent> notes, int frames, bool software)
+    private static FrameBenchReport RunScene(GpuRenderLoop loop, GpuStageFeed feed, FrameBudget budget, IReadOnlyList<NoteEvent> notes, int frames, bool software, ArQualityTier tier)
     {
         var settings = string.IsNullOrWhiteSpace(budget.Preset)
             ? VisualPresets.CreateDefaultSettings()
             : VisualPresets.FindBuiltIn(budget.Preset)?.Settings.Clone() ?? VisualPresets.CreateDefaultSettings();
+        // The tier is a property of the whole run, not of one scene: --bench-tier writes it into every
+        // scene's settings AND into the AR input built below, so the look, the projected overlay and the
+        // report cannot disagree about which tier was measured. Nothing here writes the settings file.
+        settings.ArQuality = ArQualityTiers.NameOf(tier);
         // A detail cell measures the note layer alone: ambient, impacts and particles are switched off in every
         // cell, so the difference between "plain" and "fx" is the trail, the ghosts and the landing glow.
         if (budget.NoteCount > 0) ApplyNoteIsolation(settings, budget.NoteEffects);
@@ -154,7 +180,9 @@ internal static class FrameBenchmark
         {
             // what the overlay shows: the camera's picture, and the notes and lit keys on the keyboard marked in it
             feed.Camera = new GpuCameraInput(camera.Ring, PictureFit.Fit, false, 1f);
-            feed.Ar = new GpuArInput(camera.Calibration, ArNoteStyle.Default, 1f);
+            // The bench camera is synthetic; the tier is real: ArQualityBudget.CanDraw reads ar.Quality to
+            // decide which projected effect families exist at all, so this is what makes Lite != Ultra here.
+            feed.Ar = new GpuArInput(camera.Calibration, ArNoteStyle.Default, 1f, Quality: tier);
         }
 
         // ---- warm-up: shaders, the atlas, the texture ring and the particle pools all settle here ----
@@ -194,6 +222,7 @@ internal static class FrameBenchmark
             Scene = budget.Scene,
             Preset = string.IsNullOrWhiteSpace(budget.Preset) ? VisualPresets.DefaultPresetName : budget.Preset,
             Description = budget.Description,
+            ArTier = ArQualityTiers.NameOf(tier),
             Width = budget.Width,
             Height = budget.Height,
             Frames = stats.Count,
