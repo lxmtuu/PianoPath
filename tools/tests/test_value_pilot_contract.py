@@ -111,6 +111,7 @@ internal static class ArValuePilotReview
         return Driven.Select(fam => new {{ Pinned = all.Single(c => c.Id == fam.Id), Unshot = new string[0] }}).ToArray();
     }}
     private static void WriteManifest() {{ var manifest = new {{ coverage = Coverage(), gateFailures }}; }}
+    private static void VerifyStageValuePilot() {{ Assert(cells == 24, "stage"); }}
     private static int Gate(PilotFamily fam, string name, int changed) {{ return failures.Add($"{{fam.Id}}/{{fam.ValueName}} {{name}}"); }}
 }}
 """
@@ -130,18 +131,27 @@ internal static class ArValuePilotReview
 }}
 """
     suite = f"""        Assert(cells == {cells}, "The AR value pilot must shoot thirty-one columns over all seventeen families.");
+        Assert(cells == 24, "stage");
+        if (args.Contains("--verify-stage-value-pilot-only")) {{ VerifyStageValuePilot(); }}
+        VerifyStageValuePilot(reviewOutput!);
         Results.Add($"PASS AR value pilot (N17V): {{cells}} setting frames ...");
 """
     workflow = """      - name: AR value pilot (N17V)
         run: |
           Start-Process -ArgumentList '--verify','--verify-ar-value-pilot-only'
           if ($_ -like 'PASS AR value pilot (N17V)*') { "::notice title=N17V AR value pilot::$_" }
+      - name: Stage value pilot (N17V-S)
+        run: |
+          Start-Process -ArgumentList '--verify','--verify-stage-value-pilot-only'
+          if ($_ -like 'PASS stage value pilot (N17V-S)*') { "::notice::$_" }
 """
     listed = "/".join(f"`{fam}`" for fam in ids)
     readme_vi = (f"| `--verify-ar-value-pilot-only` | pilot N17V — {listed}. "
-                 f"**{cells} khung**, không đổi binding. |")
+                 f"**{cells} khung**, không đổi binding. |\n"
+                 "| `--verify-stage-value-pilot-only` | pilot N17V-S trên Live Stage. |")
     readme_en = (f"| `--verify-ar-value-pilot-only` | N17V value pilot — {listed}. "
-                 f"**{cells} frames**, no binding change. |")
+                 f"**{cells} frames**, no binding change. |\n"
+                 "| `--verify-stage-value-pilot-only` | N17V-S stage value pilot. |")
     plan = f"> Trạng thái: pilot {len(families)} family / **{cells} khung**: " + ", ".join(ids) + "."
     return {"review": review, "witness": witness, "lifecycle": lifecycle, "suite": suite,
             "readme_vi": readme_vi, "readme_en": readme_en, "plan": plan, "workflow": workflow}
@@ -314,6 +324,31 @@ class ValuePilotContractTests(unittest.TestCase):
         review = fixture()["review"].replace("gateFailures", "notes")
         problems = errors_with(review=review)
         self.assertTrue(any("gateFailures" in p for p in problems), problems)
+
+    def test_a_missing_stage_pilot_flag_is_refused(self):
+        suite = fixture()["suite"].replace("--verify-stage-value-pilot-only", "--verify-something-else")
+        problems = errors_with(suite=suite)
+        self.assertTrue(any("isolated --verify-stage-value-pilot-only" in p for p in problems), problems)
+
+    def test_a_stage_pilot_missing_from_full_verify_is_refused(self):
+        suite = fixture()["suite"].replace("VerifyStageValuePilot(reviewOutput!);", "")
+        problems = errors_with(suite=suite)
+        self.assertTrue(any("full --verify chain" in p for p in problems), problems)
+
+    def test_a_stale_stage_cell_count_is_refused(self):
+        suite = fixture()["suite"].replace("Assert(cells == 24", "Assert(cells == 20")
+        problems = errors_with(suite=suite)
+        self.assertTrue(any("24 stage value pilot cells" in p for p in problems), problems)
+
+    def test_a_missing_stage_fail_fast_step_is_refused(self):
+        workflow = fixture()["workflow"].replace("Stage value pilot (N17V-S)", "Something else")
+        problems = errors_with(workflow=workflow)
+        self.assertTrue(any("stage value pilot fail-fast step" in p for p in problems), problems)
+
+    def test_a_missing_stage_notice_is_refused(self):
+        workflow = fixture()["workflow"].replace("-like 'PASS stage value pilot (N17V-S)*'", "-like 'PASS*'")
+        problems = errors_with(workflow=workflow)
+        self.assertTrue(any("stage pilot PASS line into a notice" in p for p in problems), problems)
 
     def test_an_empty_file_set_is_refused(self):
         problems = v.check({"review": ""})

@@ -207,6 +207,19 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
+        if (args.Contains("--verify-stage-value-pilot-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Stage value pilot review requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated N17V-S stage value pilot review; this does not run or certify the full regression suite.");
+                VerifyStageValuePilot(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
         if (args.Contains("--verify-ar-lifecycle-pilot-only"))
         {
             try
@@ -246,7 +259,7 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); VerifyArLifecycle(reviewOutput!); VerifyArValuePilot(reviewOutput!); /* stage 9 already inside VerifyArEffect; pilots isolated only */ } }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); VerifyArLifecycle(reviewOutput!); VerifyArValuePilot(reviewOutput!); VerifyStageValuePilot(reviewOutput!); /* stage 9 already inside VerifyArEffect; pilots isolated only */ } }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -7022,6 +7035,13 @@ internal static partial class VerificationSuite
         var cells = StageEffectSensitivityReview.Render(outputDirectory);
         Assert(cells == 9, "The stage sensitivity review must shoot the three particle families that share the capped question on the Live Stage renderer, at three rows each.");
         Results.Add($"PASS stage particle sensitivity review (N17S): {cells} setting frames on the Live Stage renderer at the same scene and timing as the AR page, but without its 384-quad cap — the three particle families the AR page reports as capped or its nearest neighbour, one family per column at the same switch and far values. Measured: {StageEffectSensitivityReview.Summary}. The columns exist to answer the question the AR cap silenced (does the setting reach the picture when the cap is not in the way), not to raise the cap; stage cap 24000, AR cap 384, manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "stage-effect")}.");
+    }
+
+    private static void VerifyStageValuePilot(string outputDirectory)
+    {
+        var cells = StageEffectSensitivityReview.RenderValuePilot(outputDirectory);
+        Assert(cells == 24, "The stage value pilot must shoot six columns over the three capped particle families at four rows each: off, low, mid, far.");
+        Results.Add($"PASS stage value pilot (N17V-S): {cells} setting frames on the Live Stage renderer at the same scene and timing as the AR page, but without its 384-quad cap — off→low→mid→far per (family, percentage) column: wisps WispAmount 15/75/150 and WispSpeed 100/300/600, flames FlameIntensity 20/60/100 and FlameHeight 25/60/100, sparks ParticleAmount 20/70/120 and ParticleSize 2/8/16. Each step moves pixels (≥12 px), including off↔mid; every weak column is reported together rather than failing the run at the first one. Measured: {StageEffectSensitivityReview.ValuePilotSummary}. This answers whether the slider reaches the picture when no cap is in the way; it is not a proposal to raise the AR cap, not art approval, not a hardware frame and not a binding change; manifest and HTML index in {Path.Combine(Path.GetFullPath(outputDirectory), "stage-value-pilot")}.");
     }
 
     private static void VerifyArValuePilot(string outputDirectory)

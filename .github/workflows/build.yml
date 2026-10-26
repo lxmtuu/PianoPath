@@ -432,6 +432,21 @@ jobs:
           } else { "::error title=N17V AR value pilot::No verification log was written" }
           exit $proc.ExitCode
 
+      - name: Stage value pilot (N17V-S)
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'keyflow-stage-value-pilot.log'
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          New-Item -ItemType Directory -Force -Path $review | Out-Null
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList '--verify','--verify-stage-value-pilot-only',"--verify-review-out=$review","--verify-log=$log" -PassThru -Wait
+          if (Test-Path $log) {
+            Get-Content $log | ForEach-Object {
+              Write-Output $_
+              if ($_ -like 'FAIL*') { "::error title=N17V-S stage value pilot::$_" } elseif ($_ -like 'PASS stage value pilot (N17V-S)*') { "::notice title=N17V-S stage value pilot::$_" }
+            }
+          } else { "::error title=N17V-S stage value pilot::No verification log was written" }
+          exit $proc.ExitCode
+
       # Fail fast on functional/native/WPF regressions before expensive art-review recaptures.
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as

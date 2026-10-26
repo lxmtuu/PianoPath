@@ -630,4 +630,186 @@ internal static class StageEffectSensitivityReview
         body.Append("</html>");
         File.WriteAllText(Path.Combine(root, "stage-effect", "index.html"), body.ToString());
     }
+
+    // -----------------------------------------------------------------------------------------
+    // N17V-S: the Live Stage half of the value matrix. The AR page above measures the overlay
+    // through its 384-quad cap; these three particle families are the ones whose far rows N17
+    // reports as capped, so the same 3-point question ("does each slider step actually reach
+    // the picture?") needs an answer on the renderer with no cap in the way. Everything here is
+    // borrowed from the sensitivity review above: the stage feed, Apply(), Probe() and the
+    // shot/hash verifier. Only the column shape changes: off -> low -> mid -> far.
+    // -----------------------------------------------------------------------------------------
+    private const int ValuePilotColumns = 4;
+    private sealed record ValueColumn(string Id, Stage Stage, string Switch, string Setting, double[] Values);
+    private static readonly ValueColumn[] ValuePilot =
+    [
+        new("particles.wisps", Stage.Held, "ShowWisps", "WispAmount", [15, 75, 150]),
+        new("particles.wisps", Stage.Held, "ShowWisps", "WispSpeed", [100, 300, 600]),
+        new("particles.flames", Stage.Held, "ShowFlame", "FlameIntensity", [20, 60, 100]),
+        new("particles.flames", Stage.Held, "ShowFlame", "FlameHeight", [25, 60, 100]),
+        new("particles.sparks", Stage.Impact, "ShowEmbers", "ParticleAmount", [20, 70, 120]),
+        new("particles.sparks", Stage.Impact, "ShowEmbers", "ParticleSize", [2, 8, 16]),
+    ];
+    internal static string ValuePilotSummary { get; private set; } = "";
+
+    internal static int RenderValuePilot(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output)) throw new ArgumentException("The stage value pilot output directory is empty.", nameof(output));
+        var previousLayout = KeyboardLayout.Active;
+        KeyboardLayout.Use(KeyboardLayout.Standard88);
+        try
+        {
+            var root = Path.GetFullPath(output);
+            Directory.CreateDirectory(root);
+            using var renderer = GpuStageRenderer.Create(forceWarp: true);
+            if (!renderer.IsWarp)
+                throw new InvalidOperationException($"The stage value pilot requires WARP, but Direct3D created '{renderer.AdapterName}'.");
+
+            var failures = new List<string>();
+            void Gate(ValueColumn column, string name, int changed)
+            {
+                if (changed < MinimumChangedPixels)
+                    failures.Add($"{column.Id}/{column.Setting} {name} {changed} < {MinimumChangedPixels}");
+            }
+            var reports = new List<SheetReport>(2);
+            var shots = new List<Shot>(ValuePilot.Length * ValuePilotColumns);
+            foreach (var group in ValuePilot.GroupBy(column => column.Stage))
+            {
+                var page = group.ToArray();
+                var captions = page.SelectMany(column => new[]
+                {
+                    $"{column.Id} off", $"{column.Id} {column.Setting} {column.Values[0]:0.##}",
+                    $"{column.Id} {column.Setting} {column.Values[1]:0.##}", $"{column.Id} {column.Setting} {column.Values[2]:0.##}",
+                }).ToArray();
+                var sheet = new ReviewSheet.Canvas(page.Length * ValuePilotColumns, TileWidth, TileHeight, ValuePilotColumns,
+                    $"N17V-S STAGE VALUE {group.Key.ToString().ToUpperInvariant()}", ReviewSheet.CaptionScaleFor(captions, TileWidth));
+                var cells = new List<Cell>(page.Length * ValuePilotColumns);
+                for (var col = 0; col < page.Length; col++)
+                {
+                    var column = page[col];
+                    var frames = new Shot[ValuePilotColumns];
+                    frames[0] = CaptureValue(root, renderer, ValueSettings(column, null, true), column, "off");
+                    for (var index = 0; index < 3; index++)
+                        frames[index + 1] = CaptureValue(root, renderer, ValueSettings(column, index, false), column,
+                            index == 0 ? "low" : index == 1 ? "mid" : "far");
+                    foreach (var frame in frames) shots.Add(frame);
+                    var labels = new[] { "off", "low", "mid", "far" };
+                    for (var row = 0; row < ValuePilotColumns; row++)
+                        sheet.Blit(col * ValuePilotColumns + row, captions[col * ValuePilotColumns + row],
+                            frames[row].Pixels!, Width, Height, premultiplied: false);
+
+                    if (frames[1].Lit < MinimumOverlayPixels)
+                        failures.Add($"{column.Id}/{column.Setting} low lit {frames[1].Lit} < {MinimumOverlayPixels}");
+                    if (frames[1].Quads <= 0) failures.Add($"{column.Id}/{column.Setting} low drew no stage sprites");
+                    var offVsLow = OptionMatrixPlan.ChangedPixels(frames[0].Pixels!, frames[1].Pixels!);
+                    var lowVsMid = OptionMatrixPlan.ChangedPixels(frames[1].Pixels!, frames[2].Pixels!);
+                    var offVsMid = OptionMatrixPlan.ChangedPixels(frames[0].Pixels!, frames[2].Pixels!);
+                    var midVsFar = OptionMatrixPlan.ChangedPixels(frames[2].Pixels!, frames[3].Pixels!);
+                    var offVsFar = OptionMatrixPlan.ChangedPixels(frames[0].Pixels!, frames[3].Pixels!);
+                    Gate(column, "off↔low", offVsLow);
+                    Gate(column, "low↔mid", lowVsMid);
+                    Gate(column, "off↔mid", offVsMid);
+                    Gate(column, "mid↔far", midVsFar);
+                    Gate(column, "off↔far", offVsFar);
+
+                    cells.Add(new Cell(column.Id, column.Stage, column.Switch, "off", 0, "", frames[0].File, frames[0].PixelSha256,
+                        0, frames[0].Lit, frames[0].Quads, frames[0].Demand, "Reference", "Family off"));
+                    var deltas = new[] { 0, offVsLow, offVsMid, offVsFar };
+                    for (var row = 1; row < ValuePilotColumns; row++)
+                        cells.Add(new Cell(column.Id, column.Stage, column.Setting, labels[row], column.Values[row - 1], "",
+                            frames[row].File, frames[row].PixelSha256, deltas[row], frames[row].Lit, frames[row].Quads,
+                            frames[row].Demand, Read(deltas[row]), $"{labels[row]} {column.Values[row - 1]:0.##} vs off"));
+                    foreach (var frame in frames) frame.Pixels = null;
+                }
+                var finished = sheet.Finish();
+                var layout = sheet.Sheet;
+                var sheetPath = $"stage-value-pilot/sheet-{group.Key.ToString().ToLowerInvariant()}.png";
+                var sha = ReviewPng.Write(Path.Combine(root, sheetPath), finished, layout.Width, layout.Height,
+                    $"N17V-S STAGE VALUE {group.Key}: {page.Length * ValuePilotColumns} captures", PixelFormats.Pbgra32);
+                reports.Add(new SheetReport(sheetPath, sha, layout.Columns, layout.Rows, cells));
+            }
+            VerifyShots(root, shots);
+            ValuePilotSummary = string.Join("; ", ValuePilot.Select(column =>
+            {
+                var cs = reports.SelectMany(r => r.Cells)
+                    .Where(c => c.Family == column.Id && c.Parameter == column.Setting).ToArray();
+                return $"{column.Id} {column.Setting} {string.Join("/", column.Values.Select(v => v.ToString("0.##")))} "
+                    + $"low {cs.First(c => c.Row == "low").StageChanged}→mid {cs.First(c => c.Row == "mid").StageChanged}"
+                    + $"→far {cs.First(c => c.Row == "far").StageChanged} px vs off";
+            }));
+            var total = reports.Sum(r => r.Cells.Count);
+            WriteValuePilotManifest(root, renderer.AdapterName, reports, total, failures.ToArray());
+            WriteValuePilotHtml(root, renderer.AdapterName, reports, failures.ToArray());
+            if (failures.Count > 0)
+                throw new InvalidDataException($"{failures.Count} stage value gate(s) failed: " + string.Join(" | ", failures));
+            return total;
+        }
+        finally { KeyboardLayout.Use(previousLayout); }
+    }
+
+    private static PianoVisualSettings ValueSettings(ValueColumn column, int? index, bool isOff)
+    {
+        var settings = OptionMatrixReview.BaseSettings();
+        Apply(settings, new DrivenSetting(column.Switch, EffectParameterKind.Boolean, isOff ? 0 : 1, ""));
+        if (index.HasValue)
+            Apply(settings, new DrivenSetting(column.Setting, EffectParameterKind.Percentage, column.Values[index.Value], ""));
+        settings.Clamp();
+        return settings;
+    }
+
+    private static Shot CaptureValue(string root, GpuStageRenderer renderer, PianoVisualSettings settings, ValueColumn column, string label)
+    {
+        var (pixels, demand) = RenderStage(renderer, settings, column.Stage);
+        var quads = Probe(renderer, column.Id);
+        var relative = Path.Combine("stage-value-pilot", OptionMatrixPlan.Slug($"{column.Id}-{column.Setting}"), $"{label}.png");
+        var sha = ReviewPng.Write(Path.Combine(root, relative), pixels, Width, Height, $"{column.Id}/{column.Setting}/{label} on stage");
+        return new Shot
+        {
+            File = relative.Replace('\\', '/'), PixelSha256 = sha, Lit = OptionMatrixPlan.NonBlackPixels(pixels),
+            Quads = quads, Demand = demand, Pixels = pixels
+        };
+    }
+
+    private static void WriteValuePilotManifest(string root, string adapter, IReadOnlyList<SheetReport> sheets, int total, string[] failures)
+    {
+        File.WriteAllText(Path.Combine(root, "stage-value-pilot", "manifest.json"), JsonSerializer.Serialize(new
+        {
+            schema = 1, status = "stage-value-pilot-3-points-not-claimed",
+            claim = "each driven percentage at 3 values vs off on the Live Stage renderer, without the AR 384-quad cap",
+            notClaimed = "art approval, every value, real camera, hardware frames, raising the AR cap, binding or default change",
+            renderer = "GPU-WARP", adapter, width = Width, height = Height, seed = OptionMatrixPlan.Seed,
+            stageCap = 24000, arCap = 384, gateFailures = failures,
+            columns = ValuePilot.Select(c => new { c.Id, scene = c.Stage.ToString(), c.Switch, c.Setting, c.Values }),
+            cells = total,
+            sheets = sheets.Select(r => new { r.File, r.Sha, r.Columns, r.Rows, cells = r.Cells.Select(c => new
+            {
+                c.Family, scene = c.Stage.ToString(), c.Parameter, c.Row, c.Value, c.File, c.PixelSha256,
+                c.StageChanged, c.StageLit, c.Quads, c.Demand, Capped = c.Demand > c.Quads, c.Reading
+            }) })
+        }, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static void WriteValuePilotHtml(string root, string adapter, IReadOnlyList<SheetReport> sheets, string[] failures)
+    {
+        static string E(string v) => System.Net.WebUtility.HtmlEncode(v);
+        var b = new StringBuilder();
+        b.Append("<!doctype html><meta charset=utf-8><title>Stage Value Pilot</title><style>body{font:14px system-ui;background:#10141b;color:#e1e9f3;max-width:1400px;margin:24px;padding:16px}table{border-collapse:collapse}th,td{border:1px solid #263243;padding:4px 8px}</style>"
+            + $"<h1>N17V-S stage value pilot — 3 điểm / setting</h1><p>Live Stage renderer, không có trần 384-quad của AR. Máy: {E(adapter)}</p>");
+        foreach (var r in sheets)
+        {
+            b.Append($"<h2>{E(r.File)}</h2><table><tr><th>Family</th><th>Setting</th><th>Row</th><th>Value</th><th>px vs off</th><th>Quads</th><th>Demand/Quads</th></tr>");
+            foreach (var c in r.Cells)
+                b.Append($"<tr><td>{E(c.Family)}</td><td>{E(c.Parameter)}</td><td>{E(c.Row)}</td><td>{c.Value:0.##}</td>"
+                    + $"<td>{c.StageChanged:N0}</td><td>{c.Quads:N0}</td><td>{c.Demand:N0}/{c.Quads:N0}</td></tr>");
+            b.Append("</table>").Append($"<img src={E(Path.GetFileName(r.File))} style=max-width:100%><br>");
+        }
+        if (failures.Length > 0)
+        {
+            b.Append("<h2>Gate failures (this run did not pass)</h2><ul>");
+            foreach (var f in failures) b.Append($"<li>{E(f)}</li>");
+            b.Append("</ul>");
+        }
+        File.WriteAllText(Path.Combine(root, "stage-value-pilot", "index.html"), b.ToString());
+    }
+
 }

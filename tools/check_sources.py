@@ -3287,7 +3287,7 @@ def main():
           "keeps the off-vs-mid gate, keeps the choice switches, release scene and wave pin, "
           "declares pinned/unshot coverage from the contract catalogue, "
           "pins its cell count, agrees with both READMEs and the plan, "
-          "and still has its own fail-fast CI step")
+          "and still has its own fail-fast CI step, plus the Live Stage value pilot")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:

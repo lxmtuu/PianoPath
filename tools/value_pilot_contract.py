@@ -9,7 +9,8 @@ delegate to it. This check is the guard that stops a local copy, a hard-coded co
 count, a workflow that drops the pilot's own fail-fast step, a lost ``off↔mid`` gate (which
 would let a neutral slider value be captioned as a third picture), a choice switch with the wrong
 off value, a release scene that no longer lifts the key, a repeated (family, setting) column, or
-a coverage block that stops naming the settings each column did not shoot, from coming back.
+a coverage block that stops naming the settings each column did not shoot, or a missing
+Live Stage value pilot, from coming back.
 
 Pure text in, list of problems out: no .NET, no Windows, no GPU. ``check_sources.py`` calls it on
 the real repository; ``tools/tests/test_value_pilot_contract.py`` calls it on synthetic files.
@@ -252,6 +253,26 @@ def check(files: dict) -> list:
     if "-like 'PASS AR value pilot (N17V)*'" not in workflow:
         errors.append(".github/workflows/build.yml no longer turns the N17V PASS line into a notice "
                       "annotation; the measured per-family deltas would only exist in an artifact")
+
+    # Round D: the Live Stage half of the value matrix. It needs its own isolated flag, its own
+    # fail-fast CI step, and a 24-cell assertion, otherwise the uncapped half of the answer can
+    # quietly disappear while the AR page still passes.
+    if "--verify-stage-value-pilot-only" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs lost the isolated --verify-stage-value-pilot-only "
+                      "flag; the stage half of the value matrix could not be run on its own")
+    if "VerifyStageValuePilot(reviewOutput!)" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs no longer runs VerifyStageValuePilot in the full "
+                      "--verify chain; the stage value matrix would only exist in the isolated flag")
+    if "Assert(cells == 24" not in suite:
+        errors.append("Diagnostics/VerificationSuite.cs no longer pins the 24 stage value pilot cells "
+                      "(6 columns x 4 rows)")
+    if "--verify-stage-value-pilot-only" not in workflow or "- name: Stage value pilot (N17V-S)" not in workflow:
+        errors.append(".github/workflows/build.yml lost the stage value pilot fail-fast step")
+    if "-like 'PASS stage value pilot (N17V-S)*'" not in workflow:
+        errors.append(".github/workflows/build.yml no longer turns the stage pilot PASS line into a notice")
+    for name in ("readme_vi", "readme_en"):
+        if "--verify-stage-value-pilot-only" not in files[name]:
+            errors.append(f"{name} does not document --verify-stage-value-pilot-only")
     return errors
 
 
