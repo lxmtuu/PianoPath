@@ -44,7 +44,7 @@ internal static class ArValuePilotReview
         string SwitchOnValue = "", string[]? Pins = null)
     {
         internal string[] Labels => ValueKind == EffectParameterKind.Choice
-            ? Choices : Numbers.Select(n => n.ToString("0")).ToArray();
+            ? Choices : Numbers.Select(n => n.ToString("0.##")).ToArray();
         internal double NumberAt(int index) => ValueKind == EffectParameterKind.Choice ? 0 : Numbers[index];
         internal string ChoiceAt(int index) => ValueKind == EffectParameterKind.Choice ? Choices[index] : "";
     }
@@ -111,6 +111,36 @@ internal static class ArValuePilotReview
             "ImpactMorph", EffectParameterKind.Choice, [], ["Shatter", "Melt", "Bounce"], "", "Shatter"),
         new("release.fx", Stage.Release, "ReleaseEffect", EffectParameterKind.Choice, "Fade",
             "ReleaseEffect", EffectParameterKind.Choice, [], ["Float Up", "Dissolve", "Smoke"], "", "Float Up"),
+        // Round D: every remaining declared percentage gets its own column. Three of the twelve
+        // reuse the exact axes OptionNumericPlan already proved move pixels on both renderers
+        // (trail intensity 0/50/100, wave intensity 0/75/150); the rest stay inside the contract's
+        // own min/max. The gate collector above reports every column that cannot clear >=12 px in
+        // one run, so a weak setting is dropped with its measured delta rather than guessed at.
+        new("particles.wisps", Stage.Held, "ShowWisps", EffectParameterKind.Boolean, "off",
+            "WispSpeed", EffectParameterKind.Percentage, [100, 300, 600], [], ""),
+        new("particles.wisps", Stage.Held, "ShowWisps", EffectParameterKind.Boolean, "off",
+            "WispTurbulence", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+        new("particles.wisps", Stage.Held, "ShowWisps", EffectParameterKind.Boolean, "off",
+            "WispGlow", EffectParameterKind.Percentage, [50, 125, 200], [], ""),
+        new("particles.flames", Stage.Held, "ShowFlame", EffectParameterKind.Boolean, "off",
+            "FlameHeight", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+        new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
+            "ParticleSpeed", EffectParameterKind.Percentage, [75, 175, 300], [], ""),
+        new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
+            "ParticleSize", EffectParameterKind.Percentage, [2, 8, 16], [], ""),
+        new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
+            "ParticleGlow", EffectParameterKind.Percentage, [50, 125, 200], [], ""),
+        new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
+            "ParticleLife", EffectParameterKind.Percentage, [0.5, 1.5, 3], [], ""),
+        new("falling.trail", Stage.Approach, "FallingTrail", EffectParameterKind.Choice, "None",
+            "FallingTrailIntensity", EffectParameterKind.Percentage, [0, 50, 100], [], "", "Glow"),
+        new("impact.wave", Stage.Impact, "ImpactWave", EffectParameterKind.Choice, "None",
+            "ImpactWaveIntensity", EffectParameterKind.Percentage, [0, 75, 150], [], "", "Ring",
+            ["ShowImpactRings"]),
+        new("impact.morph", Stage.Impact, "ImpactMorph", EffectParameterKind.Choice, "None",
+            "ImpactMorphIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], "", "Shatter"),
+        new("release.fx", Stage.Release, "ReleaseEffect", EffectParameterKind.Choice, "Fade",
+            "ReleaseIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], "", "Float Up"),
     ];
 
     private sealed class Shot
@@ -153,6 +183,16 @@ internal static class ArValuePilotReview
             using var renderer = GpuStageRenderer.Create(forceWarp: true);
             if (!renderer.IsWarp) throw new InvalidOperationException($"WARP required but got {renderer.AdapterName}");
 
+            // Collect every column that misses a gate instead of throwing on the first one. A
+            // widening attempt used to cost one CI run per failing family; one run now reports all
+            // of them with their measured deltas, so the next commit can keep exactly the columns
+            // that have evidence. The run still fails if any column is weak: no gate is lowered.
+            var failures = new List<string>();
+            void Gate(PilotFamily fam, string name, int changed)
+            {
+                if (changed < MinimumChangedPixels)
+                    failures.Add($"{fam.Id}/{fam.ValueName} {name} {changed} < {MinimumChangedPixels}");
+            }
             var reports = new List<SheetReport>(2);
             var shots = new List<Shot>(Driven.Length * Columns);
             foreach (var group in Driven.GroupBy(f => f.Stage))
@@ -169,32 +209,33 @@ internal static class ArValuePilotReview
                     shots.Add(off);
                     sheet.Blit(col * Columns, captions[col * Columns], off.Pixels!, Width, Height, premultiplied: false);
                     var low = CaptureAr(root, renderer, pose, camera, Settings(fam, 0, isOff: false), fam, "low");
-                    if (OptionMatrixPlan.ChangedPixels(low.Pixels!, camera) < MinimumOverlayPixels) throw new InvalidDataException($"{fam.Id} low frame painted {OptionMatrixPlan.ChangedPixels(low.Pixels!, camera)} < {MinimumOverlayPixels}");
-                    if (low.Quads <= 0) throw new InvalidDataException($"{fam.Id} low drew no quads");
+                    var lowPainted = OptionMatrixPlan.ChangedPixels(low.Pixels!, camera);
+                    if (lowPainted < MinimumOverlayPixels) failures.Add($"{fam.Id}/{fam.ValueName} low painted {lowPainted} < {MinimumOverlayPixels}");
+                    if (low.Quads <= 0) failures.Add($"{fam.Id}/{fam.ValueName} low drew no quads");
                     shots.Add(low);
                     sheet.Blit(col * Columns + 1, captions[col * Columns + 1], low.Pixels!, Width, Height, premultiplied: false);
                     var offVsLow = OptionMatrixPlan.ChangedPixels(off.Pixels!, low.Pixels!);
-                    if (offVsLow < MinimumChangedPixels) throw new InvalidDataException($"{fam.Id} off↔low {offVsLow} < {MinimumChangedPixels}");
+                    Gate(fam, "off↔low", offVsLow);
 
                     var mid = CaptureAr(root, renderer, pose, camera, Settings(fam, 1, isOff: false), fam, "mid");
                     shots.Add(mid);
                     sheet.Blit(col * Columns + 2, captions[col * Columns + 2], mid.Pixels!, Width, Height, premultiplied: false);
                     var lowVsMid = OptionMatrixPlan.ChangedPixels(low.Pixels!, mid.Pixels!);
-                    if (lowVsMid < MinimumChangedPixels) throw new InvalidDataException($"{fam.Id} low↔mid {lowVsMid} < {MinimumChangedPixels}");
+                    Gate(fam, "low↔mid", lowVsMid);
                     // A setting can land on its own neutral phase (hold.breath and falling.pulse both do at
                     // 60 in these scenes). Without this gate the mid frame is byte-identical to off yet is
                     // captioned as a third value, which is exactly the "two values, one picture" the plan
                     // forbids. Refuse the column instead of claiming coverage it does not have.
                     var offVsMid = OptionMatrixPlan.ChangedPixels(off.Pixels!, mid.Pixels!);
-                    if (offVsMid < MinimumChangedPixels) throw new InvalidDataException($"{fam.Id} off↔mid {offVsMid} < {MinimumChangedPixels}");
+                    Gate(fam, "off↔mid", offVsMid);
 
                     var far = CaptureAr(root, renderer, pose, camera, Settings(fam, 2, isOff: false), fam, "far");
                     shots.Add(far);
                     sheet.Blit(col * Columns + 3, captions[col * Columns + 3], far.Pixels!, Width, Height, premultiplied: false);
                     var midVsFar = OptionMatrixPlan.ChangedPixels(mid.Pixels!, far.Pixels!);
-                    if (midVsFar < MinimumChangedPixels) throw new InvalidDataException($"{fam.Id} mid↔far {midVsFar} < {MinimumChangedPixels}");
+                    Gate(fam, "mid↔far", midVsFar);
                     var offVsFar = OptionMatrixPlan.ChangedPixels(off.Pixels!, far.Pixels!);
-                    if (offVsFar < MinimumChangedPixels) throw new InvalidDataException($"{fam.Id} off↔far {offVsFar} < {MinimumChangedPixels}");
+                    Gate(fam, "off↔far", offVsFar);
 
                     cells.Add(new Cell(fam.Id, fam.Stage, fam.SwitchName, "off", 0, fam.SwitchKind == EffectParameterKind.Choice ? fam.SwitchOffValue : "", off.File, off.PixelSha256, 0, off.Lit, OptionMatrixPlan.ChangedPixels(off.Pixels!, camera), off.Quads, off.Demand, "Reference", "Family off"));
                     cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "low", fam.NumberAt(0), fam.ChoiceAt(0), low.File, low.PixelSha256, offVsLow, low.Lit, OptionMatrixPlan.ChangedPixels(low.Pixels!, camera), low.Quads, low.Demand, Read(offVsLow), $"Low {fam.Labels[0]} vs off"));
@@ -221,12 +262,14 @@ internal static class ArValuePilotReview
                 var mid = cs.First(c => c.Row == "mid");
                 var far = cs.First(c => c.Row == "far");
                 var values = f.ValueKind == EffectParameterKind.Choice
-                    ? string.Join("/", f.Choices) : string.Join("/", f.Numbers.Select(n => n.ToString("0")));
+                    ? string.Join("/", f.Choices) : string.Join("/", f.Numbers.Select(n => n.ToString("0.##")));
                 return $"{f.Id} {f.ValueName} {values} low {low.ArChanged}→mid {mid.ArChanged}→far {far.ArChanged} px vs off";
             }));
             var total = reports.Sum(r => r.Cells.Count);
-            WriteManifest(root, renderer.AdapterName, reports, total);
-            WriteHtmlIndex(root, renderer.AdapterName, reports);
+            WriteManifest(root, renderer.AdapterName, reports, total, failures.ToArray());
+            WriteHtmlIndex(root, renderer.AdapterName, reports, failures.ToArray());
+            if (failures.Count > 0)
+                throw new InvalidDataException($"{failures.Count} N17V gate(s) failed: " + string.Join(" | ", failures));
             return total;
         }
         finally { KeyboardLayout.Use(previousLayout); }
@@ -290,6 +333,18 @@ internal static class ArValuePilotReview
             case "ImpactMorph": settings.ImpactMorph = setting.Choice; break;
             case "ReleaseEffect": settings.ReleaseEffect = setting.Choice; break;
             case "ImpactFlashStyle": settings.ImpactFlashStyle = setting.Choice; break;
+            case "WispSpeed": settings.WispSpeed = setting.Number; break;
+            case "WispTurbulence": settings.WispTurbulence = setting.Number; break;
+            case "WispGlow": settings.WispGlow = setting.Number; break;
+            case "FlameHeight": settings.FlameHeight = setting.Number; break;
+            case "ParticleSpeed": settings.ParticleSpeed = setting.Number; break;
+            case "ParticleSize": settings.ParticleSize = setting.Number; break;
+            case "ParticleGlow": settings.ParticleGlow = setting.Number; break;
+            case "ParticleLife": settings.ParticleLife = setting.Number; break;
+            case "FallingTrailIntensity": settings.FallingTrailIntensity = setting.Number; break;
+            case "ImpactWaveIntensity": settings.ImpactWaveIntensity = setting.Number; break;
+            case "ImpactMorphIntensity": settings.ImpactMorphIntensity = setting.Number; break;
+            case "ReleaseIntensity": settings.ReleaseIntensity = setting.Number; break;
             default: throw new InvalidDataException($"pilot cannot drive {setting.Name}");
         }
     }
@@ -416,7 +471,7 @@ internal static class ArValuePilotReview
         }).ToArray();
     }
 
-    private static void WriteManifest(string root, string adapter, IReadOnlyList<SheetReport> sheets, int total)
+    private static void WriteManifest(string root, string adapter, IReadOnlyList<SheetReport> sheets, int total, string[] failures)
     {
         File.WriteAllText(Path.Combine(root, "ar-value-pilot", "manifest.json"), JsonSerializer.Serialize(new
         {
@@ -424,10 +479,11 @@ internal static class ArValuePilotReview
             notClaimed = "art approval, every value, real camera, binding change, every setting of every family",
             renderer = "GPU-WARP", adapter, width = Width, height = Height, seed = OptionMatrixPlan.Seed, pose = "ar-oblique",
             coverage = Coverage().Select(c => new { c.Family, c.Column, c.Declared, c.Driven, c.Pinned, c.Unshot, c.PinnedTo }).ToArray(),
+            gateFailures = failures,
             sheets = sheets.Select(r => new { r.File, r.Sha, r.Columns, r.Rows, cells = r.Cells.Select(c => new { c.Family, scene = c.Stage.ToString(), c.Parameter, c.Row, c.Value, c.Choice, c.File, c.PixelSha256, c.ArChanged, c.ArLit, c.ArPainted, c.Quads, c.Demand, Capped = c.Demand > c.Quads, c.Reading }) })
         }, new JsonSerializerOptions { WriteIndented = true }));
     }
-    private static void WriteHtmlIndex(string root, string adapter, IReadOnlyList<SheetReport> sheets)
+    private static void WriteHtmlIndex(string root, string adapter, IReadOnlyList<SheetReport> sheets, string[] failures)
     {
         static string E(string v) => System.Net.WebUtility.HtmlEncode(v);
         var b = new StringBuilder();
@@ -442,6 +498,12 @@ internal static class ArValuePilotReview
                 + $"<td>{E(string.Join(", ", c.Driven))}</td><td>{E(string.Join(", ", c.Pinned))}</td>"
                 + $"<td>{E(string.Join(", ", c.Unshot))}</td></tr>");
         b.Append("</table>");
+        if (failures.Length > 0)
+        {
+            b.Append("<h2>Gate failures (this run did not pass)</h2><ul>");
+            foreach (var f in failures) b.Append($"<li>{E(f)}</li>");
+            b.Append("</ul>");
+        }
         File.WriteAllText(Path.Combine(root, "ar-value-pilot", "index.html"), b.ToString());
     }
 }

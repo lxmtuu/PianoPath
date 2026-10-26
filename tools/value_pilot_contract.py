@@ -183,6 +183,15 @@ def check(files: dict) -> list:
     # Round C: a column that shoots one of a family's declared settings must say what it did NOT
     # shoot. Reading the contract catalogue (rather than a copied list) is the only way a new
     # setting cannot silently disappear from the coverage statement.
+    # Round D: collect every weak column in one run instead of throwing at the first one, and
+    # write the list into the manifest so a red run still says exactly which settings to drop.
+    if "void Gate(" not in review or "failures.Add(" not in review:
+        errors.append("Diagnostics/ArValuePilotReview.cs lost the gate collector; one CI run would "
+                      "report only the first weak column again")
+    if "gateFailures" not in review:
+        errors.append("Diagnostics/ArValuePilotReview.cs no longer writes gateFailures into the "
+                      "manifest; a red run would not say which columns to drop")
+
     for token, message in (
         ("EffectContractCatalog.AllFamilies", "no longer reads the effect contract catalogue; "
          "unshot settings would be a hand-written list that drifts from the product"),
