@@ -111,7 +111,11 @@ internal static class ArValuePilotReview
             "ImpactMorph", EffectParameterKind.Choice, [], ["Shatter", "Melt", "Bounce"], "", "Shatter"),
         new("release.fx", Stage.Release, "ReleaseEffect", EffectParameterKind.Choice, "Fade",
             "ReleaseEffect", EffectParameterKind.Choice, [], ["Float Up", "Dissolve", "Smoke"], "", "Float Up"),
-        // Round D: every remaining declared percentage gets its own column. Three of the twelve
+        // Round D: every remaining declared percentage gets its own column. The probe run showed
+        // that 0 is not a third picture for FallingTrailIntensity or ImpactWaveIntensity: at zero
+        // the family emits no quads and the low frame is byte-identical to off. Their low point
+        // therefore starts above zero; "minimum == off" is recorded in the plan, not hidden.
+        // Three of the twelve
         // reuse the exact axes OptionNumericPlan already proved move pixels on both renderers
         // (trail intensity 0/50/100, wave intensity 0/75/150); the rest stay inside the contract's
         // own min/max. The gate collector above reports every column that cannot clear >=12 px in
@@ -133,12 +137,12 @@ internal static class ArValuePilotReview
         new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
             "ParticleLife", EffectParameterKind.Percentage, [0.5, 1.5, 3], [], ""),
         new("falling.trail", Stage.Approach, "FallingTrail", EffectParameterKind.Choice, "None",
-            "FallingTrailIntensity", EffectParameterKind.Percentage, [0, 50, 100], [], "", "Glow"),
+            "FallingTrailIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], "", "Glow"),
         new("impact.wave", Stage.Impact, "ImpactWave", EffectParameterKind.Choice, "None",
-            "ImpactWaveIntensity", EffectParameterKind.Percentage, [0, 75, 150], [], "", "Ring",
+            "ImpactWaveIntensity", EffectParameterKind.Percentage, [30, 90, 150], [], "", "Ring",
             ["ShowImpactRings"]),
         new("impact.morph", Stage.Impact, "ImpactMorph", EffectParameterKind.Choice, "None",
-            "ImpactMorphIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], "", "Shatter"),
+            "ImpactMorphIntensity", EffectParameterKind.Percentage, [15, 65, 100], [], "", "Shatter"),
         new("release.fx", Stage.Release, "ReleaseEffect", EffectParameterKind.Choice, "Fade",
             "ReleaseIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], "", "Float Up"),
     ];

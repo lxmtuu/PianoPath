@@ -46,9 +46,9 @@ FAMILIES = [
     ("particles.sparks", "Impact", "ShowEmbers", "Boolean", "off", "", "ParticleSize", "Percentage", "[2, 8, 16]", "ArParticleFxCount", []),
     ("particles.sparks", "Impact", "ShowEmbers", "Boolean", "off", "", "ParticleGlow", "Percentage", "[50, 125, 200]", "ArParticleFxCount", []),
     ("particles.sparks", "Impact", "ShowEmbers", "Boolean", "off", "", "ParticleLife", "Percentage", "[0.5, 1.5, 3]", "ArParticleFxCount", []),
-    ("falling.trail", "Approach", "FallingTrail", "Choice", "None", "Glow", "FallingTrailIntensity", "Percentage", "[0, 50, 100]", "ArNoteTrailQuadCount", []),
-    ("impact.wave", "Impact", "ImpactWave", "Choice", "None", "Ring", "ImpactWaveIntensity", "Percentage", "[0, 75, 150]", "ArPulseCount", ["ShowImpactRings"]),
-    ("impact.morph", "Impact", "ImpactMorph", "Choice", "None", "Shatter", "ImpactMorphIntensity", "Percentage", "[25, 60, 100]", "ArParticleFxCount", []),
+    ("falling.trail", "Approach", "FallingTrail", "Choice", "None", "Glow", "FallingTrailIntensity", "Percentage", "[25, 60, 100]", "ArNoteTrailQuadCount", []),
+    ("impact.wave", "Impact", "ImpactWave", "Choice", "None", "Ring", "ImpactWaveIntensity", "Percentage", "[30, 90, 150]", "ArPulseCount", ["ShowImpactRings"]),
+    ("impact.morph", "Impact", "ImpactMorph", "Choice", "None", "Shatter", "ImpactMorphIntensity", "Percentage", "[15, 65, 100]", "ArParticleFxCount", []),
     ("release.fx", "Release", "ReleaseEffect", "Choice", "Fade", "Float Up", "ReleaseIntensity", "Percentage", "[25, 60, 100]", "ArReleaseEffectCount", []),
 ]
 
