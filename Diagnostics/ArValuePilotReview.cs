@@ -12,9 +12,10 @@ namespace PianoPath;
 ///
 /// N17 shows each family at *one* far value (off vs far). To flip Unverified→Applied we need
 /// low/mid/high per percentage/choice setting, to see clamp/rounding that collapses two slider
-/// positions onto one picture. This pilot does that for 12 families (five hold families, the three
-/// particle families, beams, shimmer, pulse and flash), 4 captures per family: off, low, mid, far
-/// (48 frames). Stage N17S is mirrored separately; this pilot is AR-only (≈48 frames vs 51 for N17).
+/// positions onto one picture. This pilot does that for all 17 AR families, 4 captures each: off,
+/// low, mid, far (68 frames). Twelve families drive a percentage; five drive the choice that is
+/// their own switch (falling.trail, impact.wave, impact.morph, release.fx) or their own style
+/// (impact.burst). Stage N17S is mirrored separately; this pilot is AR-only.
 /// </summary>
 internal static class ArValuePilotReview
 {
@@ -26,16 +27,32 @@ internal static class ArValuePilotReview
     private static readonly int[] HeldKeys = [48, 72];
     private const int BurstPitch = 60;
     private const int ApproachPitch = 60;
+    private const int ReleasePitch = 60;
+    private const int ReleaseLiftFrame = 12;
     private static readonly IReadOnlySet<int> NoPressed = new HashSet<int>();
-    private enum Stage { Held, Impact, Approach }
+    private enum Stage { Held, Impact, Approach, Release }
+    /// <summary>
+    /// One family / one column. A switch is either a boolean or a choice with a value the renderer treats
+    /// as off (ImpactWave None, ImpactMorph None, ReleaseEffect Fade, FallingTrail None); the three shot
+    /// values are either percentages or three declared choices. Pins are booleans the scene has to hold
+    /// on for the family to draw at all (ShowImpactRings gates the wave pass).
+    /// </summary>
     private sealed record PilotFamily(string Id, Stage Stage, string SwitchName, EffectParameterKind SwitchKind, string SwitchOffValue,
-        string ValueName, EffectParameterKind ValueKind, double[] Numbers, string[] Choices, string Unit);
+        string ValueName, EffectParameterKind ValueKind, double[] Numbers, string[] Choices, string Unit,
+        string SwitchOnValue = "", string[]? Pins = null)
+    {
+        internal string[] Labels => ValueKind == EffectParameterKind.Choice
+            ? Choices : Numbers.Select(n => n.ToString("0")).ToArray();
+        internal double NumberAt(int index) => ValueKind == EffectParameterKind.Choice ? 0 : Numbers[index];
+        internal string ChoiceAt(int index) => ValueKind == EffectParameterKind.Choice ? Choices[index] : "";
+    }
 
-    // Twelve families. Every row is one boolean switch plus one percentage, shot off/low/mid/far in the
-    // scene its lifecycle needs (Held for the hold families and beams, Impact for sparks and flash,
-    // Approach for shimmer and pulse). Non-particle families read N17's shared Probe table: a flat
-    // ArParticleFxCount reports zero quads for a bar, an arc, a beam, a shape or a flash and is what
-    // made the earlier widening attempts fail with "low drew no quads".
+    // Seventeen families, each one switch plus one driven setting, shot off/low/mid/far in the scene
+    // its lifecycle needs. Twelve drive a percentage; the four choice-switch families drive the
+    // percentage behind their switch, and impact.burst drives its own declared style list. Every
+    // witness comes from N17's shared Probe table: a flat ArParticleFxCount reports zero quads for a
+    // bar, an arc, a beam, a shape, a flash, a trail, a ring or a release droplet, which is what made
+    // the earlier widening attempts fail with "low drew no quads".
     private static readonly PilotFamily[] Driven =
     [
         new("particles.wisps", Stage.Held, "ShowWisps", EffectParameterKind.Boolean, "off",
@@ -61,10 +78,28 @@ internal static class ArValuePilotReview
             "FallingPulseRate", EffectParameterKind.Percentage, [25, 75, 100], [], ""),
         new("falling.shimmer", Stage.Approach, "NoteShimmer", EffectParameterKind.Boolean, "off",
             "NoteShimmerAmount", EffectParameterKind.Percentage, [50, 70, 100], [], ""),
+        // Round B: a Choice switch carries the value the renderer itself treats as off, exactly as
+        // N17's OffValues table declares. ImpactWave rides on the ring pass, so ShowImpactRings has
+        // to stay on for that column; it is a pin, not a second thing being driven.
+        new("falling.trail", Stage.Approach, "FallingTrail", EffectParameterKind.Choice, "None",
+            "FallingTrailLength", EffectParameterKind.Percentage, [25, 60, 100], [], "", "Glow"),
         new("particles.sparks", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
             "ParticleAmount", EffectParameterKind.Percentage, [20, 70, 120], [], ""),
         new("impact.flash", Stage.Impact, "ShowImpactFlash", EffectParameterKind.Boolean, "off",
             "ImpactFlashIntensity", EffectParameterKind.Percentage, [25, 60, 100], [], ""),
+        new("impact.burst", Stage.Impact, "ShowEmbers", EffectParameterKind.Boolean, "off",
+            "ImpactBurst", EffectParameterKind.Choice, [], ["Embers", "Fireworks", "Dust"], ""),
+        // These three draw only tens of pixels in N17, so the column drives the choice itself at three
+        // declared styles instead of a percentage whose steps would collapse onto the same picture.
+        // The switch and the value are the same setting on purpose: off is the renderer's declared
+        // off value, then three other values from the settings model's own list.
+        new("impact.wave", Stage.Impact, "ImpactWave", EffectParameterKind.Choice, "None",
+            "ImpactWave", EffectParameterKind.Choice, [], ["Ring", "Shockwave", "Ripple"], "", "Ring",
+            ["ShowImpactRings"]),
+        new("impact.morph", Stage.Impact, "ImpactMorph", EffectParameterKind.Choice, "None",
+            "ImpactMorph", EffectParameterKind.Choice, [], ["Shatter", "Melt", "Bounce"], "", "Shatter"),
+        new("release.fx", Stage.Release, "ReleaseEffect", EffectParameterKind.Choice, "Fade",
+            "ReleaseEffect", EffectParameterKind.Choice, [], ["Float Up", "Dissolve", "Smoke"], "", "Float Up"),
     ];
 
     private sealed class Shot
@@ -88,6 +123,16 @@ internal static class ArValuePilotReview
         KeyboardLayout.Use(KeyboardLayout.Standard88);
         try
         {
+            foreach (var f in Driven)
+            {
+                if (f.Labels.Length != 3)
+                    throw new InvalidDataException($"{f.Id} must declare exactly three shot values, got {f.Labels.Length}");
+                if (f.SwitchKind is not (EffectParameterKind.Boolean or EffectParameterKind.Choice))
+                    throw new InvalidDataException($"{f.Id} declares an unsupported switch kind");
+                if (f.SwitchKind == EffectParameterKind.Choice
+                    && (f.SwitchOffValue.Length == 0 || f.SwitchOnValue.Length == 0))
+                    throw new InvalidDataException($"{f.Id} needs both the off and on values of its choice switch");
+            }
             var root = Path.GetFullPath(output);
             Directory.CreateDirectory(root);
             var samples = PrismFlowVisualReview.FindSamples();
@@ -102,7 +147,7 @@ internal static class ArValuePilotReview
             foreach (var group in Driven.GroupBy(f => f.Stage))
             {
                 var page = group.ToArray();
-                var captions = page.SelectMany(f => new[] { $"{f.Id} off", $"{f.Id} {f.ValueName} {f.Numbers[0]:0}", $"{f.Id} {f.ValueName} {f.Numbers[1]:0}", $"{f.Id} {f.ValueName} {f.Numbers[2]:0}" }).ToArray();
+                var captions = page.SelectMany(f => new[] { $"{f.Id} off", $"{f.Id} {f.ValueName} {f.Labels[0]}", $"{f.Id} {f.ValueName} {f.Labels[1]}", $"{f.Id} {f.ValueName} {f.Labels[2]}" }).ToArray();
                 var sheet = new ReviewSheet.Canvas(page.Length * Columns, TileWidth, TileHeight, Columns,
                     $"VALUE PILOT AR {group.Key.ToString().ToUpperInvariant()}", ReviewSheet.CaptionScaleFor(captions, TileWidth));
                 var cells = new List<Cell>(page.Length * Columns);
@@ -140,10 +185,10 @@ internal static class ArValuePilotReview
                     var offVsFar = OptionMatrixPlan.ChangedPixels(off.Pixels!, far.Pixels!);
                     if (offVsFar < MinimumChangedPixels) throw new InvalidDataException($"{fam.Id} off↔far {offVsFar} < {MinimumChangedPixels}");
 
-                    cells.Add(new Cell(fam.Id, fam.Stage, fam.SwitchName, "off", 0, "", off.File, off.PixelSha256, 0, off.Lit, OptionMatrixPlan.ChangedPixels(off.Pixels!, camera), off.Quads, off.Demand, "Reference", "Family off"));
-                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "low", fam.Numbers[0], "", low.File, low.PixelSha256, offVsLow, low.Lit, OptionMatrixPlan.ChangedPixels(low.Pixels!, camera), low.Quads, low.Demand, Read(offVsLow), $"Low {fam.Numbers[0]:0} vs off"));
-                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "mid", fam.Numbers[1], "", mid.File, mid.PixelSha256, offVsMid, mid.Lit, OptionMatrixPlan.ChangedPixels(mid.Pixels!, camera), mid.Quads, mid.Demand, Read(offVsMid), $"Mid {fam.Numbers[1]:0} vs off"));
-                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "far", fam.Numbers[2], "", far.File, far.PixelSha256, offVsFar, far.Lit, OptionMatrixPlan.ChangedPixels(far.Pixels!, camera), far.Quads, far.Demand, Read(offVsFar), $"Far {fam.Numbers[2]:0} vs off"));
+                    cells.Add(new Cell(fam.Id, fam.Stage, fam.SwitchName, "off", 0, fam.SwitchKind == EffectParameterKind.Choice ? fam.SwitchOffValue : "", off.File, off.PixelSha256, 0, off.Lit, OptionMatrixPlan.ChangedPixels(off.Pixels!, camera), off.Quads, off.Demand, "Reference", "Family off"));
+                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "low", fam.NumberAt(0), fam.ChoiceAt(0), low.File, low.PixelSha256, offVsLow, low.Lit, OptionMatrixPlan.ChangedPixels(low.Pixels!, camera), low.Quads, low.Demand, Read(offVsLow), $"Low {fam.Labels[0]} vs off"));
+                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "mid", fam.NumberAt(1), fam.ChoiceAt(1), mid.File, mid.PixelSha256, offVsMid, mid.Lit, OptionMatrixPlan.ChangedPixels(mid.Pixels!, camera), mid.Quads, mid.Demand, Read(offVsMid), $"Mid {fam.Labels[1]} vs off"));
+                    cells.Add(new Cell(fam.Id, fam.Stage, fam.ValueName, "far", fam.NumberAt(2), fam.ChoiceAt(2), far.File, far.PixelSha256, offVsFar, far.Lit, OptionMatrixPlan.ChangedPixels(far.Pixels!, camera), far.Quads, far.Demand, Read(offVsFar), $"Far {fam.Labels[2]} vs off"));
 
                     off.Pixels = null; low.Pixels = null; mid.Pixels = null; far.Pixels = null;
                 }
@@ -161,7 +206,9 @@ internal static class ArValuePilotReview
                 var low = cs.First(c => c.Row == "low");
                 var mid = cs.First(c => c.Row == "mid");
                 var far = cs.First(c => c.Row == "far");
-                return $"{f.Id} {f.ValueName} low {low.ArChanged}→mid {mid.ArChanged}→far {far.ArChanged} px vs off";
+                var values = f.ValueKind == EffectParameterKind.Choice
+                    ? string.Join("/", f.Choices) : string.Join("/", f.Numbers.Select(n => n.ToString("0")));
+                return $"{f.Id} {f.ValueName} {values} low {low.ArChanged}→mid {mid.ArChanged}→far {far.ArChanged} px vs off";
             }));
             var total = reports.Sum(r => r.Cells.Count);
             WriteManifest(root, renderer.AdapterName, reports, total);
@@ -174,15 +221,20 @@ internal static class ArValuePilotReview
     private static PianoVisualSettings Settings(PilotFamily fam, int? valueIndex, bool isOff)
     {
         var s = OptionMatrixReview.BaseSettings();
+        // Pins are scene preconditions, not a second family: impact.wave rides on the ring pass, so
+        // ShowImpactRings has to be on before the choice switch can take the picture anywhere.
+        foreach (var pin in fam.Pins ?? []) Apply(s, new DrivenSetting(pin, EffectParameterKind.Boolean, 1, ""));
         if (fam.SwitchKind == EffectParameterKind.Boolean)
-        {
             Apply(s, new DrivenSetting(fam.SwitchName, EffectParameterKind.Boolean, isOff ? 0 : 1, ""));
-        }
-        else throw new InvalidDataException("pilot switch must be boolean");
+        else
+            Apply(s, new DrivenSetting(fam.SwitchName, EffectParameterKind.Choice, 0,
+                isOff ? fam.SwitchOffValue : fam.SwitchOnValue));
         if (!isOff && valueIndex.HasValue)
         {
-            var v = fam.Numbers[valueIndex.Value];
-            Apply(s, new DrivenSetting(fam.ValueName, fam.ValueKind, v, ""));
+            if (fam.ValueKind == EffectParameterKind.Choice)
+                Apply(s, new DrivenSetting(fam.ValueName, EffectParameterKind.Choice, 0, fam.Choices[valueIndex.Value]));
+            else
+                Apply(s, new DrivenSetting(fam.ValueName, fam.ValueKind, fam.Numbers[valueIndex.Value], ""));
         }
         s.Clamp();
         return s;
@@ -216,6 +268,13 @@ internal static class ArValuePilotReview
             case "FallingPulseRate": settings.FallingPulseRate = setting.Number; break;
             case "ShowImpactFlash": settings.ShowImpactFlash = setting.Number >= 0.5; break;
             case "ImpactFlashIntensity": settings.ImpactFlashIntensity = setting.Number; break;
+            case "FallingTrail": settings.FallingTrail = setting.Choice; break;
+            case "FallingTrailLength": settings.FallingTrailLength = setting.Number; break;
+            case "ImpactBurst": settings.ImpactBurst = setting.Choice; break;
+            case "ShowImpactRings": settings.ShowImpactRings = setting.Number >= 0.5; break;
+            case "ImpactWave": settings.ImpactWave = setting.Choice; break;
+            case "ImpactMorph": settings.ImpactMorph = setting.Choice; break;
+            case "ReleaseEffect": settings.ReleaseEffect = setting.Choice; break;
             default: throw new InvalidDataException($"pilot cannot drive {setting.Name}");
         }
     }
@@ -232,6 +291,9 @@ internal static class ArValuePilotReview
         Stage.Held => (12, 1.0 / 30),
         Stage.Impact => (12, 1.0 / 60),
         Stage.Approach => (30, 1.0 / 60),
+        // Same as N17: a finger down for 0.2 s, lifted at frame 12, captured 0.2 s later while the
+        // release droplets are still in the air (Float Up lives 0.7-1.2 s).
+        Stage.Release => (24, 1.0 / 60),
         _ => throw new ArgumentOutOfRangeException(nameof(stage)),
     };
     private static readonly NoteEvent[] ApproachNotes = [new() { Pitch = ApproachPitch, Start = .9, Duration = .5, Velocity = 96, Track = 0 }];
@@ -259,12 +321,22 @@ internal static class ArValuePilotReview
         var pressed = stage switch
         {
             Stage.Held => new HashSet<int>(HeldKeys),
+            Stage.Release => new HashSet<int> { ReleasePitch },
             _ => NoPressed,
         };
         void BeforeFrame(int frame)
         {
-            feed.SetDeterministicState(notes, (frame + 1) * dt, playing, pressed);
+            // The release scene is the only one whose finger moves; a note-off event, not an empty
+            // pressed set, is what spawns the release effect.
+            var held = stage == Stage.Release && frame >= ReleaseLiftFrame ? NoPressed : pressed;
+            feed.SetDeterministicState(notes, (frame + 1) * dt, playing, held);
             feed.SetDeterministicBeatPulse(0);
+            if (stage == Stage.Release)
+            {
+                if (frame == 0) feed.LiveNote(ReleasePitch, true, .9);
+                if (frame == ReleaseLiftFrame) feed.LiveNote(ReleasePitch, false, .9);
+                return;
+            }
             if (frame != 0) return;
             if (stage == Stage.Held) foreach (var p in HeldKeys) feed.LiveNote(p, true, .9);
             else if (stage == Stage.Impact) feed.Impact(BurstPitch, 1);
@@ -310,7 +382,7 @@ internal static class ArValuePilotReview
         static string E(string v) => System.Net.WebUtility.HtmlEncode(v);
         var b = new StringBuilder();
         b.Append("<!doctype html><meta charset=utf-8><title>Value Pilot</title><style>body{font:14px system-ui;background:#10141b;color:#e1e9f3;max-width:1400px;margin:24px;padding:16px}table{border-collapse:collapse}th,td{border:1px solid #263243;padding:4px 8px}</style><h1>AR value pilot — 3 điểm / setting</h1><p>Same pose/camera/seed, WARP, 4 cột off→low→mid→far. Máy: " + E(adapter) + "</p>");
-        foreach (var r in sheets) { b.Append($"<h2>{E(r.File)}</h2><table><tr><th>Family</th><th>Row</th><th>Value</th><th>AR px vs off</th><th>Quads</th><th>Demand/Quads</th></tr>"); foreach (var c in r.Cells) b.Append($"<tr><td>{E(c.Family)}</td><td>{E(c.Row)}</td><td>{c.Value:0}</td><td>{c.ArChanged:N0}</td><td>{c.Quads:N0}</td><td>{c.Demand:N0}/{c.Quads:N0}</td></tr>"); b.Append("</table>"); b.Append($"<img src={E(Path.GetFileName(r.File))} style=max-width:100%><br>"); }
+        foreach (var r in sheets) { b.Append($"<h2>{E(r.File)}</h2><table><tr><th>Family</th><th>Row</th><th>Value</th><th>AR px vs off</th><th>Quads</th><th>Demand/Quads</th></tr>"); foreach (var c in r.Cells) b.Append($"<tr><td>{E(c.Family)}</td><td>{E(c.Row)}</td><td>{E(c.Choice.Length > 0 ? c.Choice : c.Value.ToString("0"))}</td><td>{c.ArChanged:N0}</td><td>{c.Quads:N0}</td><td>{c.Demand:N0}/{c.Quads:N0}</td></tr>"); b.Append("</table>"); b.Append($"<img src={E(Path.GetFileName(r.File))} style=max-width:100%><br>"); }
         File.WriteAllText(Path.Combine(root, "ar-value-pilot", "index.html"), b.ToString());
     }
 }

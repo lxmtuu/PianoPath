@@ -6,8 +6,9 @@ Twelve attempts to widen the pilot failed with ``<family> low drew no quads`` be
 witness table that says which of the AR layer's counters belongs to which family; the pilots now
 delegate to it. This check is the guard that stops a local copy, a hard-coded counter, a stale
 ``Assert(cells == ...)``, an unhandled setting, a README/plan that still quotes the old frame
-count, a workflow that drops the pilot's own fail-fast step, or a lost ``off↔mid`` gate (which
-would let a neutral slider value be captioned as a third picture) from coming back.
+count, a workflow that drops the pilot's own fail-fast step, a lost ``off↔mid`` gate (which
+would let a neutral slider value be captioned as a third picture), a choice switch with the wrong
+off value, or a release scene that no longer lifts the key from coming back.
 
 Pure text in, list of problems out: no .NET, no Windows, no GPU. ``check_sources.py`` calls it on
 the real repository; ``tools/tests/test_value_pilot_contract.py`` calls it on synthetic files.
@@ -35,6 +36,14 @@ DRIVEN = re.compile(
     r'\s*EffectParameterKind\.\w+\s*,\s*"[^"]*"\s*,\s*"([^"]+)"\s*,', re.S)
 WITNESS = re.compile(r'"([a-z][a-z\-]*\.[a-z\-]+)"\s*=>\s*renderer\.')
 CASES = re.compile(r'case\s+"([^"]+)"\s*:')
+CHOICE_SWITCH = re.compile(
+    r'"([a-z][a-z.\-]+)"\s*,\s*Stage\.\w+\s*,\s*"([^"]+)"\s*,'
+    r'\s*EffectParameterKind\.Choice\s*,\s*"([^"]+)"\s*,', re.S)
+# The value the renderer itself treats as "this family is not here". A choice switch that picks a
+# different string would draw the family in its own off row.
+CHOICE_OFF_VALUES = {
+    "FallingTrail": "None", "ImpactWave": "None", "ImpactMorph": "None", "ReleaseEffect": "Fade",
+}
 
 
 def strip_cs(text: str) -> str:
@@ -140,6 +149,31 @@ def check(files: dict) -> list:
     if '"hold.bar" => renderer.' in lifecycle:
         errors.append("Diagnostics/ArLifecycleReview.cs still keeps its own witness switch; "
                       "two tables is how they drift apart")
+
+    # Round B: four families use a Choice as their own on/off. Their off value must be the one the
+    # renderer honours, their on value and shot values must be applied by name, and the release
+    # family needs its own scene (a key lifted at frame 12, captured 0.2 s later).
+    choice_switches = CHOICE_SWITCH.findall(block.group(1))
+    for family, setting, off_value in choice_switches:
+        expected = CHOICE_OFF_VALUES.get(setting)
+        if expected is None:
+            errors.append(f"value pilot uses '{setting}' as a choice switch for '{family}' without "
+                          "declaring its renderer off value in the guard")
+        elif off_value != expected:
+            errors.append(f"value pilot switches '{family}' off with '{off_value}' but the renderer "
+                          f"treats '{expected}' as off; its off row would still draw the family")
+    if "SwitchOnValue" not in review:
+        errors.append("Diagnostics/ArValuePilotReview.cs lost the on value of a choice switch; "
+                      "a Choice-driven family could not be turned on")
+    if "setting.Choice" not in review:
+        errors.append("Diagnostics/ArValuePilotReview.cs no longer applies a DrivenSetting's Choice; "
+                      "Choice-driven low/mid/far rows would all shoot the same look")
+    if "Stage.Release" not in review or "ReleaseLiftFrame" not in review:
+        errors.append("Diagnostics/ArValuePilotReview.cs lost the Release scene (note-off at frame 12); "
+                      "release.fx would be shot while the key is still held and draw nothing")
+    if "ShowImpactRings" not in review:
+        errors.append("Diagnostics/ArValuePilotReview.cs no longer pins ShowImpactRings for "
+                      "impact.wave; the wave rides on the ring pass and would emit no quads")
 
     applied = set(CASES.findall(review))
     for family, switch, value in driven:

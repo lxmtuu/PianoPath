@@ -2,9 +2,10 @@
 
 The guard only reads text. These tests build a tiny repository that satisfies it, then break one
 promise at a time: a hard-coded particle counter, a copied witness table, an unknown family,
-an unhandled setting, a stale cell count, a document that still quotes the old frame count and a
-workflow that drops the pilot's own fail-fast step. The CI annotations that motivated this guard
-are described in docs/AR-VALUE-MATRIX-PLAN.md.
+an unhandled setting, a stale cell count, a document that still quotes the old frame count, a
+workflow that drops the pilot's own fail-fast step, a choice switch with the wrong off value, or a
+release scene that no longer lifts the key. The CI annotations that motivated this guard are
+described in docs/AR-VALUE-MATRIX-PLAN.md.
 """
 import sys
 import unittest
@@ -13,31 +14,46 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import value_pilot_contract as v
 
+# family, stage, switch, switch kind, off value, on value, value, value kind,
+# numbers or choices literal, witness counter, pins
 FAMILIES = [
-    ("particles.wisps", "ShowWisps", "WispAmount", "[15, 75, 150]", "ArParticleFxCount"),
-    ("particles.flames", "ShowFlame", "FlameIntensity", "[20, 60, 100]", "ArParticleFxCount"),
-    ("atmosphere.beams", "ShowLightBeams", "BeamIntensity", "[30, 65, 100]", "ArBeamCount"),
-    ("hold.bar", "HoldBar", "HoldBarIntensity", "[25, 60, 100]", "ArLiveBarCount"),
-    ("hold.breath", "HoldBreath", "HoldBreathRate", "[25, 75, 100]", "ArLiveBarCount"),
-    ("hold.vibration", "HoldVibration", "HoldVibrationAmount", "[25, 60, 100]", "ArLiveBarCount"),
-    ("hold.color-cycle", "HoldColorCycle", "HoldColorCycleSpeed", "[25, 60, 100]", "ArLiveBarCount"),
-    ("hold.arc", "HoldElectricArc", "HoldArcIntensity", "[25, 60, 100]", "ArHoldArcCount"),
-    ("falling.pulse", "FallingPulse", "FallingPulseRate", "[25, 75, 100]", "ArShapeCount"),
-    ("falling.shimmer", "NoteShimmer", "NoteShimmerAmount", "[50, 70, 100]", "ArNoteShimmerQuadCount"),
-    ("particles.sparks", "ShowEmbers", "ParticleAmount", "[20, 70, 120]", "ArParticleFxCount"),
-    ("impact.flash", "ShowImpactFlash", "ImpactFlashIntensity", "[25, 60, 100]", "ArFlashCount"),
+    ("particles.wisps", "Held", "ShowWisps", "Boolean", "off", "", "WispAmount", "Percentage", "[15, 75, 150]", "ArParticleFxCount", []),
+    ("particles.flames", "Held", "ShowFlame", "Boolean", "off", "", "FlameIntensity", "Percentage", "[20, 60, 100]", "ArParticleFxCount", []),
+    ("atmosphere.beams", "Held", "ShowLightBeams", "Boolean", "off", "", "BeamIntensity", "Percentage", "[30, 65, 100]", "ArBeamCount", []),
+    ("hold.bar", "Held", "HoldBar", "Boolean", "off", "", "HoldBarIntensity", "Percentage", "[25, 60, 100]", "ArLiveBarCount", []),
+    ("hold.breath", "Held", "HoldBreath", "Boolean", "off", "", "HoldBreathRate", "Percentage", "[25, 75, 100]", "ArLiveBarCount", []),
+    ("hold.vibration", "Held", "HoldVibration", "Boolean", "off", "", "HoldVibrationAmount", "Percentage", "[25, 60, 100]", "ArLiveBarCount", []),
+    ("hold.color-cycle", "Held", "HoldColorCycle", "Boolean", "off", "", "HoldColorCycleSpeed", "Percentage", "[25, 60, 100]", "ArLiveBarCount", []),
+    ("hold.arc", "Held", "HoldElectricArc", "Boolean", "off", "", "HoldArcIntensity", "Percentage", "[25, 60, 100]", "ArHoldArcCount", []),
+    ("falling.pulse", "Approach", "FallingPulse", "Boolean", "off", "", "FallingPulseRate", "Percentage", "[25, 75, 100]", "ArShapeCount", []),
+    ("falling.shimmer", "Approach", "NoteShimmer", "Boolean", "off", "", "NoteShimmerAmount", "Percentage", "[50, 70, 100]", "ArNoteShimmerQuadCount", []),
+    ("particles.sparks", "Impact", "ShowEmbers", "Boolean", "off", "", "ParticleAmount", "Percentage", "[20, 70, 120]", "ArParticleFxCount", []),
+    ("impact.flash", "Impact", "ShowImpactFlash", "Boolean", "off", "", "ImpactFlashIntensity", "Percentage", "[25, 60, 100]", "ArFlashCount", []),
+    ("falling.trail", "Approach", "FallingTrail", "Choice", "None", "Glow", "FallingTrailLength", "Percentage", "[25, 60, 100]", "ArNoteTrailQuadCount", []),
+    ("impact.burst", "Impact", "ShowEmbers", "Boolean", "off", "", "ImpactBurst", "Choice", '["Embers", "Fireworks", "Dust"]', "ArParticleFxCount", []),
+    ("impact.wave", "Impact", "ImpactWave", "Choice", "None", "Ring", "ImpactWave", "Choice", '["Ring", "Shockwave", "Ripple"]', "ArPulseCount", ["ShowImpactRings"]),
+    ("impact.morph", "Impact", "ImpactMorph", "Choice", "None", "Shatter", "ImpactMorph", "Choice", '["Shatter", "Melt", "Bounce"]', "ArParticleFxCount", []),
+    ("release.fx", "Release", "ReleaseEffect", "Choice", "Fade", "Float Up", "ReleaseEffect", "Choice", '["Float Up", "Dissolve", "Smoke"]', "ArReleaseEffectCount", []),
 ]
 
 
-def fixture(families=FAMILIES, cells=48):
-    rows = "\n".join(
-        f'        new("{fam}", Stage.Held, "{switch}", EffectParameterKind.Boolean, "off",\n'
-        f'            "{value}", EffectParameterKind.Percentage, {nums}, [], ""),'
-        for fam, switch, value, nums, _ in families)
-    cases = "\n".join(
-        f'            case "{name}": break;'
-        for _, switch, value, _, _ in families for name in (switch, value))
-    ids = [fam for fam, *_ in families]
+def fixture(families=FAMILIES, cells=68):
+    rows = []
+    for fam, stage, switch, switch_kind, off, on, value, value_kind, values, _, pins in families:
+        numbers = values if value_kind == "Percentage" else "[]"
+        choices = values if value_kind == "Choice" else "[]"
+        pins_literal = "[" + ", ".join(f'"{p}"' for p in pins) + "]" if pins else "null"
+        rows.append(
+            f'        new("{fam}", Stage.{stage}, "{switch}", EffectParameterKind.{switch_kind}, "{off}",\n'
+            f'            "{value}", EffectParameterKind.{value_kind}, {numbers}, {choices}, "", "{on}", {pins_literal}),')
+    rows = "\n".join(rows)
+    applied = set()
+    for _, _, switch, _, _, _, value, _, _, _, pins in families:
+        applied.add(switch)
+        applied.add(value)
+        applied.update(pins)
+    cases = "\n".join(f'            case "{name}": break;' for name in sorted(applied))
+    ids = [f[0] for f in families]
 
     review = f"""// a comment must never be read as a driven row:
 // new("ghost.family", Stage.Held, "NoSwitch", EffectParameterKind.Boolean, "off", "NoValue", ...)
@@ -49,6 +65,18 @@ internal static class ArValuePilotReview
 {rows}
     ];
 
+    private static PianoVisualSettings Settings(PilotFamily fam, int? valueIndex, bool isOff)
+    {{
+        foreach (var pin in fam.Pins ?? []) Apply(s, new DrivenSetting(pin, EffectParameterKind.Boolean, 1, ""));
+        if (fam.SwitchKind == EffectParameterKind.Boolean)
+            Apply(s, new DrivenSetting(fam.SwitchName, EffectParameterKind.Boolean, isOff ? 0 : 1, ""));
+        else
+            Apply(s, new DrivenSetting(fam.SwitchName, EffectParameterKind.Choice, 0,
+                isOff ? fam.SwitchOffValue : fam.SwitchOnValue));
+        if (fam.ValueKind == EffectParameterKind.Choice)
+            Apply(s, new DrivenSetting(fam.ValueName, EffectParameterKind.Choice, 0, setting.Choice));
+    }}
+
     private static void Apply(PianoVisualSettings settings, DrivenSetting setting)
     {{
         switch (setting.Name)
@@ -59,10 +87,10 @@ internal static class ArValuePilotReview
 
     private static int Probe(GpuStageRenderer renderer, string family) => {v.DELEGATION};
     private static void Gate(int offVsMid) {{ if (offVsMid < 12) throw new InvalidDataException("off↔mid collapsed"); }}
+    private static int ReleaseLiftFrame => 12;
 }}
 """
-    witness_rows = "\n".join(f'        "{fam}" => renderer.{counter},'
-                             for fam, _, _, _, counter in families)
+    witness_rows = "\n".join(f'        "{f[0]}" => renderer.{f[9]},' for f in families)
     witness = f"""internal static class ArEffectFamilyReview
 {{
     internal static int Probe(GpuStageRenderer renderer, string family) => family switch
@@ -77,7 +105,7 @@ internal static class ArValuePilotReview
     private static int Probe(GpuStageRenderer renderer, string family) => {v.DELEGATION};
 }}
 """
-    suite = f"""        Assert(cells == {cells}, "The AR value pilot must shoot twelve families at four rows each.");
+    suite = f"""        Assert(cells == {cells}, "The AR value pilot must shoot all seventeen families at four rows each.");
         Results.Add($"PASS AR value pilot (N17V): {{cells}} setting frames ...");
 """
     workflow = """      - name: AR value pilot (N17V)
@@ -134,9 +162,9 @@ class ValuePilotContractTests(unittest.TestCase):
         self.assertTrue(any("no longer exposes an internal Probe" in p for p in problems), problems)
 
     def test_a_family_without_a_witness_is_refused(self):
-        extra = ("hold.shadow", "HoldShadow", "HoldShadowIntensity", "[25, 60, 100]", "ArShadowCount")
-        files = fixture(families=FAMILIES + [extra], cells=52)
-        # Give the extra family a witness that is deliberately absent from the shared table.
+        extra = ("hold.shadow", "Held", "HoldShadow", "Boolean", "off", "", "HoldShadowIntensity",
+                 "Percentage", "[25, 60, 100]", "ArShadowCount", [])
+        files = fixture(families=FAMILIES + [extra], cells=72)
         files["witness"] = files["witness"].replace(
             '        "hold.shadow" => renderer.ArShadowCount,\n', "")
         problems = v.check(files)
@@ -147,35 +175,60 @@ class ValuePilotContractTests(unittest.TestCase):
         problems = errors_with(review=review)
         self.assertTrue(any("has no case for it" in p and "NoteShimmer" in p for p in problems), problems)
 
+    def test_a_choice_switch_with_the_wrong_off_value_is_refused(self):
+        review = fixture()["review"].replace(
+            '"ImpactMorph", EffectParameterKind.Choice, "None"',
+            '"ImpactMorph", EffectParameterKind.Choice, "Fade"')
+        problems = errors_with(review=review)
+        self.assertTrue(any("treats 'None' as off" in p for p in problems), problems)
+
+    def test_an_undeclared_choice_switch_is_refused(self):
+        review = fixture()["review"].replace(
+            '"FallingTrail", EffectParameterKind.Choice',
+            '"FallingTrailSomethingElse", EffectParameterKind.Choice')
+        problems = errors_with(review=review)
+        self.assertTrue(any("without declaring its renderer off value" in p for p in problems), problems)
+
+    def test_a_lost_choice_on_value_is_refused(self):
+        problems = errors_with(review=fixture()["review"].replace("SwitchOnValue", "SwitchOn"))
+        self.assertTrue(any("lost the on value of a choice switch" in p for p in problems), problems)
+
+    def test_a_pilot_that_ignores_the_choice_string_is_refused(self):
+        problems = errors_with(review=fixture()["review"].replace("setting.Choice", "setting.Number.ToString()"))
+        self.assertTrue(any("no longer applies a DrivenSetting's Choice" in p for p in problems), problems)
+
+    def test_a_lost_release_scene_is_refused(self):
+        problems = errors_with(review=fixture()["review"].replace("Stage.Release", "Stage.Held"))
+        self.assertTrue(any("lost the Release scene" in p for p in problems), problems)
+
+    def test_a_lost_impact_wave_pin_is_refused(self):
+        problems = errors_with(review=fixture()["review"].replace("ShowImpactRings", "ShowSomethingElse"))
+        self.assertTrue(any("no longer pins ShowImpactRings" in p for p in problems), problems)
+
     def test_a_stale_cell_count_is_refused(self):
-        problems = errors_with(suite=fixture()["suite"].replace("cells == 48", "cells == 44"))
-        self.assertTrue(any("pins the 48 N17V cells" in p for p in problems), problems)
+        problems = errors_with(suite=fixture()["suite"].replace("cells == 68", "cells == 64"))
+        self.assertTrue(any("pins the 68 N17V cells" in p for p in problems), problems)
 
     def test_a_missing_pass_line_is_refused(self):
         suite = fixture()["suite"].replace('PASS AR value pilot (N17V)', 'PASS value pilot')
         problems = errors_with(suite=suite)
         self.assertTrue(any("no longer prints the N17V PASS line" in p for p in problems), problems)
 
-    def test_a_readme_still_quoting_twenty_frames_is_refused(self):
-        problems = errors_with(readme_vi=fixture()["readme_vi"].replace("48 khung", "20 khung"))
-        self.assertTrue(any("48 khung" in p for p in problems), problems)
+    def test_a_readme_still_quoting_fortyeight_frames_is_refused(self):
+        problems = errors_with(readme_vi=fixture()["readme_vi"].replace("68 khung", "48 khung"))
+        self.assertTrue(any("68 khung" in p for p in problems), problems)
 
     def test_an_english_readme_that_drops_a_family_is_refused(self):
-        problems = errors_with(readme_en=fixture()["readme_en"].replace("`falling.shimmer`", "`shimmer`"))
-        self.assertTrue(any("does not name 'falling.shimmer'" in p for p in problems), problems)
+        problems = errors_with(readme_en=fixture()["readme_en"].replace("`release.fx`", "`release`"))
+        self.assertTrue(any("does not name 'release.fx'" in p for p in problems), problems)
 
-    def test_a_plan_still_quoting_twenty_frames_is_refused(self):
-        problems = errors_with(plan=fixture()["plan"].replace("48 khung", "20 khung"))
-        self.assertTrue(any("does not say '48 khung'" in p for p in problems), problems)
+    def test_a_plan_still_quoting_fortyeight_frames_is_refused(self):
+        problems = errors_with(plan=fixture()["plan"].replace("68 khung", "48 khung"))
+        self.assertTrue(any("does not say '68 khung'" in p for p in problems), problems)
 
     def test_a_missing_readme_row_is_refused(self):
         problems = errors_with(readme_vi="| another switch | nothing here |")
         self.assertTrue(any("lost the --verify-ar-value-pilot-only row" in p for p in problems), problems)
-
-    def test_a_missing_off_vs_mid_gate_is_refused(self):
-        review = fixture()["review"].replace("off↔mid collapsed", "mid collapsed")
-        problems = errors_with(review=review)
-        self.assertTrue(any("no longer refuses a mid frame" in p for p in problems), problems)
 
     def test_a_missing_fail_fast_step_is_refused(self):
         workflow = fixture()["workflow"].replace("--verify-ar-value-pilot-only", "--verify-ar-effect-only")
@@ -187,6 +240,11 @@ class ValuePilotContractTests(unittest.TestCase):
             "-like 'PASS AR value pilot (N17V)*'", "-like 'PASS value pilot*'")
         problems = errors_with(workflow=workflow)
         self.assertTrue(any("notice annotation" in p for p in problems), problems)
+
+    def test_a_missing_off_vs_mid_gate_is_refused(self):
+        review = fixture()["review"].replace("off↔mid collapsed", "mid collapsed")
+        problems = errors_with(review=review)
+        self.assertTrue(any("no longer refuses a mid frame" in p for p in problems), problems)
 
     def test_an_empty_file_set_is_refused(self):
         problems = v.check({"review": ""})
