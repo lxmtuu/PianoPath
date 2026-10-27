@@ -54,6 +54,13 @@ cùng `adapter`, ba cảnh `default`/`heavy`/`ar` đều `Measured`, và cảnh 
 Ngưỡng tuyệt đối: **p95 < 8 ms** cho `default`, **< 16 ms** cho `heavy` và `ar` (`FrameBudget.All`).
 Nếu `verdict: Fail` ở tier nào, dừng lại và báo cáo — đừng chỉnh ngưỡng cho vừa.
 
+Cả đoạn trên có sẵn thành một lệnh: `pwsh tools/ar_hardware_bench.ps1 -Adapter 'RTX 4050' -EvidenceDir $dir`.
+Bỏ `-Adapter` thì script tự dò card rời NVIDIA và **dừng lại** nếu máy có nhiều hơn một ứng viên — laptop
+hybrid đo nhầm iGPU vẫn cho report xanh mà vô nghĩa. Script chạy một lượt nháp 20 khung để chắc
+`warp: false` trước khi đo 120 khung, dừng ngay khi tier nào vượt ngân sách (exit 3), ghi log ra
+`bench-<tier>.log` (exe là `WinExe`, nên terminal có thể chỉ hiện exit code), và sinh sẵn `webcam.json`
+với phần máy điền từ chính máy đó — phần còn lại là `FILL-ME`, và script sẽ nhắc cho tới khi bị thay.
+
 ## 4. Webcam / OBS thật — 5 kịch bản bắt buộc
 
 Chụp **ảnh hoặc video** cho mỗi kịch bản vào `$dir\shots\`, rồi điền `webcam.json` (mẫu ở §5).
