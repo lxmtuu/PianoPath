@@ -91,15 +91,37 @@ function Get-BenchReport {
 
 function Write-RunFailure {
     # The executable is GUI-subsystem, so its console lines may never reach the terminal. It still
-    # writes its reason beside the report as <report>.startup-error.txt, so read that file first.
+    # writes its reason beside the report as <report>.startup-error.txt, so read that file first,
+    # then the two log files Invoke-BenchRun wrote.
     param([string]$ReportPath, [string]$LogPath)
     $startupError = [System.IO.Path]::ChangeExtension($ReportPath, '.startup-error.txt')
     if (Test-Path -LiteralPath $startupError) {
         Write-Host (Get-Content -LiteralPath $startupError -Raw) -ForegroundColor Yellow
     }
-    if (Test-Path -LiteralPath $LogPath) {
-        Write-Host (Get-Content -LiteralPath $LogPath -Tail 15)
+    foreach ($path in @($LogPath, [System.IO.Path]::ChangeExtension($LogPath, '.err.log'))) {
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        $text = (Get-Content -LiteralPath $path -Raw)
+        if ([string]::IsNullOrWhiteSpace($text)) {
+            Write-Host "   ($(Split-Path -Leaf $path) is empty: the app wrote nothing before it ended)"
+        }
+        else {
+            Write-Host $text
+        }
     }
+}
+
+function Invoke-BenchRun {
+    # The executable is a WinExe (PianoPath.csproj: OutputType WinExe). Calling it with '&' can return
+    # before the process has finished, which leaves the automatic exit-code variable unset - that is how
+    # the first real run reported "the probe exited  - no adapter, no measurement", with no number in
+    # it. Start-Process -Wait -PassThru always waits and always reports a real exit code, so every
+    # failure message below has a number to name. Standard output and error go to two different files,
+    # because Start-Process refuses to redirect both to the same one.
+    param([string]$ExePath, [string[]]$Arguments, [string]$LogPath)
+    $errorLog = [System.IO.Path]::ChangeExtension($LogPath, '.err.log')
+    $process = Start-Process -FilePath $ExePath -ArgumentList $Arguments -NoNewWindow -Wait -PassThru `
+        -RedirectStandardOutput $LogPath -RedirectStandardError $errorLog
+    return [int]$process.ExitCode
 }
 
 function Write-SceneLines {
@@ -310,14 +332,18 @@ if (-not $SkipProbe -and -not $ValidateOnly -and -not $WebcamOnly) {
     New-Item -ItemType Directory -Path $probeDir -Force | Out-Null
     $probeJson = Join-Path $probeDir 'probe.json'
     $probeLog = Join-Path $probeDir 'probe.log'
-    & $exePath --bench=20 --bench-ar "--bench-adapter=$adapterName" "--bench-out=$probeJson" *> $probeLog
-    $probeCode = $LASTEXITCODE
+    $probeCode = Invoke-BenchRun -ExePath $exePath -LogPath $probeLog -Arguments @(
+        '--bench=20', '--bench-ar', "--bench-adapter=$adapterName", "--bench-out=$probeJson")
     if ($probeCode -eq 3) {
         Write-Warning 'the 20-frame probe was over budget; the adapter check still holds, so it continues'
     }
     elseif ($probeCode -ne 0) {
         Write-RunFailure -ReportPath $probeJson -LogPath $probeLog
         throw "the probe exited $probeCode - no adapter, no measurement. See $probeLog"
+    }
+    if (-not (Test-Path -LiteralPath $probeJson)) {
+        Write-RunFailure -ReportPath $probeJson -LogPath $probeLog
+        throw "the probe exited $probeCode but wrote no report at $probeJson; see $probeLog"
     }
     $probe = Get-BenchReport -Path $probeJson
     if ($probe.warp -ne $false -or $probe.softwareAdapter -ne $false) {
@@ -332,8 +358,8 @@ if (-not $ValidateOnly -and -not $WebcamOnly) {
         Write-Step "Tier $tier - $Frames frames per scene (default 8 ms / heavy 16 ms / ar 16 ms)"
         $report = Join-Path $evidencePath "bench-$tier.json"
         $log = Join-Path $evidencePath "bench-$tier.log"
-        & $exePath "--bench=$Frames" --bench-ar "--bench-tier=$tier" "--bench-adapter=$adapterName" "--bench-out=$report" *> $log
-        $code = $LASTEXITCODE
+        $code = Invoke-BenchRun -ExePath $exePath -LogPath $log -Arguments @(
+            "--bench=$Frames", '--bench-ar', "--bench-tier=$tier", "--bench-adapter=$adapterName", "--bench-out=$report")
         if ($code -eq 3) {
             Write-RunFailure -ReportPath $report -LogPath $log
             throw "tier $tier is outside the 8/16/16 ms budgets: report it instead of tuning the threshold (section 3), and stop before the webcam scenarios"
@@ -341,6 +367,10 @@ if (-not $ValidateOnly -and -not $WebcamOnly) {
         if ($code -ne 0) {
             Write-RunFailure -ReportPath $report -LogPath $log
             throw "tier $tier exited $code (2 = adapter or device, 4 = bad tier name); see $log"
+        }
+        if (-not (Test-Path -LiteralPath $report)) {
+            Write-RunFailure -ReportPath $report -LogPath $log
+            throw "tier $tier exited $code but wrote no report at $report; see $log"
         }
         $doc = Get-BenchReport -Path $report
         if ($doc.warp -ne $false) { throw "bench-$tier.json has warp=$($doc.warp); a software rasterizer is not hardware evidence" }

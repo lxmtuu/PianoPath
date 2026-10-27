@@ -99,6 +99,23 @@ class ArHardwareBenchScript(unittest.TestCase):
         self.assertIn("Join-Path $HOME 'keyflow-signoff'", self.script)
         self.assertIn("no D: drive on this machine", self.script)
 
+    def test_it_waits_for_the_gui_executable_and_reads_a_real_exit_code(self):
+        # A WinExe invoked with '&' can return before the process ends, which leaves $LASTEXITCODE
+        # unset: the first probe run on real hardware reported "the probe exited  - no adapter, no
+        # measurement", with the exit code missing and the report still unwritten.
+        self.assertIn("Start-Process -FilePath $ExePath", self.script)
+        self.assertIn("-Wait -PassThru", self.script)
+        self.assertIn("return [int]$process.ExitCode", self.script)
+        self.assertNotIn("& $exePath", self.script)
+        # The one place $LASTEXITCODE may still appear is after the python validator, which is a
+        # console application and therefore does get waited for.
+        self.assertLessEqual(self.script.count("$LASTEXITCODE"), 1)
+
+    def test_a_run_that_writes_no_report_says_so_and_shows_what_the_app_left(self):
+        self.assertIn("but wrote no report at", self.script)
+        self.assertIn("the app wrote nothing before it ended", self.script)
+        self.assertIn("[System.IO.Path]::ChangeExtension($LogPath, '.err.log')", self.script)
+
     def test_the_script_is_ascii_so_any_windows_code_page_reads_it_the_same(self):
         non_ascii = sorted({character for character in self.script if ord(character) > 127})
         self.assertEqual([], non_ascii)
