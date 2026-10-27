@@ -21,8 +21,9 @@
     pwsh tools/ar_hardware_bench.ps1                        # probe, Lite + Ultra, then validate
     pwsh tools/ar_hardware_bench.ps1 -Adapter 'RTX 4050'    # pin the discrete GPU by name
     pwsh tools/ar_hardware_bench.ps1 -EvidenceDir D:\keyflow-signoff\2026-10-27
-    pwsh tools/ar_hardware_bench.ps1 -ValidateOnly          # re-check a folder after section 4
-    pwsh tools/ar_hardware_bench.ps1 -WebcamOnly -Force     # rewrite webcam.json (never without -Force)
+    pwsh tools/ar_hardware_bench.ps1 -ValidateOnly         # re-check a folder after section 4
+    pwsh tools/ar_hardware_bench.ps1 -WebcamOnly -Force    # rewrite webcam.json (never without -Force)
+    pwsh tools/ar_hardware_bench.ps1 -FillWebcam           # answer the section 4 questions instead of editing JSON
 
     Section 4 itself is still a human job: five webcam scenarios, OBS Virtual Camera, MEASURE DELAY.
 #>
@@ -55,6 +56,10 @@ param(
     # Only (re)write webcam.json. Refuses to overwrite a signed or annotated record without -Force.
     [switch]$WebcamOnly,
 
+    # Ask the questions section 4 needs and fill webcam.json in, instead of opening it in Notepad.
+    # Nothing is benchmarked, and the two approvals are passed through untouched.
+    [switch]$FillWebcam,
+
     # Allow webcam.json to be rewritten. The file holds the operator's notes and both approvals, so
     # overwriting it by accident would destroy section 4's work.
     [switch]$Force
@@ -64,6 +69,15 @@ $ErrorActionPreference = 'Stop'
 
 $Tiers = @('Lite', 'Ultra')
 $Scenarios = @('overhead', 'fisheye', 'low_light', 'fast_motion', 'hand_occlusion')
+# Where each scenario's picture belongs. Written out name by name so the record a fresh run writes is
+# readable in one place, and so grepping the script for a shot name finds it.
+$DefaultShotFiles = @{
+    overhead       = 'shots/overhead.png'
+    fisheye        = 'shots/fisheye.png'
+    low_light      = 'shots/low_light.png'
+    fast_motion    = 'shots/fast_motion.png'
+    hand_occlusion = 'shots/hand_occlusion.png'
+}
 
 function Write-Step {
     param([string]$Message)
@@ -149,39 +163,63 @@ function Get-CameraName {
     return @($found | Sort-Object -Unique)
 }
 
-function Write-WebcamRecord {
-    # Auto-filled from this machine where it can be (GPU, driver, Windows build, camera names), so the
-    # record never ships a plausible-looking number nobody verified. Everything else is a FILL-ME that
-    # Get-RemainingWork keeps naming until a human replaces it.
-    param([string]$Path, [string]$GpuName, [string]$GpuDriver, [string]$OsName, [string[]]$Cameras)
+function ConvertTo-JsonText {
+    # A note typed at a prompt can hold a quote or a backslash, either of which would break the record
+    # the validator then reads as JSON. Escape the two characters that matter and nothing else.
+    param([string]$Value)
+    if ($null -eq $Value) { return '' }
+    return $Value.Replace('\', '\\').Replace('"', '\"')
+}
 
-    $device = 'FILL-ME: camera name, e.g. Logitech C920 / OBS Virtual Camera'
-    if ($Cameras.Count -eq 1) { $device = $Cameras[0] }
-    elseif ($Cameras.Count -gt 1) { $device = 'FILL-ME: which camera? ' + ($Cameras -join ' / ') }
+function Write-WebcamRecord {
+    # One writer for the whole record, so the fresh template and the -FillWebcam edit cannot drift
+    # apart. The machine fields come from this machine; everything a human decides arrives as a
+    # parameter; the two approvals are written back exactly as they were given.
+    param(
+        [string]$Path, [string]$Operator, [string]$GpuName, [string]$GpuDriver, [string]$OsName,
+        [string]$Device, [string]$Mode, [bool]$Obs, [hashtable]$Files, [hashtable]$Notes,
+        [double]$Delay, [bool]$ArtApproved, [bool]$OwnerApproved)
+
+    $scenarioLines = @()
+    foreach ($name in $Scenarios) {
+        $file = ConvertTo-JsonText -Value $Files[$name]
+        $note = ConvertTo-JsonText -Value $Notes[$name]
+        $scenarioLines += ('    "{0}": {{ "file": "{1}", "notes": "{2}" }}' -f $name, $file, $note)
+    }
+    $scenarioBlock = $scenarioLines -join ",`n"
+    $operatorText = ConvertTo-JsonText -Value $Operator
+    $gpuText = ConvertTo-JsonText -Value $GpuName
+    $driverText = ConvertTo-JsonText -Value $GpuDriver
+    $osText = ConvertTo-JsonText -Value $OsName
+    $deviceText = ConvertTo-JsonText -Value $Device
+    $modeText = ConvertTo-JsonText -Value $Mode
+    $obsText = 'false'
+    if ($Obs) { $obsText = 'true' }
+    $artText = 'false'
+    if ($ArtApproved) { $artText = 'true' }
+    $ownerText = 'false'
+    if ($OwnerApproved) { $ownerText = 'true' }
+    $delayText = $Delay.ToString([System.Globalization.CultureInfo]::InvariantCulture)
 
     $json = @"
 {
-  "operator": "FILL-ME: name of the person who ran this",
+  "operator": "$operatorText",
   "machine": {
-    "gpu": "$GpuName",
-    "driver": "$GpuDriver",
-    "os": "$OsName"
+    "gpu": "$gpuText",
+    "driver": "$driverText",
+    "os": "$osText"
   },
   "camera": {
-    "device": "$device",
-    "mode": "FILL-ME: the mode the app picked, e.g. 1280x720@60 MJPG",
-    "obs_virtual_camera": false
+    "device": "$deviceText",
+    "mode": "$modeText",
+    "obs_virtual_camera": $obsText
   },
   "scenarios": {
-    "overhead":       { "file": "shots/overhead.png",       "notes": "" },
-    "fisheye":        { "file": "shots/fisheye.png",        "notes": "" },
-    "low_light":      { "file": "shots/low_light.png",      "notes": "" },
-    "fast_motion":    { "file": "shots/fast_motion.png",    "notes": "" },
-    "hand_occlusion": { "file": "shots/hand_occlusion.png", "notes": "" }
+$scenarioBlock
   },
-  "measured_delay_ms": 0,
-  "art_approved": false,
-  "owner_approved": false
+  "measured_delay_ms": $delayText,
+  "art_approved": $artText,
+  "owner_approved": $ownerText
 }
 "@
     # UTF-8 without a BOM: tools/ar_hardware_signoff.py reads the file as utf-8, and a BOM would make
@@ -189,6 +227,111 @@ function Write-WebcamRecord {
     # the bytes are written directly instead.
     $encoding = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($Path, $json, $encoding)
+}
+
+function Read-Filled {
+    # Each question shows what is already there, because filling the record in after a partial
+    # attempt must not ask the operator to retype what they wrote last time. Empty is only accepted
+    # when the current value is usable, and a number is only accepted when it is greater than zero -
+    # the validator refuses a delay of 0, because 0 means nobody ran MEASURE DELAY.
+    param([string]$Prompt, [string]$Current, [switch]$Number)
+    while ($true) {
+        $shown = $Current
+        if ([string]::IsNullOrWhiteSpace($shown) -or $shown -match 'FILL-ME') { $shown = '(empty)' }
+        Write-Host "  $Prompt"
+        Write-Host "    current: $shown" -ForegroundColor DarkGray
+        $answer = (Read-Host '    new value, or press Enter to keep it').Trim()
+        if ([string]::IsNullOrWhiteSpace($answer)) {
+            if ([string]::IsNullOrWhiteSpace($Current) -or $Current -match 'FILL-ME') {
+                Write-Host '    this one cannot stay empty' -ForegroundColor Yellow
+                continue
+            }
+            if ($Number) {
+                $kept = 0.0
+                $keptOk = [double]::TryParse($Current, [System.Globalization.NumberStyles]::Float,
+                    [System.Globalization.CultureInfo]::InvariantCulture, [ref]$kept)
+                if (-not ($keptOk -and $kept -gt 0)) {
+                    Write-Host '    this one must be a number greater than 0' -ForegroundColor Yellow
+                    continue
+                }
+            }
+            return $Current
+        }
+        if ($Number) {
+            $parsed = 0.0
+            $parsedOk = [double]::TryParse($answer, [System.Globalization.NumberStyles]::Float,
+                [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)
+            if (-not ($parsedOk -and $parsed -gt 0)) {
+                Write-Host '    type a number greater than 0: the ms MEASURE DELAY reported' -ForegroundColor Yellow
+                continue
+            }
+        }
+        return $answer
+    }
+}
+
+function Edit-WebcamRecord {
+    # Section 4 written by hand means editing JSON in Notepad, where one missing quote turns the whole
+    # record into "could not be read as JSON". This asks the questions the record needs, copies each
+    # picture into shots/ itself, and never touches the two approvals: art_approved and
+    # owner_approved are the owner's decision, not the machine's.
+    param([string]$Path, [string]$Folder)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "no webcam.json at $Path - run the script once without -FillWebcam so it can write the record first"
+    }
+    try { $record = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json }
+    catch { throw "webcam.json is not readable JSON ($_)" }
+    $shotsDir = Join-Path $Folder 'shots'
+    if (-not (Test-Path -LiteralPath $shotsDir)) {
+        New-Item -ItemType Directory -Path $shotsDir -Force | Out-Null
+    }
+
+    Write-Step 'Webcam record: answer each question; Enter keeps what is already there'
+    $operator = Read-Filled -Prompt 'Who is running this session (operator)?' -Current $record.operator
+    $mode = Read-Filled -Prompt 'Camera mode the app reports (e.g. 1280x720@60 MJPG)?' -Current $record.camera.mode
+    $device = Read-Filled -Prompt 'Which camera did you shoot the five scenarios with?' -Current $record.camera.device
+    $obs = ((Read-Filled -Prompt 'Did you test OBS Virtual Camera (true/false)?' -Current ([string]$record.camera.obs_virtual_camera)) -match '^(true|t|yes|y)$')
+    $delayAnswer = Read-Filled -Prompt 'Delay in ms that MEASURE DELAY reported?' -Current ([string]$record.measured_delay_ms) -Number
+
+    $files = @{}
+    $notes = @{}
+    foreach ($name in $Scenarios) {
+        Write-Host ''
+        Write-Host "  Scenario '$name'" -ForegroundColor Cyan
+        $current = $DefaultShotFiles[$name]
+        $currentNotes = ''
+        $entry = $record.scenarios.$name
+        if ($null -ne $entry) {
+            if ($entry.file) { $current = $entry.file }
+            if ($entry.notes) { $currentNotes = $entry.notes }
+        }
+        Write-Host "    it belongs at: $current"
+        $shot = (Read-Host '    path to the picture you took (Enter to keep the current one)').Trim()
+        if (-not ([string]::IsNullOrWhiteSpace($shot))) {
+            # A path pasted from Explorer's "Copy as path" arrives wrapped in quotes.
+            $shot = $shot.Trim('"').Trim()
+            if (-not (Test-Path -LiteralPath $shot)) {
+                Write-Host "    nothing at $shot - keeping $current" -ForegroundColor Yellow
+            }
+            else {
+                $extension = [System.IO.Path]::GetExtension($shot)
+                if ([string]::IsNullOrWhiteSpace($extension)) { $extension = '.png' }
+                $target = Join-Path $shotsDir ($name + $extension)
+                Copy-Item -LiteralPath $shot -Destination $target -Force
+                $current = 'shots/' + $name + $extension
+                Write-Host "    copied to $current"
+            }
+        }
+        $files[$name] = $current
+        $notes[$name] = Read-Filled -Prompt "What does '$name' show - or how did it fail?" -Current $currentNotes
+    }
+
+    $delay = [double]::Parse($delayAnswer, [System.Globalization.CultureInfo]::InvariantCulture)
+    Write-WebcamRecord -Path $Path -Operator $operator -GpuName $record.machine.gpu -GpuDriver $record.machine.driver `
+        -OsName $record.machine.os -Device $device -Mode $mode -Obs $obs -Files $files -Notes $notes -Delay $delay `
+        -ArtApproved ([bool]$record.art_approved) -OwnerApproved ([bool]$record.owner_approved)
+    Write-Note ("wrote $Path - the two approvals were left as they were")
 }
 
 function Get-RemainingWork {
@@ -303,7 +446,7 @@ if ($evidencePath.StartsWith($rootPath, [StringComparison]::OrdinalIgnoreCase)) 
 }
 
 # ---------------------------------------------------------------- adapter
-if (-not $ValidateOnly) {
+if (-not $ValidateOnly -and -not $FillWebcam) {
     Write-Step 'Adapter'
     $controllers = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -and $_.Name -notmatch 'Basic Render Driver|Basic Display' })
@@ -336,7 +479,7 @@ if (-not $ValidateOnly) {
 }
 
 # ---------------------------------------------------------------- probe
-if (-not $SkipProbe -and -not $ValidateOnly -and -not $WebcamOnly) {
+if (-not $SkipProbe -and -not $ValidateOnly -and -not $WebcamOnly -and -not $FillWebcam) {
     Write-Step 'Probe: 20 frames, to prove the adapter is a graphics card before a long run'
     $probeDir = Join-Path $env:TEMP ('keyflow-probe-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
     New-Item -ItemType Directory -Path $probeDir -Force | Out-Null
@@ -363,7 +506,7 @@ if (-not $SkipProbe -and -not $ValidateOnly -and -not $WebcamOnly) {
 }
 
 # ---------------------------------------------------------------- two tiers
-if (-not $ValidateOnly -and -not $WebcamOnly) {
+if (-not $ValidateOnly -and -not $WebcamOnly -and -not $FillWebcam) {
     foreach ($tier in $Tiers) {
         Write-Step "Tier $tier - $Frames frames per scene (default 8 ms / heavy 16 ms / ar 16 ms)"
         $report = Join-Path $evidencePath "bench-$tier.json"
@@ -398,8 +541,11 @@ if (-not $BenchOnly) {
         New-Item -ItemType Directory -Path $shotsDir -Force | Out-Null
     }
     $webcamPath = Join-Path $evidencePath 'webcam.json'
-    if ((Test-Path -LiteralPath $webcamPath) -and -not $Force) {
-        Write-Note "webcam.json exists; keeping the operator's notes and approvals (use -Force to rewrite it)"
+    if ($FillWebcam) {
+        Edit-WebcamRecord -Path $webcamPath -Folder $evidencePath
+    }
+    elseif ((Test-Path -LiteralPath $webcamPath) -and -not $Force) {
+        Write-Note "webcam.json exists; keeping the operator's notes and approvals (use -Force to rewrite it, or -FillWebcam to answer the questions instead)"
     }
     else {
         Write-Step 'Webcam record'
@@ -409,7 +555,15 @@ if (-not $BenchOnly) {
         if ([string]::IsNullOrWhiteSpace($adapterName)) { $adapterName = 'FILL-ME: adapter name' }
         if ([string]::IsNullOrWhiteSpace($adapterDriver)) { $adapterDriver = 'FILL-ME: driver version' }
         $cameras = @(Get-CameraName)
-        Write-WebcamRecord -Path $webcamPath -GpuName $adapterName -GpuDriver $adapterDriver -OsName $osName -Cameras $cameras
+        $device = 'FILL-ME: camera name, e.g. Logitech C920 / OBS Virtual Camera'
+        if ($cameras.Count -eq 1) { $device = $cameras[0] }
+        elseif ($cameras.Count -gt 1) { $device = 'FILL-ME: which camera? ' + ($cameras -join ' / ') }
+        $blankNotes = @{}
+        foreach ($name in $Scenarios) { $blankNotes[$name] = '' }
+        Write-WebcamRecord -Path $webcamPath -Operator 'FILL-ME: name of the person who ran this' `
+            -GpuName $adapterName -GpuDriver $adapterDriver -OsName $osName -Device $device `
+            -Mode 'FILL-ME: the mode the app picked, e.g. 1280x720@60 MJPG' -Obs $false `
+            -Files $DefaultShotFiles -Notes $blankNotes -Delay 0 -ArtApproved $false -OwnerApproved $false
         Write-Note ("wrote $webcamPath - machine fields came from this machine, the rest are FILL-ME")
         if ($cameras.Count -gt 0) { Write-Note ('cameras found: ' + ($cameras -join ' | ')) }
     }

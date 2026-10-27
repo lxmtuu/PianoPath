@@ -78,7 +78,31 @@ class ArHardwareBenchScript(unittest.TestCase):
     def test_the_record_it_writes_covers_every_scenario(self):
         for scenario in SCENARIOS:
             self.assertIn(f'shots/{scenario}.png', self.script)
-            self.assertIn(f'"{scenario}":', self.script)
+        # The written shape: one file and one note per scenario, built from the named list.
+        self.assertIn('"{0}": {{ "file": "{1}", "notes": "{2}" }}', self.script)
+        self.assertIn("foreach ($name in $Scenarios)", self.script)
+
+    def test_it_can_fill_the_record_in_by_asking_instead_of_hand_editing_json(self):
+        # Section 4 by hand means editing JSON in Notepad, where one missing quote turns the whole
+        # record unreadable. -FillWebcam asks the questions and copies the pictures itself.
+        self.assertIn("[switch]$FillWebcam", self.script)
+        self.assertIn("Edit-WebcamRecord -Path $webcamPath -Folder $evidencePath", self.script)
+        self.assertIn("Copy-Item -LiteralPath $shot -Destination $target -Force", self.script)
+        self.assertIn("$shot.Trim('\"')", self.script)
+
+    def test_a_note_typed_at_a_prompt_cannot_break_the_json(self):
+        self.assertIn("function ConvertTo-JsonText", self.script)
+        self.assertIn("$Value.Replace(", self.script)
+        self.assertIn("ConvertTo-JsonText -Value $Files[$name]", self.script)
+
+    def test_filling_the_record_in_never_answers_the_two_approvals(self):
+        # art_approved and owner_approved are the owner's; the fill-in passes them straight through.
+        self.assertIn("-ArtApproved ([bool]$record.art_approved)", self.script)
+        self.assertIn("-OwnerApproved ([bool]$record.owner_approved)", self.script)
+
+    def test_a_kept_delay_of_zero_is_refused_because_it_means_nobody_measured(self):
+        self.assertIn("$delayAnswer = Read-Filled", self.script)
+        self.assertIn("this one must be a number greater than 0", self.script)
 
     def test_unverified_machine_fields_are_placeholders_a_human_must_replace(self):
         self.assertIn("FILL-ME", self.script)
