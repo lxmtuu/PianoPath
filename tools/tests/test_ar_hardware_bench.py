@@ -86,6 +86,13 @@ class ArHardwareBenchScript(unittest.TestCase):
         self.assertIn("measured_delay_ms is still 0", self.script)
         self.assertIn("owner_approved is not true", self.script)
 
+    def test_it_names_the_fields_that_are_still_placeholders(self):
+        # After the first run most machine fields are filled from WMI, so a message that lists every
+        # possible placeholder sends the operator hunting through a file that is nearly done.
+        self.assertIn("webcam.json still has FILL-ME placeholders: ' + ($placeholders -join ', ')", self.script)
+        self.assertIn("$record.machine.$key", self.script)
+        self.assertIn("$record.camera.$key", self.script)
+
     def test_it_refuses_an_evidence_folder_on_a_drive_that_does_not_exist(self):
         # The first run on a machine with no D: died inside New-Item with "Cannot find drive", which
         # names no alternative and says nothing about evidence. The check names the drives it does have.

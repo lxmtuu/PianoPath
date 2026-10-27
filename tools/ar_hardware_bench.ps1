@@ -202,15 +202,25 @@ function Get-RemainingWork {
         return @($work)
     }
     $raw = Get-Content -LiteralPath $webcamPath -Raw
-    if ($raw -match 'FILL-ME') {
-        $work.Add('webcam.json still has FILL-ME placeholders (operator, camera device, camera mode)')
-    }
     try {
         $record = $raw | ConvertFrom-Json
     }
     catch {
         $work.Add("webcam.json is not readable JSON ($_)")
         return @($work)
+    }
+    # Name the fields that are still placeholders instead of listing every field the template has:
+    # the machine fields come from this machine, so after the first run only a couple are left.
+    $placeholders = New-Object System.Collections.Generic.List[string]
+    if ($record.operator -match 'FILL-ME') { $placeholders.Add('operator') }
+    foreach ($key in @('gpu', 'driver', 'os')) {
+        if ($record.machine.$key -match 'FILL-ME') { $placeholders.Add("machine.$key") }
+    }
+    foreach ($key in @('device', 'mode')) {
+        if ($record.camera.$key -match 'FILL-ME') { $placeholders.Add("camera.$key") }
+    }
+    if ($placeholders.Count -gt 0) {
+        $work.Add('webcam.json still has FILL-ME placeholders: ' + ($placeholders -join ', '))
     }
     foreach ($name in $Scenarios) {
         $entry = $record.scenarios.$name

@@ -6,6 +6,11 @@
 > hình phần mềm, không phải card đồ hoạ; camera trong `--bench-ar` là camera tổng hợp, không phải webcam.
 > `ArProjectedParameterBindings` trong `Stage/Effects/EffectContracts.cs` vẫn có `Recording` và `ArOverlay`
 > ở mức **`Unverified`**. Tài liệu này là **cái cần làm**, không phải biên bản đã làm.
+>
+> **Cập nhật 2026-10-27 — cổng 1 của §6 đã qua.** Hai report `warp: false` (Lite và Ultra) đo trên
+> card thật **NVIDIA GeForce RTX 4050 Laptop GPU, driver 32.0.16.1714** đều nằm hoàn toàn trong ngân
+> sách 8/16/16 ms; bằng chứng nằm ngoài repo tại `C:\keyflow-signoff\2026-10-27\`. Cổng 2 (năm kịch
+> bản webcam/OBS thật) và cổng 3 (chữ ký chủ repo) **vẫn CHƯA DUYỆT**.
 
 ## 1. Cái đã có và cái còn thiếu
 
@@ -16,7 +21,7 @@
 | Cổng fail-fast CI cho N17V / N17V-S | ✅ Xanh | `.github/workflows/build.yml`, hai step riêng + notice |
 | `--bench-tier=<Lite\|Standard\|Ultra>` | ✅ Có công tắc | `Diagnostics/FrameBenchmark.cs`; tier ghi vào `arTier` của JSON và dòng log |
 | Script gom/kiểm chứng bằng chứng | ✅ Có công cụ | `tools/ar_hardware_signoff.py`, tự kiểm bằng `--check` trên CI |
-| **p95 trên card đồ hoạ thật, 2 tier** | ❌ Chưa có | Không có report nào có `warp: false` |
+| **p95 trên card đồ hoạ thật, 2 tier** | ✅ Xanh (2026-10-27) | `C:\keyflow-signoff\2026-10-27\`: `warp: false`, Lite 2,997 / 2,646 / 3,040 ms, Ultra 3,026 / 3,030 / 3,024 ms (`default`/`heavy`/`ar` so với 8/16/16 ms) |
 | **Webcam thật / OBS Virtual Camera** | ❌ Chưa có | Chưa có ảnh, video hay biên bản 5 kịch bản |
 | **Duyệt mỹ thuật** | ❌ Chưa có | Chủ repo chưa ký |
 | **Lật `Unverified` → `Applied`** | ❌ Chưa được phép | Cần đủ (2)+(3)+chữ ký chủ repo, xem §6 |
