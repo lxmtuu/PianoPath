@@ -32,7 +32,8 @@ param(
     [string]$Exe = '',
 
     # Folder bench-Lite.json, bench-Ultra.json, webcam.json and shots/ go into. It is deliberately
-    # outside the repository: evidence photos and videos are not committed (section 2).
+    # outside the repository: evidence photos and videos are not committed (section 2). Defaults to
+    # D:\keyflow-signoff\<today>, or <home>\keyflow-signoff\<today> when this machine has no D: drive.
     [string]$EvidenceDir = '',
 
     # Substring of the adapter to measure on. Required in practice on a hybrid laptop, and resolved
@@ -231,7 +232,25 @@ if ([string]::IsNullOrWhiteSpace($Exe)) {
     $Exe = [System.IO.Path]::Combine($repoRoot, 'bin', 'Release', 'net10.0-windows', 'PianoPath.exe')
 }
 if ([string]::IsNullOrWhiteSpace($EvidenceDir)) {
-    $EvidenceDir = Join-Path 'D:\keyflow-signoff' (Get-Date -Format 'yyyy-MM-dd')
+    # The runbook suggests D:\keyflow-signoff\<date>. Most machines have no D: at all - the first run
+    # of this script died on "Cannot find drive. A drive with the name 'D' does not exist" - so the
+    # default falls back to the user's own profile folder, which exists everywhere and is still
+    # outside the repository. Pass -EvidenceDir to put it anywhere else.
+    $defaultRoot = 'D:\keyflow-signoff'
+    if (-not (Test-Path -LiteralPath ([System.IO.Path]::GetPathRoot($defaultRoot)))) {
+        $defaultRoot = Join-Path $HOME 'keyflow-signoff'
+        Write-Warning "no D: drive on this machine, so the evidence folder defaults to $defaultRoot"
+    }
+    $EvidenceDir = Join-Path $defaultRoot (Get-Date -Format 'yyyy-MM-dd')
+}
+# A typed -EvidenceDir on a drive that does not exist is an operator mistake, not something to fix
+# silently: New-Item would fail three lines further down with a message that names no alternative.
+$evidenceRoot = [System.IO.Path]::GetPathRoot($EvidenceDir)
+if ($evidenceRoot -and -not (Test-Path -LiteralPath $evidenceRoot)) {
+    $drives = @(Get-PSDrive -PSProvider FileSystem | ForEach-Object { $_.Name + ':' } | Sort-Object)
+    $firstRoot = (Get-PSDrive -PSProvider FileSystem | Select-Object -First 1).Root
+    $suggested = Join-Path (Join-Path $firstRoot 'keyflow-signoff') (Get-Date -Format 'yyyy-MM-dd')
+    throw "the evidence folder starts with $evidenceRoot, and this machine has no such drive (it has: $($drives -join ' ')). Pass -EvidenceDir '$suggested' or another folder on a drive that exists"
 }
 if (-not (Test-Path -LiteralPath $Exe)) {
     throw "no build at $Exe - run 'dotnet build -c Release' from the commit being signed off first (section 2)"
@@ -245,6 +264,7 @@ catch {
     # A drive that does not exist yet has no resolved form. New-Item creates it below or fails loudly.
 }
 New-Item -ItemType Directory -Path $evidencePath -Force | Out-Null
+Write-Note ("evidence folder: $evidencePath")
 $rootPath = (Resolve-Path -LiteralPath $repoRoot).Path
 if ($evidencePath.StartsWith($rootPath, [StringComparison]::OrdinalIgnoreCase)) {
     Write-Warning "the evidence folder is inside the repository ($evidencePath); section 2 keeps photos and videos out of it"

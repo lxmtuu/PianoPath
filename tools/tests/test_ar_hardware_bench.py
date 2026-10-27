@@ -86,6 +86,19 @@ class ArHardwareBenchScript(unittest.TestCase):
         self.assertIn("measured_delay_ms is still 0", self.script)
         self.assertIn("owner_approved is not true", self.script)
 
+    def test_it_refuses_an_evidence_folder_on_a_drive_that_does_not_exist(self):
+        # The first run on a machine with no D: died inside New-Item with "Cannot find drive", which
+        # names no alternative and says nothing about evidence. The check names the drives it does have.
+        self.assertIn("[System.IO.Path]::GetPathRoot($EvidenceDir)", self.script)
+        self.assertIn("this machine has no such drive", self.script)
+        self.assertIn("Get-PSDrive -PSProvider FileSystem", self.script)
+        self.assertIn("Pass -EvidenceDir '", self.script)
+
+    def test_the_default_evidence_folder_falls_back_instead_of_dying_on_a_missing_d_drive(self):
+        self.assertIn("$defaultRoot = 'D:\\keyflow-signoff'", self.script)
+        self.assertIn("Join-Path $HOME 'keyflow-signoff'", self.script)
+        self.assertIn("no D: drive on this machine", self.script)
+
     def test_the_script_is_ascii_so_any_windows_code_page_reads_it_the_same(self):
         non_ascii = sorted({character for character in self.script if ord(character) > 127})
         self.assertEqual([], non_ascii)
