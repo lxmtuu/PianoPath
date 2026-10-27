@@ -59,7 +59,21 @@ Không đợt nào tự lật binding. Lật cần **(1)+(2)+GPU thật+2 tier+c
 - Không trình bày hai giá trị cho cùng một ảnh là hai kết quả độc lập — `mid` phải là ảnh thứ ba.
 - Mỗi tờ có `manifest.json` với `Value`, `Choice`, `ArChanged`, `Demand/Quads` như N17, để người đọc tự đếm.
 
-## 6. Liên hệ với bench
+## 6. N18-HW — kit duyệt phần cứng (chưa có kết quả)
+
+> **2026-10-27 — sau khi PR #77 merge vào `main` (`4657ab8`).** Ma trận **32 cột / 17 family / 128 khung AR
+> + 24 khung Stage** vẫn là bằng chứng **WARP**, không phải GPU thật. Công việc tiếp theo không phải mở rộng
+> ma trận mà là đóng khoảng cách phần cứng: thêm `--bench-tier=<Lite|Standard|Ultra>` vào
+> `Diagnostics/FrameBenchmark.cs` (tier đi vào `settings.ArQuality`, `GpuArInput.Quality`, `arTier` của JSON
+> và dòng log; baseline khác tier không được đem so), viết `docs/AR-HARDWARE-SIGNOFF.md`, và
+> `tools/ar_hardware_signoff.py` để gom/kiểm chứng **hai report `warp: false`** cùng năm kịch bản webcam/OBS.
+> `tools/hardware_signoff_contract.py` khoá toàn bộ sợi dây này trong `check_sources.py`, và CI có step
+> `AR hardware sign-off kit (N18-HW)` riêng trên fast lane — step đó **chỉ đọc text**, không render khung nào.
+> Guard cũng khoá `ArProjectedParameterBindings` ở `Unverified` cho `Recording`/`ArOverlay`: lật sang
+> `Applied` cần (1) 2 tier trên card thật trong ngân sách 8/16/16 ms, (2) webcam/OBS thật đủ 5 kịch bản,
+> (3) chữ ký của cậu. **Chưa có số đo nào trong ba mục đó.**
+
+## 7. Liên hệ với bench
 
 Ma trận giá trị không thay thế bench. Pilot 24 khung trên WARP không nói gì về p95 trên RTX. Bench `docs/AR-CAP-192-DECISION.md` §3 vẫn là cổng trước khi nâng trần — dù có ma trận hay không.
 

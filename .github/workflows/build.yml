@@ -55,6 +55,28 @@ jobs:
           node tools/check_damper_light.cjs
           node tools/check_particle_motion_lab.cjs
 
+      # N18-HW is the *kit* for a hardware sign-off, not the sign-off itself. Both commands read text
+      # only: --check exercises the evidence validator against synthetic reports, and the contract
+      # keeps the flag, the JSON, the runbook, the READMEs and the binding state in step. Running them
+      # here means a broken two-tier switch turns the fast lane red before any Windows/GPU job starts.
+      # Neither command renders a frame, so this is not physical-GPU or webcam evidence.
+      - name: AR hardware sign-off kit (N18-HW)
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'ar-hardware-signoff.log'
+          python3 tools/ar_hardware_signoff.py --check 2>&1 | Tee-Object -FilePath $log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python3 tools/hardware_signoff_contract.py 2>&1 | Tee-Object -FilePath $log -Append
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # A literal '-like PASS ...*' here would be picked up by check_sources.py's N17 notice guard,
+          # which searches the whole workflow for the first such pattern. Keep this step's prefix in a
+          # variable so the N17 annotation keeps matching the line its own suite prints.
+          $pass = 'PASS AR hardware sign-off kit (N18-HW)*'
+          Get-Content $log | ForEach-Object {
+            if ($_ -like 'FAIL*') { "::error title=N18-HW hardware sign-off kit::$_" }
+            elseif ($_ -like $pass) { "::notice title=N18-HW hardware sign-off kit::$_" }
+          }
+
       # Input-fixture validation only; does not claim Windows/GPU/AR render evidence.
       - name: Prism Flow baseline input checks
         if: >-

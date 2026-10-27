@@ -517,4 +517,45 @@ public class FrameBudgetTests
         Assert.DoesNotContain("camera:", lines.Single(line => line.Contains("default 1920×1080", StringComparison.Ordinal)), StringComparison.Ordinal);
         Assert.All(lines, line => Assert.Matches("^(NOTE|PASS|WARN|FAIL) perf: ", line));
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // --bench-tier: the tier is part of the evidence, not a note beside it
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void The_tier_travels_through_the_json_and_a_report_without_one_reads_as_standard()
+    {
+        var lite = new FrameBenchRun { ArTier = "Lite", Scenes = [new FrameBenchReport { Scene = "ar", ArTier = "Lite", Width = 1920, Height = 1080, Stats = FrameStats.From([9]) }] };
+        var json = lite.ToJson();
+        Assert.Contains("\"arTier\": \"Lite\"", json, StringComparison.Ordinal);
+        Assert.True(FrameBenchRun.TryParse(json, out var reread));
+        Assert.Equal("Lite", reread.ArTier);
+        Assert.Equal("Lite", reread.Scene("ar")!.ArTier);
+        // A report written before the flag existed has neither field. Both levels must still read as
+        // Standard, so a cached baseline does not turn into "no baseline" the day the flag ships.
+        var old = json.Replace("\"arTier\": \"Lite\",", "", StringComparison.Ordinal);
+        Assert.True(FrameBenchRun.TryParse(old, out var legacy));
+        Assert.Equal("Standard", legacy.ArTier);
+        Assert.Equal("Standard", legacy.Scene("ar")!.ArTier);
+    }
+
+    [Fact]
+    public void A_lite_baseline_is_not_compared_with_an_ultra_run()
+    {
+        var before = Run(false, Scene("default", 60));
+        var lite = new FrameBenchRun { ArTier = "Lite", Scenes = [Scene("default", 60)] };
+        var ultra = new FrameBenchRun { ArTier = "Ultra", Scenes = [Scene("default", 60)] };
+        Assert.Equal(FrameTrend.Unknown, ultra.Compare(lite, ultra.Scene("default")!).Trend);
+        // Same tier is still comparable: the check must not disable the relative gate by accident.
+        Assert.Equal(FrameTrend.Steady, ultra.Compare(new FrameBenchRun { ArTier = "Ultra", Scenes = [Scene("default", 60)] }, ultra.Scene("default")!).Trend);
+        // A legacy Standard baseline against a legacy Standard run is the case CI actually carries.
+        Assert.Equal(FrameTrend.Steady, before.Compare(Run(false, Scene("default", 60)), before.Scene("default")!).Trend);
+    }
+
+    [Fact]
+    public void The_machine_line_names_the_tier_the_run_was_measured_at()
+    {
+        var lines = new FrameBenchRun { ArTier = "Ultra", Scenes = [Scene("default", 60)] }.LogLines(null);
+        Assert.Contains("AR tier Ultra", lines[0], StringComparison.Ordinal);
+    }
 }

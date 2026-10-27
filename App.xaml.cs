@@ -31,7 +31,11 @@ public partial class App : Application
         // one took, so a frame budget is judged by a measurement instead of by feel. It opens no window — the
         // render loop, the simulation and the read-back are the whole of what is being measured.
         // See Diagnostics/FrameBenchmark.cs and the frame budgets in Diagnostics/FrameBudget.cs.
-        if (e.Args.Contains("--bench") || e.Args.Contains("--bench-ar") || e.Args.Any(argument => argument.StartsWith("--bench=", StringComparison.Ordinal)))
+        // --bench-tier=<Lite|Standard|Ultra> is a switch of the same gate: alone it measures the AR scene
+        // at that tier, so it has to reach FrameBenchmark.Run too and not open the main window by accident.
+        if (e.Args.Contains("--bench") || e.Args.Contains("--bench-ar")
+            || e.Args.Any(argument => argument.StartsWith("--bench=", StringComparison.Ordinal)
+                || argument.StartsWith("--bench-tier=", StringComparison.Ordinal)))
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             Shutdown(FrameBenchmark.Run(e.Args));
