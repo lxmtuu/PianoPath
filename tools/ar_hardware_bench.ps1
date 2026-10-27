@@ -177,7 +177,8 @@ function Write-WebcamRecord {
     # parameter; the two approvals are written back exactly as they were given.
     param(
         [string]$Path, [string]$Operator, [string]$GpuName, [string]$GpuDriver, [string]$OsName,
-        [string]$Device, [string]$Mode, [bool]$Obs, [hashtable]$Files, [hashtable]$Notes,
+        [string]$Device, [string]$Mode, [bool]$Obs, [string]$ObsToggleNotes, [string]$SameNamePairNotes,
+        [hashtable]$Files, [hashtable]$Notes,
         [double]$Delay, [bool]$ArtApproved, [bool]$OwnerApproved)
 
     $scenarioLines = @()
@@ -193,6 +194,8 @@ function Write-WebcamRecord {
     $osText = ConvertTo-JsonText -Value $OsName
     $deviceText = ConvertTo-JsonText -Value $Device
     $modeText = ConvertTo-JsonText -Value $Mode
+    $obsToggleText = ConvertTo-JsonText -Value $ObsToggleNotes
+    $sameNamePairText = ConvertTo-JsonText -Value $SameNamePairNotes
     $obsText = 'false'
     if ($Obs) { $obsText = 'true' }
     $artText = 'false'
@@ -212,7 +215,9 @@ function Write-WebcamRecord {
   "camera": {
     "device": "$deviceText",
     "mode": "$modeText",
-    "obs_virtual_camera": $obsText
+    "obs_virtual_camera": $obsText,
+    "obs_toggle_notes": "$obsToggleText",
+    "same_name_pair_notes": "$sameNamePairText"
   },
   "scenarios": {
 $scenarioBlock
@@ -292,6 +297,12 @@ function Edit-WebcamRecord {
     $mode = Read-Filled -Prompt 'Camera mode the app reports (e.g. 1280x720@60 MJPG)?' -Current $record.camera.mode
     $device = Read-Filled -Prompt 'Which camera did you shoot the five scenarios with?' -Current $record.camera.device
     $obs = ((Read-Filled -Prompt 'Did you test OBS Virtual Camera (true/false)?' -Current ([string]$record.camera.obs_virtual_camera)) -match '^(true|t|yes|y)$')
+    # The last two questions of section 4 carry no picture, so the record is their only home. Both
+    # are asked as free text on purpose: a check that failed has to say how, not just stay false.
+    $obsToggle = Read-Filled -Prompt 'What happened when OBS Virtual Camera was switched on and off while the app was open?' `
+        -Current ([string]$record.camera.obs_toggle_notes)
+    $sameNamePair = Read-Filled -Prompt 'What happened with the second camera of the same name (the one Windows calls (2))?' `
+        -Current ([string]$record.camera.same_name_pair_notes)
     $delayAnswer = Read-Filled -Prompt 'Delay in ms that MEASURE DELAY reported?' -Current ([string]$record.measured_delay_ms) -Number
 
     $files = @{}
@@ -329,7 +340,8 @@ function Edit-WebcamRecord {
 
     $delay = [double]::Parse($delayAnswer, [System.Globalization.CultureInfo]::InvariantCulture)
     Write-WebcamRecord -Path $Path -Operator $operator -GpuName $record.machine.gpu -GpuDriver $record.machine.driver `
-        -OsName $record.machine.os -Device $device -Mode $mode -Obs $obs -Files $files -Notes $notes -Delay $delay `
+        -OsName $record.machine.os -Device $device -Mode $mode -Obs $obs -ObsToggleNotes $obsToggle `
+        -SameNamePairNotes $sameNamePair -Files $files -Notes $notes -Delay $delay `
         -ArtApproved ([bool]$record.art_approved) -OwnerApproved ([bool]$record.owner_approved)
     Write-Note ("wrote $Path - the two approvals were left as they were")
 }
@@ -383,6 +395,14 @@ function Get-RemainingWork {
     }
     if (-not $record.measured_delay_ms -or $record.measured_delay_ms -le 0) {
         $work.Add('measured_delay_ms is still 0 - run MEASURE DELAY in the app and put the number here')
+    }
+    # Section 4's two picture-less checks are not scenarios, so nothing else in this script would
+    # notice that they were never written down. They are listed here as their own remaining work.
+    if ([string]::IsNullOrWhiteSpace([string]$record.camera.obs_toggle_notes) -or $record.camera.obs_toggle_notes -match 'FILL-ME') {
+        $work.Add('camera.obs_toggle_notes is still empty - say what happened when OBS Virtual Camera was switched while the app was open')
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$record.camera.same_name_pair_notes) -or $record.camera.same_name_pair_notes -match 'FILL-ME') {
+        $work.Add('camera.same_name_pair_notes is still empty - say what happened with the second same-name camera, the one Windows calls (2)')
     }
     if ($record.art_approved -ne $true) {
         $work.Add('art_approved is not true - the owner reviews the shots first')
@@ -563,6 +583,8 @@ if (-not $BenchOnly) {
         Write-WebcamRecord -Path $webcamPath -Operator 'FILL-ME: name of the person who ran this' `
             -GpuName $adapterName -GpuDriver $adapterDriver -OsName $osName -Device $device `
             -Mode 'FILL-ME: the mode the app picked, e.g. 1280x720@60 MJPG' -Obs $false `
+            -ObsToggleNotes 'FILL-ME: what happened when OBS Virtual Camera was switched while the app was open' `
+            -SameNamePairNotes 'FILL-ME: what happened with the second same-name camera, the one Windows calls (2)' `
             -Files $DefaultShotFiles -Notes $blankNotes -Delay 0 -ArtApproved $false -OwnerApproved $false
         Write-Note ("wrote $webcamPath - machine fields came from this machine, the rest are FILL-ME")
         if ($cameras.Count -gt 0) { Write-Note ('cameras found: ' + ($cameras -join ' | ')) }

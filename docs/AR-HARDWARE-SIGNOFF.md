@@ -80,8 +80,12 @@ Chụp **ảnh hoặc video** cho mỗi kịch bản vào `$dir\shots\`, rồi �
 | `hand_occlusion` | Hiệu ứng không vẽ đè sai lên tay người chơi | Đặt tay lên phím đang có nốt/impact |
 
 Ngoài năm kịch bản: bật/tắt **OBS Virtual Camera** trong lúc app đang mở, thử **hai webcam cùng tên** (hậu tố
-`(2)`), và đo độ trễ bằng **MEASURE DELAY** rồi lưu số ms vào `webcam.json`. Ghi rõ kết quả dù xấu —
-một kịch bản hỏng là dữ liệu, không phải lý do để bỏ qua nó.
+`(2)`), và đo độ trễ bằng **MEASURE DELAY** rồi lưu số ms vào `webcam.json`. Hai kiểm tra đầu không có ảnh
+nên `webcam.json` chính là nơi duy nhất chúng được ghi: kết quả nằm ở `camera.obs_toggle_notes` và
+`camera.same_name_pair_notes`, và **`tools/ar_hardware_signoff.py` từ chối biên bản thiếu hai ô đó** —
+không có chỗ ghi thì kiểm tra có thể bị bỏ qua mà `--evidence` vẫn in PASS. Ghi rõ kết quả dù xấu —
+một kịch bản hỏng là dữ liệu, không phải lý do để bỏ qua nó. `-FillWebcam` hỏi thẳng hai câu đó,
+còn `-ValidateOnly` báo lại từng ô còn trống.
 
 ## 5. Cấu trúc thư mục bằng chứng
 
@@ -101,7 +105,9 @@ một kịch bản hỏng là dữ liệu, không phải lý do để bỏ qua n
   "camera": {
     "device": "Logitech C920 / OBS Virtual Camera",
     "mode": "1280x720@60 MJPG",
-    "obs_virtual_camera": true
+    "obs_virtual_camera": true,
+    "obs_toggle_notes": "tắt/bật hai lần khi app đang mở, overlay vẫn vẽ",
+    "same_name_pair_notes": "thiết bị (2) mở ra khung đen, giữ thiết bị đầu"
   },
   "scenarios": {
     "overhead":       { "file": "shots/overhead.png",       "notes": "" },

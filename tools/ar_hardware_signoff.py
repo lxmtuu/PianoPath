@@ -91,6 +91,14 @@ def _webcam_errors(root, record):
             errors.append(f"webcam.json camera.{key} is empty")
     if not isinstance(camera.get("obs_virtual_camera"), bool):
         errors.append("webcam.json camera.obs_virtual_camera must be true or false")
+    # Section 4 asks for two more checks than it has scenarios, and neither one carries a picture:
+    # switching OBS Virtual Camera while the app is open, and the second camera Windows enumerates
+    # under the same name with a '(2)' suffix. Both are recorded as a written result instead of a
+    # pass/fail flag, because a check that failed still has to say so - only silence is refused.
+    for key, what in (("obs_toggle_notes", "switching OBS Virtual Camera while the app was open"),
+                      ("same_name_pair_notes", "the second same-name camera (the '(2)' device)")):
+        if not isinstance(camera.get(key), str) or not camera[key].strip():
+            errors.append(f"webcam.json camera.{key} has no written result for {what}; section 4 records it either way")
     delay = record.get("measured_delay_ms")
     if not isinstance(delay, (int, float)) or isinstance(delay, bool) or delay <= 0:
         errors.append("webcam.json measured_delay_ms must be the positive number MEASURE DELAY reported")
@@ -168,7 +176,9 @@ def _synthetic(root):
         }, indent=2), encoding="utf-8")
     (root / "webcam.json").write_text(json.dumps({
         "operator": "synthetic", "machine": {"gpu": "RTX 4050", "driver": "560.94", "os": "Windows 11"},
-        "camera": {"device": "C920 / OBS", "mode": "1280x720@60 MJPG", "obs_virtual_camera": True},
+        "camera": {"device": "C920 / OBS", "mode": "1280x720@60 MJPG", "obs_virtual_camera": True,
+                  "obs_toggle_notes": "switched off and on twice with the app open; the overlay kept drawing",
+                  "same_name_pair_notes": "the (2) device opened a black frame, so the first one was kept"},
         "scenarios": {name: {"file": f"shots/{name}.png", "notes": "synthetic check"} for name in SCENARIOS},
         "measured_delay_ms": 85, "art_approved": False, "owner_approved": False,
     }, indent=2), encoding="utf-8")
@@ -206,6 +216,10 @@ def self_check():
     case("a missing webcam record is caught", lambda root: (root / "webcam.json").unlink(), "webcam.json is missing")
     case("a missing scenario shot is caught", lambda root: (root / "shots/fisheye.png").unlink(), "fisheye")
     case("an unmeasured delay is caught", lambda root: _webcam_patch(root, measured_delay_ms=0), "measured_delay_ms")
+    case("an untold OBS toggle is caught", lambda root: _camera_patch(root, obs_toggle_notes="  "),
+         "camera.obs_toggle_notes")
+    case("an untold same-name pair is caught", lambda root: _camera_patch(root, same_name_pair_notes=""),
+         "camera.same_name_pair_notes")
     for label, hit, problems in cases:
         print(f"  {'PASS' if hit else 'FAIL'} self-check: {label}" + ("" if hit else f" ({problems})"))
         if not hit:
@@ -226,6 +240,13 @@ def _patch(root, name, **fields):
 
 def _webcam_patch(root, **fields):
     _patch(root, "webcam.json", **fields)
+
+
+def _camera_patch(root, **fields):
+    path = root / "webcam.json"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc["camera"].update(fields)
+    path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
 
 
 def _scene_patch(root, name, scene, p95=None, camera=False):

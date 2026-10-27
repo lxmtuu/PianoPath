@@ -154,6 +154,25 @@ class ArHardwareBenchScript(unittest.TestCase):
     def test_the_runbook_points_at_it(self):
         self.assertIn("tools/ar_hardware_bench.ps1", self.runbook)
 
+    def test_the_two_checks_that_carry_no_picture_have_a_home_in_the_record(self):
+        # Section 4 demands three checks beyond the five scenarios. Two of them produce no photo,
+        # so webcam.json is the only place they can exist: without a field the operator can skip
+        # them and ar_hardware_signoff.py still prints PASS, and without a prompt nobody is ever
+        # asked. Both the writer and the remaining-work report have to carry them.
+        for key in ("obs_toggle_notes", "same_name_pair_notes"):
+            self.assertIn(f'"{key}"', self.script)
+            self.assertIn(f"camera.{key} is still empty", self.script)
+            self.assertIn(f"$record.camera.{key}", self.script)
+            self.assertIn(key, self.runbook)
+        # Written once, in one place: template, prompt and pass-through all use the same parameters.
+        self.assertIn("-ObsToggleNotes $obsToggle", self.script)
+        self.assertIn("-SameNamePairNotes $sameNamePair", self.script)
+        self.assertIn("-ObsToggleNotes 'FILL-ME", self.script)
+        self.assertIn("-SameNamePairNotes 'FILL-ME", self.script)
+        # Both are asked as free text, because a check that failed has to say how it failed.
+        self.assertIn("while the app was open", self.script)
+        self.assertIn("the one Windows calls (2)", self.script)
+
 
 if __name__ == "__main__":
     unittest.main()
