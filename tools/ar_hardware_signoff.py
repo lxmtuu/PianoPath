@@ -5,8 +5,10 @@ This CLI reads ``bench-Lite.json`` and ``bench-Ultra.json`` (the reports ``--ben
 plus the human ``webcam.json`` record, and prints one PASS or FAIL line per condition. It writes an
 optional JSON summary when asked. It does not draw, does not launch a GUI, does not assert anything
 about art quality, and never edits ``Stage/Effects/EffectContracts.cs``: flipping a binding is a human
-decision described in ``docs/AR-HARDWARE-SIGNOFF.md``. ``--check`` runs the same validator against
-synthetic evidence in a temporary folder, so CI can prove the gate still works without a graphics card.
+decision described in ``docs/AR-HARDWARE-SIGNOFF.md``. A record that still holds the runner's
+``FILL-ME`` template is refused, so ``--evidence`` cannot print PASS on a folder nobody has filled in.
+``--check`` runs the same validator against synthetic evidence in a temporary folder, so CI can prove
+the gate still works without a graphics card.
 """
 import argparse
 import json
@@ -18,6 +20,8 @@ TIERS = ("Lite", "Ultra")
 # The budgets FrameBudget.All writes. Pinned here so a hand-edited report cannot loosen its own gate.
 BUDGETS = {"default": 8.0, "heavy": 16.0, "ar": 16.0}
 SCENARIOS = ("overhead", "fisheye", "low_light", "fast_motion", "hand_occlusion")
+# ar_hardware_bench.ps1 writes this into every field it cannot fill from the machine itself.
+PLACEHOLDER = "FILL-ME"
 PASS = "PASS AR hardware sign-off kit (N18-HW)"
 
 
@@ -33,6 +37,21 @@ def _load(path):
 
 def _scene(report, name):
     return next((scene for scene in report.get("scenes", []) if scene.get("scene") == name), None)
+
+
+def _unfilled(value):
+    """True when a field still holds the runner's template instead of a person's answer.
+
+    ``FILL-ME: ...`` is a non-empty string, so the blank checks alone cannot see it. Section 5 tells
+    the operator to run ``--evidence`` on its own - without ``-ValidateOnly`` to warn them first - so
+    without this the command would print PASS on a record nobody has filled in yet.
+    """
+    return isinstance(value, str) and PLACEHOLDER in value.upper()
+
+
+def _unfilled_error(field):
+    return (f"webcam.json {field} still says {PLACEHOLDER}; the runner fills in what this machine knows "
+            "and leaves the rest to a person, so the record is not evidence yet")
 
 
 def _report_errors(report, tier):
@@ -81,14 +100,20 @@ def _webcam_errors(root, record):
     errors = []
     if not isinstance(record.get("operator"), str) or not record["operator"].strip():
         errors.append("webcam.json has no operator")
+    elif _unfilled(record["operator"]):
+        errors.append(_unfilled_error("operator"))
     machine = record.get("machine") or {}
     for key in ("gpu", "driver", "os"):
         if not isinstance(machine.get(key), str) or not machine[key].strip():
             errors.append(f"webcam.json machine.{key} is empty")
+        elif _unfilled(machine[key]):
+            errors.append(_unfilled_error(f"machine.{key}"))
     camera = record.get("camera") or {}
     for key in ("device", "mode"):
         if not isinstance(camera.get(key), str) or not camera[key].strip():
             errors.append(f"webcam.json camera.{key} is empty")
+        elif _unfilled(camera[key]):
+            errors.append(_unfilled_error(f"camera.{key}"))
     if not isinstance(camera.get("obs_virtual_camera"), bool):
         errors.append("webcam.json camera.obs_virtual_camera must be true or false")
     # Section 4 asks for two more checks than it has scenarios, and neither one carries a picture:
@@ -99,6 +124,8 @@ def _webcam_errors(root, record):
                       ("same_name_pair_notes", "the second same-name camera (the '(2)' device)")):
         if not isinstance(camera.get(key), str) or not camera[key].strip():
             errors.append(f"webcam.json camera.{key} has no written result for {what}; section 4 records it either way")
+        elif _unfilled(camera[key]):
+            errors.append(_unfilled_error(f"camera.{key}"))
     delay = record.get("measured_delay_ms")
     if not isinstance(delay, (int, float)) or isinstance(delay, bool) or delay <= 0:
         errors.append("webcam.json measured_delay_ms must be the positive number MEASURE DELAY reported")
@@ -124,6 +151,11 @@ def _webcam_errors(root, record):
         note = entry.get("notes")
         if not isinstance(note, str) or not note.strip():
             errors.append(f"scenario '{name}' has no notes; a failed scenario still needs a written result")
+        elif _unfilled(note):
+            # The template text is a note like any other to the duplicate check below, so it has to be
+            # refused before it is counted: five identical template notes already trip that rule, but
+            # a single unfilled one would sail through it.
+            errors.append(_unfilled_error(f"scenarios.{name}.notes"))
         else:
             noted.setdefault(note.strip().casefold(), []).append(name)
     for shot, names in shared.items():
@@ -256,6 +288,12 @@ def self_check():
          "camera.obs_toggle_notes")
     case("an untold same-name pair is caught", lambda root: _camera_patch(root, same_name_pair_notes=""),
          "camera.same_name_pair_notes")
+    case("a record still holding the FILL-ME template is refused",
+         lambda root: _webcam_patch(root, operator="FILL-ME: name of the person who ran this"),
+         "operator still says FILL-ME")
+    case("an unanswered scenario note is refused",
+         lambda root: _scenario_patch(root, "low_light", "FILL-ME"),
+         "scenarios.low_light.notes still says FILL-ME")
     for label, hit, problems in cases:
         print(f"  {'PASS' if hit else 'FAIL'} self-check: {label}" + ("" if hit else f" ({problems})"))
         if not hit:
@@ -299,6 +337,13 @@ def _camera_patch(root, **fields):
     path = root / "webcam.json"
     doc = json.loads(path.read_text(encoding="utf-8"))
     doc["camera"].update(fields)
+    path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+
+
+def _scenario_patch(root, name, notes):
+    path = root / "webcam.json"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc["scenarios"][name]["notes"] = notes
     path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
 
 

@@ -58,6 +58,16 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
   choosing the prettier one.
 - **Full lifecycle matrix for 17 families (N17L full).** `--verify-ar-lifecycle-only` extends the 6-frame pilot to **78 frames** in `ar-lifecycle/` (9 sheets, one per milestone): Held 8×2 (0.40 s/1.00 s), Approach 3×2 (0.25 s/0.50 s), Impact 5×3 (0.05 s/0.20 s/0.35 s), Release 1×2 (0.40 s/0.60 s), each milestone off↔on at same pose/camera/seed `ar-oblique` WARP. Gates ≥12 px for T0/T1; T2 `impact.flash` may be <12 px because flash only lives 0.26 s (expired), other families must still draw (quads>0, ≥500 px over camera). This is a **page**, not a binding flip — 6-frame pilot already green, full 78 deferred from the full suite (stack overflow with 51+9+12+6+78 together) and isolated-only until RTX 4050 bench shows p95 < 16 ms budget remains.
 - **Three stage columns for the same question, but without the 192 cap.** `--verify-stage-effect-only` re-shoots `particles.wisps` / `particles.flames` / `particles.sparks` on the **Live Stage** (same timing/seed/one-family-per-column, but drawn through the `GpuStageRenderer` stage path, cap **24,000** so `demand == quads` at both ends). On stage, `WispAmount` 150 yields **480/480** alive/drawn and `ParticleAmount` 120 yields **264/264**, and the off-to-far pixel deltas grow into the **thousands** (no longer clipped at the AR 85 px / 1,775 px). Both measurements are true: AR reports **cap**, stage reports **slider still alive**, and neither proposes raising the AR cap.
+- **The AR hardware sign-off kit (N18-HW) no longer prints PASS on a record nobody filled in.** The runner
+  writes `FILL-ME: …` into every field it cannot know by itself, while `tools/ar_hardware_signoff.py` only
+  checked for non-empty strings — so running `--evidence` on its own (which section 5 tells the operator to do)
+  printed PASS while `operator`, `camera.device`, `camera.mode` or a scenario's `notes` still held the template
+  sentence. Every value still saying `FILL-ME` is now refused, with a sixteenth and seventeenth self-check case
+  and a token in `hardware_signoff_contract.py` so dropping that guard turns the fast lane red. Section 4 also
+  gained a home for its two picture-less checks — switching OBS Virtual Camera while the app is open, and the
+  same-name `(2)` camera — in `camera.obs_toggle_notes` and `camera.same_name_pair_notes`, both required to say
+  something. This is still a **kit**: it produces no hardware evidence, gates 2 and 3 stay unapproved, and
+  `ArProjectedParameterBindings` stays `Unverified`.
 
 ## 2.2.0 — 2026-10-18
 

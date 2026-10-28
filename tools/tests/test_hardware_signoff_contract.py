@@ -81,6 +81,7 @@ RUNBOOK = '''
 ngân sách 8/16/16 ms, `webcam.json`, OBS Virtual Camera, `Unverified`, `owner_approved`.
 Chạy `tools/ar_hardware_signoff.py --evidence <dir>` rồi `--check`.
 Hai kiểm tra không có ảnh ghi vào `camera.obs_toggle_notes` và `camera.same_name_pair_notes`.
+Biên bản còn `FILL-ME` thì bị từ chối.
 
 | Kịch bản | Yêu cầu |
 | --- | --- |
@@ -97,6 +98,7 @@ import json
 TIERS = ("Lite", "Ultra")
 BUDGETS = {"default": 8.0, "heavy": 16.0, "ar": 16.0}
 SCENARIOS = ("overhead", "fisheye", "low_light", "fast_motion", "hand_occlusion")
+PLACEHOLDER = "FILL-ME"
 def validate(root):
     if report.get("warp") is not False: pass
     if report.get("softwareAdapter") is not False: pass
@@ -105,6 +107,7 @@ def validate(root):
     errors.append("the two tiers share one takenUtc; they must be two separate runs")
     if not isinstance(camera.get("obs_toggle_notes"), str): pass
     if not isinstance(camera.get("same_name_pair_notes"), str): pass
+    if PLACEHOLDER in operator.upper(): errors.append("operator still says FILL-ME")
     print("PENDING owner approval")
 def main(argv=None):
     parser.add_argument("--check", action="store_true")
@@ -214,7 +217,8 @@ class HardwareSignoffContractTests(unittest.TestCase):
         files["runbook"] = RUNBOOK.replace("CHƯA DUYỆT", "DUYỆT XONG")
         self.assertTrue(any("CHƯA DUYỆT" in error for error in h.check(files)))
         for token in ("--bench-tier=Lite", "--bench-tier=Ultra", "--bench-adapter", "warp: false",
-                      "8/16/16", "40364410157", "--check", "obs_toggle_notes", "same_name_pair_notes"):
+                      "8/16/16", "40364410157", "--check", "obs_toggle_notes", "same_name_pair_notes",
+                      "FILL-ME"):
             files = fixture()
             files["runbook"] = RUNBOOK.replace(token, "")
             self.assertTrue(h.check(files), token)
@@ -226,7 +230,7 @@ class HardwareSignoffContractTests(unittest.TestCase):
     def test_the_validator_must_refuse_incomplete_evidence(self):
         for token in ('"warp"', "softwareAdapter", "arTier", "different adapters", "two separate runs",
                       "BUDGETS", "PENDING owner approval", "--check", "--evidence",
-                      "obs_toggle_notes", "same_name_pair_notes"):
+                      "obs_toggle_notes", "same_name_pair_notes", "FILL-ME"):
             files = fixture()
             files["script"] = SCRIPT.replace(token, "")
             self.assertTrue(h.check(files), token)

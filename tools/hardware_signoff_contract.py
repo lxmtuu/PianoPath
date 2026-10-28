@@ -110,7 +110,8 @@ def check(files: dict) -> list:
         errors.append("docs/AR-HARDWARE-SIGNOFF.md lost its explicit CHƯA DUYỆT status")
     for token in ("--bench-tier=Lite", "--bench-tier=Ultra", "--bench-adapter", "warp: false",
                   "8/16/16", "webcam.json", "OBS Virtual Camera", "Unverified", "owner_approved",
-                  "ar_hardware_signoff.py --evidence", "--check", "obs_toggle_notes", "same_name_pair_notes"):
+                  "ar_hardware_signoff.py --evidence", "--check", "obs_toggle_notes", "same_name_pair_notes",
+                  "FILL-ME"):
         if token not in runbook:
             errors.append(f"docs/AR-HARDWARE-SIGNOFF.md does not name {token!r}; the procedure is incomplete")
     for scenario in SCENARIOS:
@@ -122,7 +123,7 @@ def check(files: dict) -> list:
     # 6. The validator checks the whole evidence folder and cannot be used to declare art approval.
     for token in ("--check", "--evidence", '"warp"', "softwareAdapter", "arTier", "different adapters",
                   "two separate runs", "BUDGETS", "PENDING owner approval",
-                  "obs_toggle_notes", "same_name_pair_notes"):
+                  "obs_toggle_notes", "same_name_pair_notes", "FILL-ME"):
         if token not in script:
             errors.append(f"tools/ar_hardware_signoff.py lost {token!r}; it would accept incomplete evidence")
     for scenario in SCENARIOS:

@@ -83,7 +83,9 @@ Ngoài năm kịch bản: bật/tắt **OBS Virtual Camera** trong lúc app đan
 `(2)`), và đo độ trễ bằng **MEASURE DELAY** rồi lưu số ms vào `webcam.json`. Hai kiểm tra đầu không có ảnh
 nên `webcam.json` chính là nơi duy nhất chúng được ghi: kết quả nằm ở `camera.obs_toggle_notes` và
 `camera.same_name_pair_notes`, và **`tools/ar_hardware_signoff.py` từ chối biên bản thiếu hai ô đó** —
-không có chỗ ghi thì kiểm tra có thể bị bỏ qua mà `--evidence` vẫn in PASS. Ghi rõ kết quả dù xấu —
+không có chỗ ghi thì kiểm tra có thể bị bỏ qua mà `--evidence` vẫn in PASS. Cùng lý do đó, mọi giá trị
+còn là câu mẫu `FILL-ME` cũng bị từ chối, nên chạy thẳng `--evidence` không cho PASS trên biên bản chưa
+ai điền. Ghi rõ kết quả dù xấu —
 một kịch bản hỏng là dữ liệu, không phải lý do để bỏ qua nó. `-FillWebcam` hỏi thẳng hai câu đó,
 còn `-ValidateOnly` báo lại từng ô còn trống.
 
