@@ -511,6 +511,10 @@ $rootPath = (Resolve-Path -LiteralPath $repoRoot).Path
 if ($evidencePath.StartsWith($rootPath, [StringComparison]::OrdinalIgnoreCase)) {
     Write-Warning "the evidence folder is inside the repository ($evidencePath); section 2 keeps photos and videos out of it"
 }
+# Where the record lives belongs to the folder, not to whichever section happens to run: signing
+# skips the webcam section, and taking the path from there reported "no webcam.json at " for a record
+# that was sitting in the folder the whole time.
+$webcamPath = Join-Path $evidencePath 'webcam.json'
 
 # ---------------------------------------------------------------- adapter
 if (-not $ValidateOnly -and -not $FillWebcam -and -not $Approve) {
@@ -607,7 +611,6 @@ if (-not $BenchOnly -and -not $Approve) {
     if (-not (Test-Path -LiteralPath $shotsDir)) {
         New-Item -ItemType Directory -Path $shotsDir -Force | Out-Null
     }
-    $webcamPath = Join-Path $evidencePath 'webcam.json'
     if ($FillWebcam) {
         Edit-WebcamRecord -Path $webcamPath -Folder $evidencePath
     }

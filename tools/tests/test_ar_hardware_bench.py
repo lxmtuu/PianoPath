@@ -132,6 +132,13 @@ class ArHardwareBenchScript(unittest.TestCase):
         ):
             self.assertIn(guard, self.script)
 
+    def test_the_record_path_belongs_to_the_folder_not_to_one_section(self):
+        # -Approve reached the sign-off holding an empty $webcamPath and reported "no webcam.json at "
+        # for a record that was in the folder all along: the path was assigned inside the very section
+        # that signing skips. Any mode that needs the record has to be able to find it.
+        before_adapter = self.script.split("# ---------------------------------------------------------------- adapter")[0]
+        self.assertIn("$webcamPath = Join-Path $evidencePath 'webcam.json'", before_adapter)
+
     def test_a_scenario_that_has_not_been_shot_yet_says_so_at_the_prompt(self):
         # Keeping the target file name is the right answer before a picture exists, but it must not
         # look like the answer: the operator would reach the end of the run believing it was recorded.
