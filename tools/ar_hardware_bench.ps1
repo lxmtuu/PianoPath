@@ -351,6 +351,28 @@ function Edit-WebcamRecord {
         $notes[$name] = Read-Filled -Prompt "What does '$name' show - or how did it fail?" -Current $currentNotes
     }
 
+    # An answer pasted from the wrong place - the label of the next question, a line of instructions -
+    # looks exactly like a real answer once it is in the file, and the validator cannot tell them
+    # apart either. Everything is read back once, and writing it takes a second yes.
+    Write-Host ''
+    Write-Host '  About to write this record:' -ForegroundColor Cyan
+    Write-Host "    operator          : $operator"
+    Write-Host "    camera.device     : $device"
+    Write-Host "    camera.mode       : $mode"
+    Write-Host "    OBS tested        : $obs"
+    Write-Host "    OBS toggle notes  : $obsToggle"
+    Write-Host "    same-name pair    : $sameNamePair"
+    Write-Host "    measured delay ms : $delayAnswer"
+    foreach ($name in $Scenarios) {
+        Write-Host ("    {0,-17}: {1}" -f $name, $files[$name])
+        Write-Host ("    {0,-17}  notes: {1}" -f '', $notes[$name])
+    }
+    $confirm = (Read-Host '  write it? (yes to write, anything else throws it away)').Trim()
+    if ($confirm -notmatch '^(yes|y)$') {
+        Write-Host '  nothing was written - run -FillWebcam again' -ForegroundColor Yellow
+        return
+    }
+
     $delay = [double]::Parse($delayAnswer, [System.Globalization.CultureInfo]::InvariantCulture)
     Write-WebcamRecord -Path $Path -Operator $operator -GpuName $record.machine.gpu -GpuDriver $record.machine.driver `
         -OsName $record.machine.os -Device $device -Mode $mode -Obs $obs -ObsToggleNotes $obsToggle `

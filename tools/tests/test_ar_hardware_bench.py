@@ -95,6 +95,14 @@ class ArHardwareBenchScript(unittest.TestCase):
         self.assertIn("$Value.Replace(", self.script)
         self.assertIn("ConvertTo-JsonText -Value $Files[$name]", self.script)
 
+    def test_the_record_is_read_back_and_only_written_on_purpose(self):
+        # An answer pasted from the wrong place looks exactly like a real answer once it is in the
+        # file: the operator's name ended up holding the label of the next question. Reading the whole
+        # record back and requiring a yes is the last point at which that is still catchable.
+        self.assertIn("About to write this record:", self.script)
+        self.assertIn("write it? (yes to write, anything else throws it away)", self.script)
+        self.assertIn("nothing was written - run -FillWebcam again", self.script)
+
     def test_the_prompt_never_offers_enter_when_there_is_nothing_to_keep(self):
         # A field with no value yet plus a hint saying "press Enter to keep it" loops forever and
         # looks like a hang: the operator pressed Enter three times before asking what was wrong. The
