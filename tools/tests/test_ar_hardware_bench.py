@@ -95,6 +95,12 @@ class ArHardwareBenchScript(unittest.TestCase):
         self.assertIn("$Value.Replace(", self.script)
         self.assertIn("ConvertTo-JsonText -Value $Files[$name]", self.script)
 
+    def test_a_scenario_that_has_not_been_shot_yet_says_so_at_the_prompt(self):
+        # Keeping the target file name is the right answer before a picture exists, but it must not
+        # look like the answer: the operator would reach the end of the run believing it was recorded.
+        self.assertIn("no picture at $current yet", self.script)
+        self.assertIn("the validator keeps asking until the file is there", self.script)
+
     def test_the_record_is_read_back_and_only_written_on_purpose(self):
         # An answer pasted from the wrong place looks exactly like a real answer once it is in the
         # file: the operator's name ended up holding the label of the next question. Reading the whole

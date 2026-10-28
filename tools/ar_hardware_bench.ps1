@@ -348,6 +348,12 @@ function Edit-WebcamRecord {
             }
         }
         $files[$name] = $current
+        if (-not (Test-Path -LiteralPath (Join-Path $Folder $current))) {
+            # Keeping the target name is the right answer for a scenario that has not been shot yet,
+            # but it must not look like the answer: without this the run ends, the notes are written
+            # and the missing picture only turns up in the validator's list.
+            Write-Host "    no picture at $current yet - the validator keeps asking until the file is there" -ForegroundColor Yellow
+        }
         $notes[$name] = Read-Filled -Prompt "What does '$name' show - or how did it fail?" -Current $currentNotes
     }
 
