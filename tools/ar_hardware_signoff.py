@@ -103,6 +103,7 @@ def _webcam_errors(root, record):
     if not isinstance(delay, (int, float)) or isinstance(delay, bool) or delay <= 0:
         errors.append("webcam.json measured_delay_ms must be the positive number MEASURE DELAY reported")
     scenarios = record.get("scenarios") or {}
+    shared = {}
     for name in SCENARIOS:
         entry = scenarios.get(name)
         if not isinstance(entry, dict):
@@ -113,8 +114,21 @@ def _webcam_errors(root, record):
             errors.append(f"scenario '{name}' has no file")
         elif not (root / shot).is_file():
             errors.append(f"scenario '{name}' points at {shot}, which is not in the evidence folder")
+        elif (root / shot).stat().st_size == 0:
+            # A name in the record is not a picture. A zero-byte file passes every other condition
+            # this gate has, and nothing would notice until somebody opened the folder by hand.
+            errors.append(f"scenario '{name}' points at {shot}, which is empty; the picture itself has to be in the folder")
+        else:
+            shared.setdefault(shot, []).append(name)
         if not isinstance(entry.get("notes"), str) or not entry["notes"].strip():
             errors.append(f"scenario '{name}' has no notes; a failed scenario still needs a written result")
+    for shot, names in shared.items():
+        # Five scenarios exist because five different things can go wrong. One picture doing the work
+        # of five proves only that a picture was taken once.
+        if len(names) > 1:
+            joined = ", ".join(f"'{n}'" for n in names)
+            errors.append(f"{joined} all point at {shot}; each scenario needs its own picture, "
+                          "taken at its own moment")
     for key in ("art_approved", "owner_approved"):
         if not isinstance(record.get(key), bool):
             errors.append(f"webcam.json {key} must be true or false")
@@ -215,6 +229,10 @@ def self_check():
     case("one run copied twice is refused", lambda root: _patch(root, "bench-Ultra.json", takenUtc="2026-10-27T00:00:00.0000000Z"), "two separate runs")
     case("a missing webcam record is caught", lambda root: (root / "webcam.json").unlink(), "webcam.json is missing")
     case("a missing scenario shot is caught", lambda root: (root / "shots/fisheye.png").unlink(), "fisheye")
+    case("an empty picture is caught", lambda root: (root / "shots/overhead.png").write_bytes(b""), "is empty")
+    case("one picture reused for every scenario is caught",
+         lambda root: _scene_file_patch(root, "fisheye", "shots/overhead.png"),
+         "each scenario needs its own picture")
     case("an unmeasured delay is caught", lambda root: _webcam_patch(root, measured_delay_ms=0), "measured_delay_ms")
     case("an untold OBS toggle is caught", lambda root: _camera_patch(root, obs_toggle_notes="  "),
          "camera.obs_toggle_notes")
@@ -240,6 +258,14 @@ def _patch(root, name, **fields):
 
 def _webcam_patch(root, **fields):
     _patch(root, "webcam.json", **fields)
+
+
+def _scene_file_patch(root, name, file):
+    """Point one scenario at another scenario's picture, as a folder with one shot reused would."""
+    path = root / "webcam.json"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    doc["scenarios"][name]["file"] = file
+    path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
 
 
 def _camera_patch(root, **fields):
