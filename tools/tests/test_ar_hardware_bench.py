@@ -95,6 +95,14 @@ class ArHardwareBenchScript(unittest.TestCase):
         self.assertIn("$Value.Replace(", self.script)
         self.assertIn("ConvertTo-JsonText -Value $Files[$name]", self.script)
 
+    def test_the_prompt_never_offers_enter_when_there_is_nothing_to_keep(self):
+        # A field with no value yet plus a hint saying "press Enter to keep it" loops forever and
+        # looks like a hang: the operator pressed Enter three times before asking what was wrong. The
+        # hint has to depend on whether keeping is actually possible.
+        self.assertIn("$hasCurrent = -not ([string]::IsNullOrWhiteSpace($Current) -or $Current -match 'FILL-ME')", self.script)
+        self.assertIn("there is nothing to keep yet", self.script)
+        self.assertIn("this one cannot stay empty", self.script)
+
     def test_filling_the_record_in_never_answers_the_two_approvals(self):
         # art_approved and owner_approved are the owner's; the fill-in passes them straight through.
         self.assertIn("-ArtApproved ([bool]$record.art_approved)", self.script)

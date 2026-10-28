@@ -241,11 +241,17 @@ function Read-Filled {
     # the validator refuses a delay of 0, because 0 means nobody ran MEASURE DELAY.
     param([string]$Prompt, [string]$Current, [switch]$Number)
     while ($true) {
+        # Saying "press Enter to keep it" when there is nothing to keep puts the operator in a loop
+        # that looks like a hang: Enter cannot satisfy a field that has no value yet. The hint has to
+        # depend on whether keeping is actually possible.
+        $hasCurrent = -not ([string]::IsNullOrWhiteSpace($Current) -or $Current -match 'FILL-ME')
         $shown = $Current
-        if ([string]::IsNullOrWhiteSpace($shown) -or $shown -match 'FILL-ME') { $shown = '(empty)' }
+        if (-not $hasCurrent) { $shown = '(nothing yet)' }
         Write-Host "  $Prompt"
         Write-Host "    current: $shown" -ForegroundColor DarkGray
-        $answer = (Read-Host '    new value, or press Enter to keep it').Trim()
+        $hint = '    type the answer now, or press Enter to keep the one above'
+        if (-not $hasCurrent) { $hint = '    type the answer (Enter alone will not do: there is nothing to keep yet)' }
+        $answer = (Read-Host $hint).Trim()
         if ([string]::IsNullOrWhiteSpace($answer)) {
             if ([string]::IsNullOrWhiteSpace($Current) -or $Current -match 'FILL-ME') {
                 Write-Host '    this one cannot stay empty' -ForegroundColor Yellow
