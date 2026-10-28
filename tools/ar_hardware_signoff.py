@@ -104,6 +104,7 @@ def _webcam_errors(root, record):
         errors.append("webcam.json measured_delay_ms must be the positive number MEASURE DELAY reported")
     scenarios = record.get("scenarios") or {}
     shared = {}
+    noted = {}
     for name in SCENARIOS:
         entry = scenarios.get(name)
         if not isinstance(entry, dict):
@@ -120,8 +121,11 @@ def _webcam_errors(root, record):
             errors.append(f"scenario '{name}' points at {shot}, which is empty; the picture itself has to be in the folder")
         else:
             shared.setdefault(shot, []).append(name)
-        if not isinstance(entry.get("notes"), str) or not entry["notes"].strip():
+        note = entry.get("notes")
+        if not isinstance(note, str) or not note.strip():
             errors.append(f"scenario '{name}' has no notes; a failed scenario still needs a written result")
+        else:
+            noted.setdefault(note.strip().casefold(), []).append(name)
     for shot, names in shared.items():
         # Five scenarios exist because five different things can go wrong. One picture doing the work
         # of five proves only that a picture was taken once.
@@ -129,6 +133,14 @@ def _webcam_errors(root, record):
             joined = ", ".join(f"'{n}'" for n in names)
             errors.append(f"{joined} all point at {shot}; each scenario needs its own picture, "
                           "taken at its own moment")
+    for note_text, names in noted.items():
+        # Two scenarios cannot have had the same thing happen to them, so one note written five times
+        # is a placeholder that satisfies every other condition this gate has - which is exactly how
+        # the prompt's own wording ended up in a record that printed no failures at all.
+        if len(names) > 1:
+            joined = ", ".join(f"'{n}'" for n in names)
+            errors.append(f"{joined} carry the same note; five scenarios cannot have one result - "
+                          "write what each picture shows, or how each one failed")
     for key in ("art_approved", "owner_approved"):
         if not isinstance(record.get(key), bool):
             errors.append(f"webcam.json {key} must be true or false")
@@ -193,7 +205,10 @@ def _synthetic(root):
         "camera": {"device": "C920 / OBS", "mode": "1280x720@60 MJPG", "obs_virtual_camera": True,
                   "obs_toggle_notes": "switched off and on twice with the app open; the overlay kept drawing",
                   "same_name_pair_notes": "the (2) device opened a black frame, so the first one was kept"},
-        "scenarios": {name: {"file": f"shots/{name}.png", "notes": "synthetic check"} for name in SCENARIOS},
+        # Each scenario gets its own note: five identical ones are refused, and the fixture must be
+        # able to pass the gate it is used to test.
+        "scenarios": {name: {"file": f"shots/{name}.png", "notes": f"synthetic result for {name}"}
+                      for name in SCENARIOS},
         "measured_delay_ms": 85, "art_approved": False, "owner_approved": False,
     }, indent=2), encoding="utf-8")
 
@@ -233,6 +248,9 @@ def self_check():
     case("one picture reused for every scenario is caught",
          lambda root: _scene_file_patch(root, "fisheye", "shots/overhead.png"),
          "each scenario needs its own picture")
+    case("one note copied into every scenario is caught",
+         lambda root: _all_notes_patch(root, "the same sentence everywhere"),
+         "carry the same note")
     case("an unmeasured delay is caught", lambda root: _webcam_patch(root, measured_delay_ms=0), "measured_delay_ms")
     case("an untold OBS toggle is caught", lambda root: _camera_patch(root, obs_toggle_notes="  "),
          "camera.obs_toggle_notes")
@@ -265,6 +283,15 @@ def _scene_file_patch(root, name, file):
     path = root / "webcam.json"
     doc = json.loads(path.read_text(encoding="utf-8"))
     doc["scenarios"][name]["file"] = file
+    path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+
+
+def _all_notes_patch(root, note):
+    """Write one sentence into every scenario's note, as a record filled in by copy and paste would."""
+    path = root / "webcam.json"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    for name in SCENARIOS:
+        doc["scenarios"][name]["notes"] = note
     path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
 
 
