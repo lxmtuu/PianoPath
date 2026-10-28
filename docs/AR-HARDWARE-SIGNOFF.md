@@ -145,7 +145,10 @@ Script **không bao giờ** sửa `Stage/Effects/EffectContracts.cs`. Dù `--evi
 
 1. Hai report `Lite` và `Ultra` trên **card thật** (`warp: false`) đều nằm trong ngân sách 8/16/16 ms.
 2. Năm kịch bản webcam/OBS thật có ảnh + ghi chú, không còn ô `notes` trống ở kịch bản lỗi.
-3. Chủ repo **duyệt mỹ thuật** và ký `owner_approved: true` trong biên bản.
+3. Chủ repo **duyệt mỹ thuật** và ký `owner_approved: true` trong biên bản. Việc ký có lệnh riêng —
+   `pwsh tools/ar_hardware_bench.ps1 -Approve` — và lệnh đó **từ chối ký** khi validator còn bất kỳ
+   điều gì chưa đạt, kèm đúng danh sách chưa đạt. Chữ ký ký lên (1) và (2), chứ không thay thế chúng:
+   duyệt một thư mục chưa có ảnh là tiêu hao quyết định duy nhất mà máy không làm được.
 
 PR đó phải dẫn tới file JSON bằng chứng và nêu rõ adapter/driver; guard
 `tools/hardware_signoff_contract.py` đang khoá binding ở mức `Unverified`, nên nếu lật mà chưa có

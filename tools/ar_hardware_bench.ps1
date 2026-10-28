@@ -24,6 +24,7 @@
     pwsh tools/ar_hardware_bench.ps1 -ValidateOnly         # re-check a folder after section 4
     pwsh tools/ar_hardware_bench.ps1 -WebcamOnly -Force    # rewrite webcam.json (never without -Force)
     pwsh tools/ar_hardware_bench.ps1 -FillWebcam           # answer the section 4 questions instead of editing JSON
+    pwsh tools/ar_hardware_bench.ps1 -Approve              # sign the record; refused if any check fails
 
     Section 4 itself is still a human job: five webcam scenarios, OBS Virtual Camera, MEASURE DELAY.
 #>
@@ -62,7 +63,12 @@ param(
 
     # Allow webcam.json to be rewritten. The file holds the operator's notes and both approvals, so
     # overwriting it by accident would destroy section 4's work.
-    [switch]$Force
+    [switch]$Force,
+
+    # Record the owner's sign-off. The validator has to have nothing left to say first: section 6
+    # makes the approval the third of three conditions, a signature on the other two, not a way
+    # around them. Nothing is benchmarked and no picture is touched.
+    [switch]$Approve
 )
 
 $ErrorActionPreference = 'Stop'
@@ -507,7 +513,7 @@ if ($evidencePath.StartsWith($rootPath, [StringComparison]::OrdinalIgnoreCase)) 
 }
 
 # ---------------------------------------------------------------- adapter
-if (-not $ValidateOnly -and -not $FillWebcam) {
+if (-not $ValidateOnly -and -not $FillWebcam -and -not $Approve) {
     Write-Step 'Adapter'
     $controllers = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -and $_.Name -notmatch 'Basic Render Driver|Basic Display' })
@@ -540,7 +546,7 @@ if (-not $ValidateOnly -and -not $FillWebcam) {
 }
 
 # ---------------------------------------------------------------- probe
-if (-not $SkipProbe -and -not $ValidateOnly -and -not $WebcamOnly -and -not $FillWebcam) {
+if (-not $SkipProbe -and -not $ValidateOnly -and -not $WebcamOnly -and -not $FillWebcam -and -not $Approve) {
     Write-Step 'Probe: 20 frames, to prove the adapter is a graphics card before a long run'
     $probeDir = Join-Path $env:TEMP ('keyflow-probe-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
     New-Item -ItemType Directory -Path $probeDir -Force | Out-Null
@@ -567,7 +573,7 @@ if (-not $SkipProbe -and -not $ValidateOnly -and -not $WebcamOnly -and -not $Fil
 }
 
 # ---------------------------------------------------------------- two tiers
-if (-not $ValidateOnly -and -not $WebcamOnly -and -not $FillWebcam) {
+if (-not $ValidateOnly -and -not $WebcamOnly -and -not $FillWebcam -and -not $Approve) {
     foreach ($tier in $Tiers) {
         Write-Step "Tier $tier - $Frames frames per scene (default 8 ms / heavy 16 ms / ar 16 ms)"
         $report = Join-Path $evidencePath "bench-$tier.json"
@@ -596,7 +602,7 @@ if (-not $ValidateOnly -and -not $WebcamOnly -and -not $FillWebcam) {
 }
 
 # ---------------------------------------------------------------- webcam record
-if (-not $BenchOnly) {
+if (-not $BenchOnly -and -not $Approve) {
     $shotsDir = Join-Path $evidencePath 'shots'
     if (-not (Test-Path -LiteralPath $shotsDir)) {
         New-Item -ItemType Directory -Path $shotsDir -Force | Out-Null
@@ -630,6 +636,79 @@ if (-not $BenchOnly) {
         Write-Note ("wrote $webcamPath - machine fields came from this machine, the rest are FILL-ME")
         if ($cameras.Count -gt 0) { Write-Note ('cameras found: ' + ($cameras -join ' | ')) }
     }
+}
+
+# ---------------------------------------------------------------- approve
+function Approve-Record {
+    # The sign-off is the one thing the machine cannot supply, and the one thing that is worthless on
+    # its own: an owner who says "I approve" over an empty evidence folder has spent the one decision
+    # only they can make on a record that proves nothing. Section 6 lists it third of three, so the
+    # other two are checked here and the approval is refused until they hold.
+    param([string]$Path, [string]$Folder)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "no webcam.json at $Path - the approval belongs to a record; run the script once without -Approve so it can write one"
+    }
+    try { $record = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json }
+    catch { throw "webcam.json is not readable JSON ($_)" }
+
+    $python = Get-Python
+    $validator = Join-Path $PSScriptRoot 'ar_hardware_signoff.py'
+    $summaryPath = Join-Path $Folder '.approve-check.json'
+    Write-Step 'Checking the record before it can be signed'
+    & $python $validator --evidence $Folder --summary $summaryPath | Out-Null
+    $unmet = @()
+    if (Test-Path -LiteralPath $summaryPath) {
+        try {
+            $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+            foreach ($problem in @($summary.problems)) { $unmet += $problem }
+        }
+        catch { $unmet += 'the validator summary could not be read' }
+        Remove-Item -LiteralPath $summaryPath -Force
+    }
+    else { $unmet += 'the validator produced no summary; run -ValidateOnly and read its output' }
+
+    if ($unmet.Count -gt 0) {
+        Write-Host ''
+        Write-Host '  refused: the owner signs a complete record, and this one is not:' -ForegroundColor Red
+        foreach ($problem in $unmet) { Write-Host "    - $problem" -ForegroundColor Red }
+        throw 'nothing was signed - fix the lines above, then run -Approve again'
+    }
+
+    Write-Step 'Sign-off: both approvals are about to be written'
+    Write-Host "  operator              : $($record.operator)"
+    Write-Host "  art_approved (now)    : $($record.art_approved)"
+    Write-Host "  owner_approved (now)  : $($record.owner_approved)"
+    Write-Host "  measured_delay_ms     : $($record.measured_delay_ms)"
+    foreach ($name in $Scenarios) {
+        Write-Host ("  {0,-22}: {1}" -f $name, $record.scenarios.$name.file)
+    }
+    $confirm = (Read-Host '  sign it? (yes to approve, anything else leaves the record as it is)').Trim()
+    if ($confirm -notmatch '^(yes|y)$') {
+        Write-Host '  not signed - the record is unchanged' -ForegroundColor Yellow
+        return
+    }
+
+    $files = @{}
+    $notes = @{}
+    foreach ($name in $Scenarios) {
+        $entry = $record.scenarios.$name
+        if ($null -ne $entry -and $entry.file) { $files[$name] = $entry.file }
+        else { $files[$name] = $DefaultShotFiles[$name] }
+        if ($null -ne $entry -and $entry.notes) { $notes[$name] = $entry.notes }
+        else { $notes[$name] = '' }
+    }
+    Write-WebcamRecord -Path $Path -Operator $record.operator -GpuName $record.machine.gpu `
+        -GpuDriver $record.machine.driver -OsName $record.machine.os -Device $record.camera.device `
+        -Mode $record.camera.mode -Obs ([bool]$record.camera.obs_virtual_camera) `
+        -ObsToggleNotes $record.camera.obs_toggle_notes `
+        -SameNamePairNotes $record.camera.same_name_pair_notes -Files $files -Notes $notes `
+        -Delay ([double]$record.measured_delay_ms) -ArtApproved $true -OwnerApproved $true
+    Write-Host ("  signed by $($record.operator) - ArProjectedParameterBindings stays Unverified until the binding PR lands") -ForegroundColor Green
+}
+
+if ($Approve) {
+    Approve-Record -Path $webcamPath -Folder $evidencePath
 }
 
 # ---------------------------------------------------------------- validate

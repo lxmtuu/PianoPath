@@ -95,6 +95,43 @@ class ArHardwareBenchScript(unittest.TestCase):
         self.assertIn("$Value.Replace(", self.script)
         self.assertIn("ConvertTo-JsonText -Value $Files[$name]", self.script)
 
+    def test_the_owner_sign_off_has_a_command_of_its_own(self):
+        # The one decision the machine cannot make had nowhere to live but Notepad, and JSON edited by
+        # hand is one missing quote away from "could not be read as JSON".
+        self.assertIn("[switch]$Approve", self.script)
+        self.assertIn("pwsh tools/ar_hardware_bench.ps1 -Approve", self.script)
+        self.assertIn("function Approve-Record", self.script)
+
+    def test_the_sign_off_is_refused_until_the_other_two_conditions_hold(self):
+        # Section 6 lists the approval third of three: it is a signature on the two tier reports and
+        # the five scenarios, not a way around them. An owner saying "I approve" over a folder with no
+        # pictures spends the one decision only they can make on a record that proves nothing.
+        self.assertIn("refused: the owner signs a complete record, and this one is not:", self.script)
+        self.assertIn("nothing was signed - fix the lines above, then run -Approve again", self.script)
+        # The refusal is the validator's own verdict, not a second list that can drift out of step.
+        self.assertIn("--evidence $Folder --summary $summaryPath", self.script)
+        self.assertIn("$summary.problems", self.script)
+        # And it is a throw: signing is never something the script does on the way past a failure.
+        self.assertIn("throw 'nothing was signed", self.script)
+
+    def test_signing_takes_a_second_yes_and_never_happens_on_the_way_past(self):
+        self.assertIn("sign it? (yes to approve, anything else leaves the record as it is)", self.script)
+        self.assertIn("not signed - the record is unchanged", self.script)
+        self.assertIn("-ArtApproved $true -OwnerApproved $true", self.script)
+        # The approval is about the record; nothing about it touches the binding.
+        self.assertIn("ArProjectedParameterBindings stays Unverified until the binding PR lands", self.script)
+
+    def test_approving_measures_nothing_and_rewrites_no_evidence(self):
+        # -Approve runs the validator and writes two booleans. A run that also benched two tiers or
+        # re-templated webcam.json would destroy the evidence it is being asked to sign.
+        for guard in (
+            "if (-not $ValidateOnly -and -not $FillWebcam -and -not $Approve) {",
+            "if (-not $SkipProbe -and -not $ValidateOnly -and -not $WebcamOnly -and -not $FillWebcam -and -not $Approve) {",
+            "if (-not $ValidateOnly -and -not $WebcamOnly -and -not $FillWebcam -and -not $Approve) {",
+            "if (-not $BenchOnly -and -not $Approve) {",
+        ):
+            self.assertIn(guard, self.script)
+
     def test_a_scenario_that_has_not_been_shot_yet_says_so_at_the_prompt(self):
         # Keeping the target file name is the right answer before a picture exists, but it must not
         # look like the answer: the operator would reach the end of the run believing it was recorded.
