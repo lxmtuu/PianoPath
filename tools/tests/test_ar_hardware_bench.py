@@ -157,6 +157,18 @@ class ArHardwareBenchScript(unittest.TestCase):
         self.assertIn("a record with no picture is not evidence", self.script)
         self.assertIn("throw 'nothing was written - a record with no picture is not evidence'", self.script)
 
+    def test_an_operator_who_cannot_type_a_path_can_type_a_number(self):
+        # "I do not know how to take a picture" ends with an invented path, or with the operator
+        # giving up. Windows puts a Win+PrtScn picture in Pictures\Screenshots by itself, so the
+        # script looks there and offers what it finds as numbers.
+        self.assertIn("function Get-RecentPictures", self.script)
+        self.assertIn("Join-Path $HOME 'Pictures\\Screenshots'", self.script)
+        self.assertIn("pictures already on this machine (newest first - type its number):", self.script)
+        self.assertIn("path to the picture you took, or its number (Enter to keep the current one)", self.script)
+        self.assertIn("there is no picture numbered $shot", self.script)
+        # And the one keystroke that makes a picture at all is said out loud, not left in the runbook.
+        self.assertIn("no picture yet? Win+PrtScn saves one by itself into", self.script)
+
     def test_a_scenario_that_has_not_been_shot_yet_says_so_at_the_prompt(self):
         # Keeping the target file name is the right answer before a picture exists, but it must not
         # look like the answer: the operator would reach the end of the run believing it was recorded.

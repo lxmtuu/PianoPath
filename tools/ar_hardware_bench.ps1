@@ -318,6 +318,10 @@ function Edit-WebcamRecord {
     }
 
     Write-Step 'Webcam record: answer each question; Enter keeps what is already there'
+    # The one thing standing between an operator and section 4 is often not the camera but knowing
+    # how to get a picture off the screen at all, and then where it went.
+    Write-Note ("no picture yet? Win+PrtScn saves one by itself into $(Join-Path $HOME 'Pictures\Screenshots')")
+    $recent = @(Get-RecentPictures -ExtraDirs @($shotsDir))
     $operator = Read-Filled -Prompt 'Who is running this session (operator)?' -Current $record.operator
     $mode = Read-Filled -Prompt 'Camera mode the app reports (e.g. 1280x720@60 MJPG)?' -Current $record.camera.mode
     $device = Read-Filled -Prompt 'Which camera did you shoot the five scenarios with?' -Current $record.camera.device
@@ -343,7 +347,24 @@ function Edit-WebcamRecord {
             if ($entry.notes) { $currentNotes = $entry.notes }
         }
         Write-Host "    it belongs at: $current"
-        $shot = (Read-Host '    path to the picture you took (Enter to keep the current one)').Trim()
+        if ($recent.Count -gt 0) {
+            # A number instead of a path: the picture is somewhere on this machine, and the operator
+            # does not have to know where to say which one it is.
+            Write-Host '    pictures already on this machine (newest first - type its number):' -ForegroundColor DarkGray
+            for ($i = 0; $i -lt $recent.Count; $i++) {
+                Write-Host ('      {0}) {1}' -f ($i + 1), $recent[$i].Name) -ForegroundColor DarkGray
+                Write-Host ('         {0}' -f $recent[$i].DirectoryName) -ForegroundColor DarkGray
+            }
+        }
+        $shot = (Read-Host '    path to the picture you took, or its number (Enter to keep the current one)').Trim()
+        if ($shot -match '^\d+$') {
+            $index = [int]$shot - 1
+            if ($index -ge 0 -and $index -lt $recent.Count) { $shot = $recent[$index].FullName }
+            else {
+                Write-Host "    there is no picture numbered $shot" -ForegroundColor Yellow
+                $shot = ''
+            }
+        }
         if (-not ([string]::IsNullOrWhiteSpace($shot))) {
             # A path pasted from Explorer's "Copy as path" arrives wrapped in quotes.
             $shot = $shot.Trim('"').Trim()
@@ -409,6 +430,36 @@ function Edit-WebcamRecord {
         -SameNamePairNotes $sameNamePair -Files $files -Notes $notes -Delay $delay `
         -ArtApproved ([bool]$record.art_approved) -OwnerApproved ([bool]$record.owner_approved)
     Write-Note ("wrote $Path - the two approvals were left as they were")
+}
+
+function Get-RecentPictures {
+    # Typing a path is the part an operator who has never taken a screenshot cannot do, and an
+    # invented path is how a record ends up describing nothing. Windows drops a picture taken with
+    # Win+PrtScn into Pictures\Screenshots without being told, so these are the places to look, and
+    # the operator only has to type a number.
+    param([string[]]$ExtraDirs = @())
+
+    $dirs = @(
+        (Join-Path $HOME 'Pictures\Screenshots'),
+        (Join-Path $HOME 'OneDrive\Pictures\Screenshots'),
+        (Join-Path $HOME 'Pictures'),
+        (Join-Path $HOME 'OneDrive\Pictures'),
+        (Join-Path $HOME 'Desktop'),
+        (Join-Path $HOME 'OneDrive\Desktop')
+    ) + $ExtraDirs
+    $seen = @{}
+    $pictures = @()
+    foreach ($dir in $dirs) {
+        if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { continue }
+        foreach ($pattern in @('*.png', '*.jpg', '*.jpeg')) {
+            foreach ($file in @(Get-ChildItem -LiteralPath $dir -File -Filter $pattern -ErrorAction SilentlyContinue)) {
+                if ($seen.ContainsKey($file.FullName)) { continue }
+                $seen[$file.FullName] = $true
+                $pictures += $file
+            }
+        }
+    }
+    return @($pictures | Sort-Object LastWriteTime -Descending | Select-Object -First 8)
 }
 
 function Get-RemainingWork {
