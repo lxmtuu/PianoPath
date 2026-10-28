@@ -245,7 +245,7 @@ function Read-Filled {
     # attempt must not ask the operator to retype what they wrote last time. Empty is only accepted
     # when the current value is usable, and a number is only accepted when it is greater than zero -
     # the validator refuses a delay of 0, because 0 means nobody ran MEASURE DELAY.
-    param([string]$Prompt, [string]$Current, [switch]$Number)
+    param([string]$Prompt, [string]$Current, [switch]$Number, [switch]$Sentence)
     while ($true) {
         # Saying "press Enter to keep it" when there is nothing to keep puts the operator in a loop
         # that looks like a hang: Enter cannot satisfy a field that has no value yet. The hint has to
@@ -273,6 +273,12 @@ function Read-Filled {
                 }
             }
             return $Current
+        }
+        if ($Sentence -and $answer -match '^(yes|y|yeah|yep|no|n|nope|ok|okay|true|false|done|co|duoc|roi|u)$') {
+            # A note is a description, not a verdict. An operator who has no picture to describe falls
+            # back on "yes" - and five identical "yes" notes then read like five results.
+            Write-Host '    that answers a yes-or-no question; this one needs what the picture shows, in one sentence' -ForegroundColor Yellow
+            continue
         }
         if ($Number) {
             # 0 means "not measured yet", and it is the one number that may be typed honestly before
@@ -360,7 +366,19 @@ function Edit-WebcamRecord {
             # and the missing picture only turns up in the validator's list.
             Write-Host "    no picture at $current yet - the validator keeps asking until the file is there" -ForegroundColor Yellow
         }
-        $notes[$name] = Read-Filled -Prompt "What does '$name' show - or how did it fail?" -Current $currentNotes
+        $notes[$name] = Read-Filled -Prompt "What does '$name' show - or how did it fail?" -Current $currentNotes -Sentence
+    }
+
+    # Filling the record in before a single picture exists produced notes that say "yes": there was
+    # nothing to describe, so the questions were answered as if they were yes-or-no. Such a record
+    # describes nothing and it is not written. An operator who pasted real paths has real pictures by
+    # now, so this only stops the invented kind.
+    $pictures = @($Scenarios | Where-Object { Test-Path -LiteralPath (Join-Path $Folder $files[$_]) })
+    if ($pictures.Count -eq 0) {
+        Write-Host ''
+        Write-Host '  none of the five pictures is in the folder yet, so this record describes nothing:' -ForegroundColor Yellow
+        Write-Host '  shoot the five scenarios (section 4), then run -FillWebcam again' -ForegroundColor Yellow
+        throw 'nothing was written - a record with no picture is not evidence'
     }
 
     # An answer pasted from the wrong place - the label of the next question, a line of instructions -

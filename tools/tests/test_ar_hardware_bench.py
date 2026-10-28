@@ -139,6 +139,24 @@ class ArHardwareBenchScript(unittest.TestCase):
         before_adapter = self.script.split("# ---------------------------------------------------------------- adapter")[0]
         self.assertIn("$webcamPath = Join-Path $evidencePath 'webcam.json'", before_adapter)
 
+    def test_a_note_cannot_be_a_yes_or_no_answer(self):
+        # Asked what a picture shows, an operator with no picture to describe falls back on "yes" -
+        # and five of those read like five results. A note is a description, not a verdict.
+        self.assertIn("[switch]$Sentence", self.script)
+        self.assertIn("that answers a yes-or-no question; this one needs what the picture shows, in one sentence",
+                      self.script)
+        self.assertIn("Read-Filled -Prompt \"What does '$name' show - or how did it fail?\" -Current $currentNotes -Sentence",
+                      self.script)
+
+    def test_a_record_with_not_one_picture_in_it_is_not_written(self):
+        # Filling the record before section 4 produced invented notes; the run looked like it had
+        # recorded something. A record that attaches no picture describes nothing, and an operator who
+        # pasted real paths has real pictures by then - so only the invented kind is stopped.
+        self.assertIn("none of the five pictures is in the folder yet, so this record describes nothing:", self.script)
+        self.assertIn("shoot the five scenarios (section 4), then run -FillWebcam again", self.script)
+        self.assertIn("a record with no picture is not evidence", self.script)
+        self.assertIn("throw 'nothing was written - a record with no picture is not evidence'", self.script)
+
     def test_a_scenario_that_has_not_been_shot_yet_says_so_at_the_prompt(self):
         # Keeping the target file name is the right answer before a picture exists, but it must not
         # look like the answer: the operator would reach the end of the run believing it was recorded.
