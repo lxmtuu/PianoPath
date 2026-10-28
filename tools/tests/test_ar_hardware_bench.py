@@ -108,6 +108,14 @@ class ArHardwareBenchScript(unittest.TestCase):
         self.assertIn("-ArtApproved ([bool]$record.art_approved)", self.script)
         self.assertIn("-OwnerApproved ([bool]$record.owner_approved)", self.script)
 
+    def test_an_unmeasured_delay_can_be_typed_as_zero_but_never_passes(self):
+        # There is no "skip" key at a prompt, so an operator who has not run MEASURE DELAY yet had to
+        # either stop or invent a number. 0 is the honest answer: it is accepted here and still
+        # refused by the validator and named by Get-RemainingWork until it is measured.
+        self.assertIn("if ($answer -eq '0')", self.script)
+        self.assertIn("recorded as not measured yet", self.script)
+        self.assertIn("this one must be a number greater than 0", self.script)
+
     def test_a_kept_delay_of_zero_is_refused_because_it_means_nobody_measured(self):
         self.assertIn("$delayAnswer = Read-Filled", self.script)
         self.assertIn("this one must be a number greater than 0", self.script)

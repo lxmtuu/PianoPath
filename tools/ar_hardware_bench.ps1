@@ -269,6 +269,13 @@ function Read-Filled {
             return $Current
         }
         if ($Number) {
+            # 0 means "not measured yet", and it is the one number that may be typed honestly before
+            # MEASURE DELAY has been run: the validator keeps refusing it and Get-RemainingWork keeps
+            # naming it, whereas any other number would be a measurement nobody made.
+            if ($answer -eq '0') {
+                Write-Host '    recorded as not measured yet; the validator will keep asking for it' -ForegroundColor Yellow
+                return '0'
+            }
             $parsed = 0.0
             $parsedOk = [double]::TryParse($answer, [System.Globalization.NumberStyles]::Float,
                 [System.Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)
