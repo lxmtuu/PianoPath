@@ -475,6 +475,23 @@ jobs:
       # SKIP/NOTE instead of failing, so a red step here means a real regression.
       # Every log line is also echoed into the job summary; annotations stay under GitHub's
       # 10-per-level cap by only surfacing SKIP/NOTE/FAIL plus the final summary line.
+      # N18-CG runs the falling group on its own before the hour-long suite, for the same reason N17 and
+      # N17V do: a pixel gate that closes when a family joins should name itself in a minute, not be
+      # guessed from a log nobody can read. The gradient added a contract family, and a new family moves
+      # every pin that counts families.
+      - name: Falling FX group (N18-CG)
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'keyflow-falling.log'
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList '--verify','--verify-falling-only',"--verify-log=$log" -PassThru -Wait
+          if (Test-Path $log) {
+            Get-Content $log | ForEach-Object {
+              Write-Output $_
+              if ($_ -like 'FAIL*') { "::error title=N18-CG falling FX::$_" } elseif ($_ -like 'PASS *') { "::notice title=N18-CG falling FX::$_" }
+            }
+          } else { "::error title=N18-CG falling FX::No verification log was written" }
+          exit $proc.ExitCode
+
       - name: Verification suite
         shell: pwsh
         run: |
