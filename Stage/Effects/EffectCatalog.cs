@@ -24,8 +24,8 @@ internal sealed record EffectDefinition(string Id, string Name, string NameVi, s
 internal static class EffectCatalog
 {
     // =============================================================================================
-    // Falling — while the note travels toward the keys. Color Gradient remains Planned until a
-    // distinct head-to-tail note-body gradient exists; ColorMode="Gradient" is across keyboard pitch.
+    // Falling — while the note travels toward the keys. Color Gradient is the head-to-tail note-body
+    // gradient (NoteBodyGradient); ColorMode="Gradient" is a different thing: across keyboard pitch.
     // =============================================================================================
     internal static class Falling
     {
@@ -34,7 +34,7 @@ internal static class EffectCatalog
             new("falling.glow-trail", "Glow Trail", "Vệt sáng mờ", "Soft light trail dragging behind the falling note.", EffectStatus.Available, "falling.trail"),
             new("falling.motion-blur", "Motion Blur", "Mờ chuyển động", "Note body smears along its travel direction.", EffectStatus.Available, "falling.trail"),
             new("falling.sparkle-tail", "Sparkle Tail", "Đuôi tia sáng", "Tail emits small twinkling sparkles.", EffectStatus.Available, "falling.trail"),
-            new("falling.color-gradient", "Color Gradient", "Chuyển sắc đầu–đuôi", "Planned: a note blends from one color at the head to another at the tail. The current ColorMode=Gradient blends colors across keyboard pitch instead.", EffectStatus.Planned, "falling.body.gradient"),
+            new("falling.color-gradient", "Color Gradient", "Chuyển sắc đầu–đuôi", "The note body blends from its own colour at the head to a brighter tail. Distinct from ColorMode=Gradient, which blends across keyboard pitch.", EffectStatus.Available, "falling.body.gradient"),
             new("falling.pulsing", "Pulsing", "Nhấp nháy", "Note breathes bright/dim while falling.", EffectStatus.Available, "falling.body"),
             new("falling.ribbon-twist", "Ribbon Twist", "Dải lụa xoắn", "Silk ribbon swaying behind the note along its path.", EffectStatus.Available, "falling.trail"),
             new("falling.particle-stream", "Particle Stream", "Dòng hạt", "Thin stream of particles pours off the falling note.", EffectStatus.Available, "falling.trail"),

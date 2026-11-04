@@ -365,6 +365,7 @@ public partial class MainWindow
         SliderRow(falling, "Pulse rate", nameof(PianoVisualSettings.FallingPulseRate), 0, 100, "How fast the notes pulse.").VisibleWhen = () => _visualSettings.FallingPulse;
         Toggle(falling, "Ghost echoes", nameof(PianoVisualSettings.FallingGhost), "Faint echo copies lead each note.");
         SliderRow(falling, "Ghost amount", nameof(PianoVisualSettings.FallingGhostAmount), 0, 100, "Visibility and number of the echoes.").VisibleWhen = () => _visualSettings.FallingGhost;
+        SliderRow(falling, "Body gradient", nameof(PianoVisualSettings.NoteBodyGradient), 0, 100, "How far the note body shifts from its own colour at the head to a brighter tail.");
 
         var impact = Card(NoteSettingsHost, "IMPACT · WAVE & FLASH", "The first half second after a note lands on the keys. Size and brightness follow the hit strength.");
         Toggle(impact, "Landing glow", nameof(PianoVisualSettings.NoteLandingGlow), "A soft glow gathers on the key a note is about to strike, then hands over to the impact — also a practice aid (GPU stage).");

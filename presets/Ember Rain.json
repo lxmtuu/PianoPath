@@ -114,6 +114,7 @@
     "FallingPulseRate": 40.0,
     "FallingGhost": false,
     "FallingGhostAmount": 40.0,
+    "NoteBodyGradient": 0.0,
     "NoteShimmer": false,
     "NoteShimmerAmount": 0,
     "ShootingStars": false,

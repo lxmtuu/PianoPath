@@ -1713,6 +1713,33 @@ internal sealed partial class PianoStage : FrameworkElement
             var textColor = (style is "Neon" or "CrystalOutline") ? Colors.White : luminance > 150 ? Color.FromRgb(12, 8, 20) : Colors.White;
             DrawLabel(dc, label, new Point(r.X + r.Width / 2, r.Bottom - Math.Min(12, r.Height / 2)), Math.Min(11, r.Width * .62), Color.FromArgb(Alpha(230 * opacity), textColor.R, textColor.G, textColor.B), true);
         }
+        // falling.color-gradient: the head keeps the note's own colour and the tail lifts towards white by
+        // NoteBodyGradient. One overlay clipped to the body, rather than a gradient per note style, so every
+        // style keeps its own look and the silhouette cannot change. The head is the edge that arrives at the
+        // keys first - the bottom while notes fall, the top while they rise - so the gradient follows travel,
+        // not the screen. Cached by colour and strength like every other gradient here: a busy frame draws
+        // hundreds of notes, and a brush each would be an allocation per note per frame.
+        if (_visual.NoteBodyGradient > 0 && !ghostPass && r.Height > 2)
+        {
+            var tailColor = Blend(color, Colors.White, .55);
+            var tailAlpha = Alpha(235 * opacity * _visual.NoteBodyGradient / 100);
+            var bodyKey = GradientKey(rising ? (byte)21 : (byte)20, Color.FromArgb(tailAlpha, tailColor.R, tailColor.G, tailColor.B));
+            if (!_gradientCache.TryGetValue(bodyKey, out var bodyGradient))
+            {
+                var body = new LinearGradientBrush
+                {
+                    StartPoint = rising ? new Point(0, 0) : new Point(0, 1),
+                    EndPoint = rising ? new Point(0, 1) : new Point(0, 0),
+                    MappingMode = BrushMappingMode.RelativeToBoundingBox
+                };
+                body.GradientStops.Add(new GradientStop(Color.FromArgb(0, tailColor.R, tailColor.G, tailColor.B), 0));
+                body.GradientStops.Add(new GradientStop(Color.FromArgb(tailAlpha, tailColor.R, tailColor.G, tailColor.B), 1));
+                body.Freeze(); bodyGradient = CacheGradient(bodyKey, body);
+            }
+            dc.PushClip(new RectangleGeometry(r, radius, radius));
+            dc.DrawRectangle(bodyGradient, null, r);
+            dc.Pop();
+        }
         if (_visual.FallingGhost && !ghostPass && r.Height > 4) DrawNoteGhosts(dc, r, color, opacity, pitch, rising);
         if (_visual.HoldBar && sounding && !ghostPass) DrawHoldBar(dc, r, color, opacity);
     }

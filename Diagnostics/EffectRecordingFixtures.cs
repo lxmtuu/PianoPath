@@ -88,6 +88,11 @@ internal static class EffectRecordingFixtures
             settings => { settings.NoteShimmer = true; settings.NoteShimmerAmount = 100; },
             WpfAdvanceSteps: 6, GpuSettleFrames: 2, GpuSampleFrames: 12),
         new EffectRecordingCaptureFixture(
+            "falling.body.gradient", EffectRecordingScene.FallingNote,
+            // Static: the gradient rides the note's travel, so a settled frame already shows it end to end.
+            settings => { settings.NoteBodyGradient = 100; },
+            WpfAdvanceSteps: 4, GpuSettleFrames: 2, GpuSampleFrames: 4),
+        new EffectRecordingCaptureFixture(
             "hold.bar", EffectRecordingScene.HeldNotes,
             settings => { settings.HoldBar = true; settings.HoldBarIntensity = 100; },
             WpfAdvanceSteps: 4, GpuSettleFrames: 2, GpuSampleFrames: 8),

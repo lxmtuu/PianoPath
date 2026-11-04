@@ -1094,7 +1094,14 @@ float4 ShadeNoteMaterial(NoteMaterialInput v)
     }
     float inside = saturate(0.5 - d * SceneSize.z);
     float outsideD = max(d, 0.0);
+    // leading edge (the head that meets the keys): v.Misc.z carries the travel direction, so this is 1 at
+    // the head whichever way the note moves.
+    float along = saturate(p.y * v.Misc.z / hb.y * 0.5 + 0.5);
     float3 col = v.Color.rgb;
+    // falling.color-gradient: the head keeps the note's own colour and the tail lifts towards white by
+    // NoteD.z. Applied to the shared colour before any material reads it, the same way the WPF stage
+    // clips one overlay to the body: every style inherits it and the silhouette cannot move.
+    col = lerp(col, 1.0, (1.0 - along) * NoteD.z);
     float opacity = v.Color.a;
     float sounding = v.Misc.x;
     float edgeW = max(NoteA.z, 0.75);
@@ -1106,8 +1113,7 @@ float4 ShadeNoteMaterial(NoteMaterialInput v)
     float3 emit = col * halo * NoteC.z * (0.55 + 0.75 * sounding) * (1.0 - inside);
     float alpha = 0.0;
 
-    // leading edge (the head that meets the keys)
-    float along = saturate(p.y * v.Misc.z / hb.y * 0.5 + 0.5);
+    // the head glow rides the same coordinate
     float head = pow(along, 10.0) * NoteB.z;
     float xN = p.x / hb.x;
 

@@ -259,6 +259,39 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
+
+        // The falling-FX group in isolation: the setting wiring, the contract family, and the note-body
+        // gradient measured in pixels. It needs the window's rendered layout - the dock builds the slider
+        // rows, the choice maps and the stage - so it waits for ContentRendered the same way the practice
+        // window does, rather than reaching into a half-built window.
+        if (args.Contains("--verify-falling-only"))
+        {
+            Results.Add("NOTE Isolated falling-FX review (wiring, contract family, and the note-body gradient in pixels); this does not run or certify the full regression suite.");
+            var fallingWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
+            fallingWindow.UseSoftwareForSession();
+            fallingWindow.DisableChromeMotion();
+            fallingWindow.ContentRendered += (_, _) =>
+            {
+                var delay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+                delay.Tick += (_, _) =>
+                {
+                    delay.Stop();
+                    try
+                    {
+                        var stage = (PianoStage)fallingWindow.FindName("Stage");
+                        var visualSettings = (PianoVisualSettings)Field(fallingWindow, "_visualSettings");
+                        var choices = (Dictionary<string, ComboBox>)Field(fallingWindow, "_visualChoices");
+                        Run(nameof(VerifyFallingFx), () => VerifyFallingFx(fallingWindow, stage, visualSettings, choices));
+                        Run(nameof(VerifyNoteBodyGradient), () => VerifyNoteBodyGradient(fallingWindow, stage, visualSettings));
+                        Finish(app, args, null);
+                    }
+                    catch (Exception ex) { Finish(app, args, ex); }
+                };
+                delay.Start();
+            };
+            fallingWindow.Show();
+            return;
+        }
             try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); VerifyArLifecycle(reviewOutput!); VerifyArValuePilot(reviewOutput!); VerifyStageValuePilot(reviewOutput!); /* stage 9 already inside VerifyArEffect; pilots isolated only */ } }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
@@ -729,8 +762,8 @@ internal static partial class VerificationSuite
     private static void VerifyFallingPilot()
     {
         var pilot = EffectContractCatalog.FallingFxPilot;
-        Assert(EffectContractCatalog.IsFallingPilotWellFormed && pilot.Count == 3,
-            "The falling-FX pilot should contain the three well-formed, uniquely identified families.");
+        Assert(EffectContractCatalog.IsFallingPilotWellFormed && pilot.Count == 4,
+            "The falling-FX pilot should contain the four well-formed, uniquely identified families.");
         var byId = pilot.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
         Assert(byId["falling.trail"].Capabilities.WpfStage.State == EffectBackendState.Native
                 && byId["falling.trail"].Capabilities.GpuStage.State == EffectBackendState.Native
@@ -742,6 +775,15 @@ internal static partial class VerificationSuite
                 && byId["falling.shimmer"].Parameters.All(parameter => parameter.Bindings.WpfStage == EffectParameterBindingState.Ignored
                     && parameter.Bindings.GpuStage == EffectParameterBindingState.Applied),
             "The shimmer must stay honest: GPU-native, and Unsupported/ignored on the WPF stage that never reads NoteShimmer.");
+        Assert(byId["falling.body.gradient"].Capabilities.WpfStage.State == EffectBackendState.Native
+                && byId["falling.body.gradient"].Capabilities.GpuStage.State == EffectBackendState.Unverified
+                && byId["falling.body.gradient"].Capabilities.ArOverlay.State == EffectBackendState.Unverified
+                && byId["falling.body.gradient"].Parameters.All(parameter => parameter.Bindings.WpfStage == EffectParameterBindingState.Applied
+                    && parameter.Bindings.GpuStage == EffectParameterBindingState.Applied
+                    && parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
+            "The body gradient reaches all three: a WPF overlay, and the shared note material that both the stage shader and the AR quads shade through. GPU and AR stay Unverified because no per-value matrix measures either.");
+        Assert(byId["falling.body.gradient"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation,
+            "The gradient rides the note's travel, so it holds no animation of its own for Reduced Motion to freeze.");
         Assert(byId["falling.trail"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
                 && byId["falling.pulse"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation
                 && byId["falling.shimmer"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation,
@@ -773,7 +815,7 @@ internal static partial class VerificationSuite
                 Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
             }
         }
-        Results.Add("PASS falling-FX contract metadata: trail/ghost travel-derived, pulse/shimmer own their clock and freeze under Reduced Motion, the shimmer is honestly GPU-only with WPF Unsupported, the shimmer's flash risk resolves conservatively, and no cost is invented. Metadata coherence only; no renderer changed.");
+        Results.Add("PASS falling-FX contract metadata: trail/ghost and the body gradient travel-derived, pulse/shimmer own their clock and freeze under Reduced Motion, the shimmer is honestly GPU-only with WPF Unsupported, the body gradient is drawn by all three backends and stays Unverified on GPU and AR, the shimmer's flash risk resolves conservatively, and no cost is invented. Metadata coherence only; no renderer changed.");
     }
 
     /// <summary>
@@ -3093,6 +3135,7 @@ internal static partial class VerificationSuite
         stage.SetVisualSettings(visualSettings);
         Run(nameof(VerifyImpactFx), () => VerifyImpactFx(window, stage, visualSettings, choices));
         Run(nameof(VerifyFallingFx), () => VerifyFallingFx(window, stage, visualSettings, choices));
+        Run(nameof(VerifyNoteBodyGradient), () => VerifyNoteBodyGradient(window, stage, visualSettings));
         Run(nameof(VerifyHoldFx), () => VerifyHoldFx(window, stage, visualSettings));
         Run(nameof(VerifyReleaseFx), () => VerifyReleaseFx(window, stage, visualSettings, choices));
         Run(nameof(VerifyAmbientFx), () => VerifyAmbientFx(window, stage, visualSettings, choices));
@@ -4178,11 +4221,11 @@ internal static partial class VerificationSuite
     {
         var fixtures = EffectRecordingFixtures.All;
         var families = EffectContractCatalog.AllFamilies;
-        Assert(fixtures.Count == 24
+        Assert(fixtures.Count == 25
                 && fixtures.Select(fixture => fixture.FamilyId).Distinct(StringComparer.Ordinal).Count() == fixtures.Count
                 && fixtures.Select(fixture => fixture.FamilyId).OrderBy(id => id, StringComparer.Ordinal)
                     .SequenceEqual(families.Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal)),
-            "WPF recording capture fixtures must cover each of the 24 typed families exactly once before backend filtering.");
+            "WPF recording capture fixtures must cover each of the 25 typed families exactly once before backend filtering.");
         Assert(!stage.UsesGpuFrame,
             "The WPF PNG family captures must exercise the software-stage renderer, not a cached GPU preview.");
 
@@ -4285,8 +4328,8 @@ internal static partial class VerificationSuite
                 evidence.Add($"{fixture.FamilyId}={changed}");
             }
 
-            Assert(evidence.Count == 22,
-                $"WPF PNG capture evidence should cover exactly the 22 WPF-native families, not the two GPU-only effects (captured {evidence.Count}).");
+            Assert(evidence.Count == 23,
+                $"WPF PNG capture evidence should cover exactly the 23 WPF-native families, not the two GPU-only effects (captured {evidence.Count}).");
             Results.Add($"PASS WPF Recording family captures: {evidence.Count} individually isolated families were written and read back through real 640×360 PNG sequence files [{string.Join(", ", evidence)}]. Shooting Stars and Note Shimmer remain WPF Unsupported and are covered only by their GPU tap frames; parameter bindings stay Unverified and cost stays Unmeasured.");
         }
         finally
@@ -6092,10 +6135,23 @@ internal static partial class VerificationSuite
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.ImpactBurst)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactMorph)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactFlashStyle)),
             "The Particles page should expose the burst style, the note morph and the flash style.");
         var headTailGradient = EffectCatalog.Falling.All.Single(e => e.Id == "falling.color-gradient");
-        Assert(EffectCatalog.AllEffects.Count == 87 && EffectCatalog.AvailableCount == 86
-            && headTailGradient.Status == EffectStatus.Planned && headTailGradient.Channel == "falling.body.gradient"
-            && EffectCatalog.Falling.All.Where(e => e.Id != headTailGradient.Id).All(e => e.Status == EffectStatus.Available),
-            "The effect inventory should keep its missing head-to-tail gradient Planned rather than equating it with the pitch palette.");
+        Assert(EffectCatalog.AllEffects.Count == 87 && EffectCatalog.AvailableCount == 87
+            && headTailGradient.Status == EffectStatus.Available && headTailGradient.Channel == "falling.body.gradient"
+            && EffectCatalog.Falling.All.All(e => e.Status == EffectStatus.Available),
+            "The head-to-tail gradient should now be an implemented falling-family effect of its own, distinct from the pitch palette.");
+        // Implemented means wired, not merely renamed: a 0-100 slider on the Notes page that starts off, the
+        // clamp every percentage gets, and the contract family naming the setting the stage reads. A pixel
+        // assertion belongs to the software-render harness, not here - this suite drives the live window.
+        var gradientSliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
+        Assert(gradientSliders.TryGetValue(nameof(PianoVisualSettings.NoteBodyGradient), out var bodyGradientSlider)
+            && bodyGradientSlider.Minimum == 0 && bodyGradientSlider.Maximum == 100
+            && new PianoVisualSettings().NoteBodyGradient == 0,
+            "The Notes page should expose the head-to-tail body gradient as a 0-100 slider that starts off.");
+        var overRange = new PianoVisualSettings { NoteBodyGradient = 400 }; overRange.Clamp();
+        Assert(overRange.NoteBodyGradient == 100, "The body gradient should clamp to 100 like every other percentage.");
+        var gradientFamily = EffectContractCatalog.FallingFxPilot.FirstOrDefault(f => f.Id == "falling.body.gradient");
+        Assert(gradientFamily is not null && gradientFamily.Parameters.Any(p => p.SettingName == nameof(PianoVisualSettings.NoteBodyGradient)),
+            "The falling contract should carry the body-gradient family with the setting the stage reads.");
         Assert(EffectCatalog.Impact.All.All(e => e.Status == EffectStatus.Available),
             "The whole impact catalogue should be implemented in v2.");
         var wasTrail = visualSettings.FallingTrail; var wasTrailIntensity = visualSettings.FallingTrailIntensity;
@@ -6136,6 +6192,91 @@ internal static partial class VerificationSuite
     /// Hold phase FX (effects-redesign v3): the Notes page exposes the hold bar, breathing glow,
     /// vibration, color cycle and electric arc; sounding notes and chained keys paint real geometry.
     /// </summary>
+    /// <summary>
+    /// falling.color-gradient: the head-to-tail gradient really paints, it runs along the note's travel rather
+    /// than down the screen, and it leaves both the head's own colour and the silhouette alone. The note is
+    /// drawn through the stage's own routine into an off-screen bitmap, so this is a claim about pixels -
+    /// the wiring assertion in <see cref="VerifyFallingFx"/> only proves the setting reaches the stage.
+    /// </summary>
+    private static void VerifyNoteBodyGradient(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        var saved = visualSettings.Clone();
+        // Everything that could move a colour on its own is off, and the palette is one flat colour, so the
+        // gradient is the only thing allowed to differ between the two ends of the body.
+        visualSettings.NoteStyle = "Solid"; visualSettings.NoteGlow = 0; visualSettings.NoteHeadGlow = 0;
+        // Notes3D off as well: its bevel already brightens one end, and a pixel that starts near white
+        // leaves the gradient almost no headroom - measured against it, the lift looked like a fifth of
+        // what it is. Flat body, so the only thing that can vary from end to end is the gradient.
+        visualSettings.Notes3D = false;
+        visualSettings.BloomSize = 0; visualSettings.ShowNoteLabels = false; visualSettings.FallingPulse = false;
+        visualSettings.FallingTrail = "None"; visualSettings.FallingGhost = false; visualSettings.HoldVibration = false;
+        visualSettings.HoldColorCycle = false; visualSettings.HoldBar = false; visualSettings.NoteShimmer = false;
+        visualSettings.VelocityColor = false; visualSettings.OctaveColor = false; visualSettings.ZoneSplit = false;
+        visualSettings.AudioReactive = false; visualSettings.TempoSync = false; visualSettings.PedalGlow = false;
+        visualSettings.ColorMode = "Spectrum"; visualSettings.Palette = "Custom";
+        visualSettings.NoteColorStart = "#1E5AA8"; visualSettings.NoteColorEnd = "#1E5AA8";
+        visualSettings.Saturation = 100;
+        stage.SetVisualSettings(visualSettings);
+        var color = stage.NoteColor(60, 0);
+        var body = new Rect(470, 150, 60, 300);
+
+        // Tops and bottoms, not heads and tails: the point of the fixture is which end of the screen brightens.
+        // The bounds are the box around everything the note painted, which is how the silhouette is measured -
+        // a count of "mostly opaque" pixels would swing by hundreds on the anti-aliased rim alone, because the
+        // overlay composited over a half-covered edge pixel lifts it across any threshold you care to pick.
+        (int Top, int Bottom, int Left, int Right, int TopEdge, int BottomEdge) Sample(double amount, bool rising)
+        {
+            visualSettings.NoteBodyGradient = amount;
+            stage.SetVisualSettings(visualSettings);
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+                Invoke(stage, "DrawConfiguredNote", dc, body, color, 1.0, false, 60, rising, false);
+            var bitmap = new RenderTargetBitmap(1000, 600, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            var pixels = new byte[1000 * 600 * 4];
+            bitmap.CopyPixels(pixels, 4000, 0);
+            int Offset(int x, int y) => (y * 1000 + x) * 4;
+            int Sum(int offset) => pixels[offset] + pixels[offset + 1] + pixels[offset + 2];
+            var centre = (int)(body.X + body.Width / 2);
+            var left = 1000; var right = -1; var topEdge = 600; var bottomEdge = -1;
+            for (var y = 0; y < 600; y++)
+                for (var x = 0; x < 1000; x++)
+                {
+                    if (pixels[Offset(x, y) + 3] <= 8) continue;
+                    if (x < left) left = x;
+                    if (x > right) right = x;
+                    if (y < topEdge) topEdge = y;
+                    if (y > bottomEdge) bottomEdge = y;
+                }
+            // Four pixels in from each end: far enough to be inside the body, near enough that the
+            // gradient's own ramp has not begun to lift the head end yet.
+            return (Sum(Offset(centre, (int)body.Top + 4)), Sum(Offset(centre, (int)body.Bottom - 4)),
+                left, right, topEdge, bottomEdge);
+        }
+
+        var flat = Sample(0, false);
+        var falling = Sample(100, false);
+        var rising = Sample(100, true);
+        // Every comparison is against the same pixel with the gradient off, never against the other end of
+        // the body: the solid style carries its own bevel gradient, so "the two ends match with the gradient
+        // off" would be a test of that bevel rather than of this effect.
+        Assert(falling.Top - flat.Top >= 90,
+            $"A falling note reaches the keys bottom-first, so its tail is the top end and that end has to lift (top {flat.Top} before, {falling.Top} after).");
+        Assert(rising.Bottom - flat.Bottom >= 90,
+            $"A rising note travels the other way, so the gradient has to flip with it (bottom {flat.Bottom} before, {rising.Bottom} after).");
+        Assert(Math.Abs(falling.Bottom - flat.Bottom) <= 6,
+            $"The head keeps the note's own colour: only the tail lifts towards white (bottom {flat.Bottom} before, {falling.Bottom} after).");
+        Assert(Math.Abs(rising.Top - flat.Top) <= 6,
+            $"The same head keeps its colour when the note rises (top {flat.Top} before, {rising.Top} after).");
+        // One pixel of slack for the anti-aliased rim, which the overlay can nudge by a fraction; an overlay
+        // that escaped the body would push an edge out by the whole gradient.
+        Assert(Math.Abs(falling.Left - flat.Left) <= 1 && Math.Abs(falling.Right - flat.Right) <= 1
+                && Math.Abs(falling.TopEdge - flat.TopEdge) <= 1 && Math.Abs(falling.BottomEdge - flat.BottomEdge) <= 1,
+            $"The gradient is an overlay clipped to the body, so the silhouette cannot move (left {flat.Left}->{falling.Left}, right {flat.Right}->{falling.Right}, top {flat.TopEdge}->{falling.TopEdge}, bottom {flat.BottomEdge}->{falling.BottomEdge}).");
+        visualSettings.CopyFrom(saved);
+        stage.SetVisualSettings(visualSettings);
+    }
+
     private static void VerifyHoldFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
     {
         var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");

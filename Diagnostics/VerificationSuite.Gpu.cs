@@ -603,11 +603,11 @@ internal static partial class VerificationSuite
     {
         var fixtures = EffectRecordingFixtures.All;
         var families = EffectContractCatalog.AllFamilies;
-        Assert(fixtures.Count == 24
+        Assert(fixtures.Count == 25
                 && fixtures.Select(fixture => fixture.FamilyId).Distinct(StringComparer.Ordinal).Count() == fixtures.Count
                 && fixtures.Select(fixture => fixture.FamilyId).OrderBy(id => id, StringComparer.Ordinal)
                     .SequenceEqual(families.Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal)),
-            "The GPU recording capture fixtures must cover each of the 24 typed families exactly once.");
+            "The GPU recording capture fixtures must cover each of the 25 typed families exactly once.");
         Assert(width == EffectRecordingFixtures.Width && height == EffectRecordingFixtures.Height
                 && tap.Width == width && tap.Height == height,
             "The per-family recording captures must use the exact-size 640×360 output of the real GPU recording tap.");

@@ -249,7 +249,7 @@ public sealed class EffectContractTests
     [Fact]
     public void All_families_union_covers_every_pilot_exactly_once()
     {
-        Assert.Equal(24, EffectContractCatalog.AllFamilies.Count);
+        Assert.Equal(25, EffectContractCatalog.AllFamilies.Count);
         Assert.Equal(
             EffectContractCatalog.ImpactFxPilot.Concat(EffectContractCatalog.FallingFxPilot)
                 .Concat(EffectContractCatalog.HoldFxPilot).Concat(EffectContractCatalog.AmbientFxPilot)
@@ -272,11 +272,12 @@ public sealed class EffectContractTests
             "hold.bar", "hold.breath", "hold.vibration", "hold.color-cycle", "hold.arc",
             "atmosphere.beams", "particles.sparks", "particles.wisps", "particles.flames", "release.fx",
             // Drawn on AR note quads, but not by every path: trails and ghosts need the saved pose, the pulse and
-            // the shimmer ride on the note quad itself. No per-value AR matrix covers them yet.
-            "falling.trail", "falling.pulse", "falling.shimmer",
+            // the shimmer ride on the note quad itself. The gradient reaches them through the shared note
+            // material. No per-value AR matrix covers any of them yet.
+            "falling.trail", "falling.pulse", "falling.shimmer", "falling.body.gradient",
         };
         Assert.Equal(6, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native));
-        Assert.Equal(17, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified));
+        Assert.Equal(18, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified));
         Assert.Equal(1, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported));
         foreach (var family in EffectContractCatalog.AllFamilies)
         {

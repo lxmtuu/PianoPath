@@ -310,6 +310,13 @@ internal static class EffectContractCatalog
     private static readonly EffectParameterBindingProfile WpfOnlyRefractionBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Ignored,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
+    // The head-to-tail gradient is drawn by the WPF stage and by the GPU note shader, both from the note's own
+    // colour. AR reaches the same lerp through the shared material, so its state is Unverified rather than
+    // Ignored: read by code that has never been measured per value, not a fallback that quietly approximates
+    // it, and not a claim that AR's direction has been checked.
+    private static readonly EffectParameterBindingProfile NoteBodyGradientBindings = new(
+        EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
     private static readonly EffectCostAssessment UnmeasuredCost = new(EffectCostState.Unmeasured);
 
     // Manual-review record of the physical-adapter probe (2026-10-07, AMD Radeon(TM) Graphics, iGPU):
@@ -519,7 +526,8 @@ internal static class EffectContractCatalog
 
     /// <summary>
     /// The third contract pilot: what rides along while a note travels. Trail and pulse/ghost are drawn by
-    /// both renderers; the shimmer is the one GPU-only member — the WPF stage never reads
+    /// both renderers; the body gradient is drawn by the WPF stage only, and the shimmer is the one GPU-only
+    /// member — the WPF stage never reads
     /// <c>NoteShimmer</c> (verified by source inspection), so it is Unsupported there rather than silently
     /// claimed. Motion classification is honest: trails and ghosts derive from the note's own travel, while
     /// the pulse and the shimmer twinkle on their own clock (IntrinsicAnimation).
@@ -564,6 +572,26 @@ internal static class EffectContractCatalog
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
+            "falling.body.gradient",
+            EffectPhase.Falling, EffectTrigger.NoteBodyRendered, EffectLifecycle.WhileNoteVisible, EffectAnchor.NoteBody,
+            // Static: the gradient depends on where the note is, not on the clock, so it animates with the note
+            // and never on its own - nothing here for reduced motion to freeze.
+            EffectClock.None, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Percentage("NoteBodyGradient", 0, 100, NoteBodyGradientBindings),
+            }),
+            // One overlay clipped to the note body in the WPF stage, one lerp on the shared colour in the GPU
+            // note shader - and therefore on AR too, because PsArQuad shades its projected quads with the same
+            // ShadeNoteMaterial. Recording is Native: the family has its own paired GPU recording capture, which
+            // is what that state means here. GPU and AR stay Unverified: the shader reads it and the WARP jobs
+            // draw notes through it, but no per-value matrix measures it, and PsArQuad pins the travel
+            // direction (note.Misc.z = 1.0) instead of deriving it, so how the gradient sits on a tilted
+            // projected note has never been looked at.
+            new EffectCapabilityProfile(Native, Unverified, Native, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
             "falling.shimmer",
             EffectPhase.Falling, EffectTrigger.NoteBodyRendered, EffectLifecycle.WhileNoteVisible, EffectAnchor.NoteBody,
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
@@ -580,7 +608,7 @@ internal static class EffectContractCatalog
 
     /// <summary>IDs unique, schemas and capability claims well-formed, before consumers opt in.</summary>
     internal static bool IsFallingPilotWellFormed =>
-        FallingFxPilot.Count == 3
+        FallingFxPilot.Count == 4
         && FallingFxPilot.All(contract => contract.IsWellFormed)
         && FallingFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == FallingFxPilot.Count;
 

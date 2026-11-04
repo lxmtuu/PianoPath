@@ -32,13 +32,16 @@ internal static partial class VerificationSuite
             "hold.bar", "hold.breath", "hold.vibration", "hold.color-cycle", "hold.arc",
             "atmosphere.beams", "particles.sparks", "particles.wisps", "particles.flames", "release.fx",
             "falling.trail", "falling.pulse", "falling.shimmer",
+            // The gradient rides the same projected note quad through the shared material, with no per-value
+            // AR matrix behind it yet.
+            "falling.body.gradient",
         };
         var families = EffectContractCatalog.AllFamilies;
-        Assert(families.Count == 24, "AR classification should cover all 24 typed effect families.");
+        Assert(families.Count == 25, "AR classification should cover all 25 typed effect families.");
         Assert(families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native) == 6
-                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified) == 17
+                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified) == 18
                 && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported) == 1,
-            "AR evidence must distinguish six verified screen-space families, 17 unverified projected families and the one family AR never draws (the backdrop star field).");
+            "AR evidence must distinguish six verified screen-space families, 18 unverified projected families and the one family AR never draws (the backdrop star field).");
         Assert(nativeInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native).Select(family => family.Id)),
             "Only the four ambient layers, shooting stars and petals are verified Native over the camera.");
         Assert(unverifiedInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified).Select(family => family.Id)),

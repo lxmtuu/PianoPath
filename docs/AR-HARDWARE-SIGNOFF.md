@@ -6,6 +6,11 @@
 > hình phần mềm, không phải card đồ hoạ; camera trong `--bench-ar` là camera tổng hợp, không phải webcam.
 > `ArProjectedParameterBindings` trong `Stage/Effects/EffectContracts.cs` vẫn có `Recording` và `ArOverlay`
 > ở mức **`Unverified`**. Tài liệu này là **cái cần làm**, không phải biên bản đã làm.
+>
+> **Cập nhật 2026-10-27 — cổng 1 của §6 đã qua.** Hai report `warp: false` (Lite và Ultra) đo trên
+> card thật **NVIDIA GeForce RTX 4050 Laptop GPU, driver 32.0.16.1714** đều nằm hoàn toàn trong ngân
+> sách 8/16/16 ms; bằng chứng nằm ngoài repo tại `C:\keyflow-signoff\2026-10-27\`. Cổng 2 (năm kịch
+> bản webcam/OBS thật) và cổng 3 (chữ ký chủ repo) **vẫn CHƯA DUYỆT**.
 
 ## 1. Cái đã có và cái còn thiếu
 
@@ -16,7 +21,7 @@
 | Cổng fail-fast CI cho N17V / N17V-S | ✅ Xanh | `.github/workflows/build.yml`, hai step riêng + notice |
 | `--bench-tier=<Lite\|Standard\|Ultra>` | ✅ Có công tắc | `Diagnostics/FrameBenchmark.cs`; tier ghi vào `arTier` của JSON và dòng log |
 | Script gom/kiểm chứng bằng chứng | ✅ Có công cụ | `tools/ar_hardware_signoff.py`, tự kiểm bằng `--check` trên CI |
-| **p95 trên card đồ hoạ thật, 2 tier** | ❌ Chưa có | Không có report nào có `warp: false` |
+| **p95 trên card đồ hoạ thật, 2 tier** | ✅ Xanh (2026-10-27) | `C:\keyflow-signoff\2026-10-27\`: `warp: false`, Lite 2,997 / 2,646 / 3,040 ms, Ultra 3,026 / 3,030 / 3,024 ms (`default`/`heavy`/`ar` so với 8/16/16 ms) |
 | **Webcam thật / OBS Virtual Camera** | ❌ Chưa có | Chưa có ảnh, video hay biên bản 5 kịch bản |
 | **Duyệt mỹ thuật** | ❌ Chưa có | Chủ repo chưa ký |
 | **Lật `Unverified` → `Applied`** | ❌ Chưa được phép | Cần đủ (2)+(3)+chữ ký chủ repo, xem §6 |
@@ -54,6 +59,13 @@ cùng `adapter`, ba cảnh `default`/`heavy`/`ar` đều `Measured`, và cảnh 
 Ngưỡng tuyệt đối: **p95 < 8 ms** cho `default`, **< 16 ms** cho `heavy` và `ar` (`FrameBudget.All`).
 Nếu `verdict: Fail` ở tier nào, dừng lại và báo cáo — đừng chỉnh ngưỡng cho vừa.
 
+Cả đoạn trên có sẵn thành một lệnh: `pwsh tools/ar_hardware_bench.ps1 -Adapter 'RTX 4050' -EvidenceDir $dir`.
+Bỏ `-Adapter` thì script tự dò card rời NVIDIA và **dừng lại** nếu máy có nhiều hơn một ứng viên — laptop
+hybrid đo nhầm iGPU vẫn cho report xanh mà vô nghĩa. Script chạy một lượt nháp 20 khung để chắc
+`warp: false` trước khi đo 120 khung, dừng ngay khi tier nào vượt ngân sách (exit 3), ghi log ra
+`bench-<tier>.log` (exe là `WinExe`, nên terminal có thể chỉ hiện exit code), và sinh sẵn `webcam.json`
+với phần máy điền từ chính máy đó — phần còn lại là `FILL-ME`, và script sẽ nhắc cho tới khi bị thay.
+
 ## 4. Webcam / OBS thật — 5 kịch bản bắt buộc
 
 Chụp **ảnh hoặc video** cho mỗi kịch bản vào `$dir\shots\`, rồi điền `webcam.json` (mẫu ở §5).
@@ -68,8 +80,14 @@ Chụp **ảnh hoặc video** cho mỗi kịch bản vào `$dir\shots\`, rồi �
 | `hand_occlusion` | Hiệu ứng không vẽ đè sai lên tay người chơi | Đặt tay lên phím đang có nốt/impact |
 
 Ngoài năm kịch bản: bật/tắt **OBS Virtual Camera** trong lúc app đang mở, thử **hai webcam cùng tên** (hậu tố
-`(2)`), và đo độ trễ bằng **MEASURE DELAY** rồi lưu số ms vào `webcam.json`. Ghi rõ kết quả dù xấu —
-một kịch bản hỏng là dữ liệu, không phải lý do để bỏ qua nó.
+`(2)`), và đo độ trễ bằng **MEASURE DELAY** rồi lưu số ms vào `webcam.json`. Hai kiểm tra đầu không có ảnh
+nên `webcam.json` chính là nơi duy nhất chúng được ghi: kết quả nằm ở `camera.obs_toggle_notes` và
+`camera.same_name_pair_notes`, và **`tools/ar_hardware_signoff.py` từ chối biên bản thiếu hai ô đó** —
+không có chỗ ghi thì kiểm tra có thể bị bỏ qua mà `--evidence` vẫn in PASS. Cùng lý do đó, mọi giá trị
+còn là câu mẫu `FILL-ME` cũng bị từ chối, nên chạy thẳng `--evidence` không cho PASS trên biên bản chưa
+ai điền. Ghi rõ kết quả dù xấu —
+một kịch bản hỏng là dữ liệu, không phải lý do để bỏ qua nó. `-FillWebcam` hỏi thẳng hai câu đó,
+còn `-ValidateOnly` báo lại từng ô còn trống.
 
 ## 5. Cấu trúc thư mục bằng chứng
 
@@ -89,7 +107,9 @@ một kịch bản hỏng là dữ liệu, không phải lý do để bỏ qua n
   "camera": {
     "device": "Logitech C920 / OBS Virtual Camera",
     "mode": "1280x720@60 MJPG",
-    "obs_virtual_camera": true
+    "obs_virtual_camera": true,
+    "obs_toggle_notes": "tắt/bật hai lần khi app đang mở, overlay vẫn vẽ",
+    "same_name_pair_notes": "thiết bị (2) mở ra khung đen, giữ thiết bị đầu"
   },
   "scenarios": {
     "overhead":       { "file": "shots/overhead.png",       "notes": "" },
@@ -125,7 +145,10 @@ Script **không bao giờ** sửa `Stage/Effects/EffectContracts.cs`. Dù `--evi
 
 1. Hai report `Lite` và `Ultra` trên **card thật** (`warp: false`) đều nằm trong ngân sách 8/16/16 ms.
 2. Năm kịch bản webcam/OBS thật có ảnh + ghi chú, không còn ô `notes` trống ở kịch bản lỗi.
-3. Chủ repo **duyệt mỹ thuật** và ký `owner_approved: true` trong biên bản.
+3. Chủ repo **duyệt mỹ thuật** và ký `owner_approved: true` trong biên bản. Việc ký có lệnh riêng —
+   `pwsh tools/ar_hardware_bench.ps1 -Approve` — và lệnh đó **từ chối ký** khi validator còn bất kỳ
+   điều gì chưa đạt, kèm đúng danh sách chưa đạt. Chữ ký ký lên (1) và (2), chứ không thay thế chúng:
+   duyệt một thư mục chưa có ảnh là tiêu hao quyết định duy nhất mà máy không làm được.
 
 PR đó phải dẫn tới file JSON bằng chứng và nêu rõ adapter/driver; guard
 `tools/hardware_signoff_contract.py` đang khoá binding ở mức `Unverified`, nên nếu lật mà chưa có
