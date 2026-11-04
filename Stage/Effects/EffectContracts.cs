@@ -525,7 +525,8 @@ internal static class EffectContractCatalog
 
     /// <summary>
     /// The third contract pilot: what rides along while a note travels. Trail and pulse/ghost are drawn by
-    /// both renderers; the shimmer is the one GPU-only member — the WPF stage never reads
+    /// both renderers; the body gradient is drawn by the WPF stage only, and the shimmer is the one GPU-only
+    /// member — the WPF stage never reads
     /// <c>NoteShimmer</c> (verified by source inspection), so it is Unsupported there rather than silently
     /// claimed. Motion classification is honest: trails and ghosts derive from the note's own travel, while
     /// the pulse and the shimmer twinkle on their own clock (IntrinsicAnimation).
@@ -601,7 +602,7 @@ internal static class EffectContractCatalog
 
     /// <summary>IDs unique, schemas and capability claims well-formed, before consumers opt in.</summary>
     internal static bool IsFallingPilotWellFormed =>
-        FallingFxPilot.Count == 3
+        FallingFxPilot.Count == 4
         && FallingFxPilot.All(contract => contract.IsWellFormed)
         && FallingFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == FallingFxPilot.Count;
 

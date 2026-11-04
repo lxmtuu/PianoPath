@@ -6107,7 +6107,7 @@ internal static partial class VerificationSuite
             "The Notes page should expose the head-to-tail body gradient as a 0-100 slider that starts off.");
         var overRange = new PianoVisualSettings { NoteBodyGradient = 400 }; overRange.Clamp();
         Assert(overRange.NoteBodyGradient == 100, "The body gradient should clamp to 100 like every other percentage.");
-        var gradientFamily = EffectContracts.FallingFxPilot.FirstOrDefault(f => f.Id == "falling.body.gradient");
+        var gradientFamily = EffectContractCatalog.FallingFxPilot.FirstOrDefault(f => f.Id == "falling.body.gradient");
         Assert(gradientFamily is not null && gradientFamily.Parameters.Any(p => p.SettingName == nameof(PianoVisualSettings.NoteBodyGradient)),
             "The falling contract should carry the body-gradient family with the setting the stage reads.");
         Assert(EffectCatalog.Impact.All.All(e => e.Status == EffectStatus.Available),
