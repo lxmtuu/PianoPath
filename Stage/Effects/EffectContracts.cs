@@ -310,6 +310,12 @@ internal static class EffectContractCatalog
     private static readonly EffectParameterBindingProfile WpfOnlyRefractionBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Ignored,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
+    // The head-to-tail gradient is drawn by the WPF stage alone: it is one overlay in DrawConfiguredNote, and
+    // neither the GPU note shader nor the AR note quads read NoteBodyGradient. Ignored is the honest state
+    // there - not Applied, and not a fallback that quietly approximates it.
+    private static readonly EffectParameterBindingProfile WpfOnlyNoteBodyGradientBindings = new(
+        EffectParameterBindingState.Applied, EffectParameterBindingState.Ignored,
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
     private static readonly EffectCostAssessment UnmeasuredCost = new(EffectCostState.Unmeasured);
 
     // Manual-review record of the physical-adapter probe (2026-10-07, AMD Radeon(TM) Graphics, iGPU):
@@ -563,6 +569,21 @@ internal static class EffectContractCatalog
             new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "falling.body.gradient",
+            EffectPhase.Falling, EffectTrigger.NoteBodyRendered, EffectLifecycle.WhileNoteVisible, EffectAnchor.NoteBody,
+            // Static: the gradient depends on where the note is, not on the clock, so it animates with the note
+            // and never on its own - nothing here for reduced motion to freeze.
+            EffectClock.None, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Percentage("NoteBodyGradient", 0, 100, WpfOnlyNoteBodyGradientBindings),
+            }),
+            // One overlay clipped to the note body in the WPF stage. The GPU shader and the AR quads are
+            // Unsupported rather than Unverified: there is no code path to verify yet.
+            new EffectCapabilityProfile(Native, Unsupported, Unverified, Unsupported),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
             "falling.shimmer",
             EffectPhase.Falling, EffectTrigger.NoteBodyRendered, EffectLifecycle.WhileNoteVisible, EffectAnchor.NoteBody,

@@ -203,6 +203,9 @@ internal sealed class PianoVisualSettings
     public bool FallingGhost { get; set; } = false;
     /// <summary>Visibility and number of the echo copies (0-100).</summary>
     public double FallingGhostAmount { get; set; } = 40;
+    /// <summary>Head-to-tail colour shift across the note body (0-100). 0 leaves the body flat: the head
+    /// keeps the note's own colour while the tail lifts towards white by this much.</summary>
+    public double NoteBodyGradient { get; set; } = 0;
     /// <summary>GPU stage: a light sheen sweeps along every travelling bar.</summary>
     public bool NoteShimmer { get; set; } = false;
     /// <summary>Strength of the sweeping sheen (0-100).</summary>
@@ -780,6 +783,7 @@ internal sealed class PianoVisualSettings
         ImpactWaveIntensity = Math.Clamp(ImpactWaveIntensity, 0, 150); ImpactFlashIntensity = Math.Clamp(ImpactFlashIntensity, 0, 100);
         FallingTrailIntensity = Math.Clamp(FallingTrailIntensity, 0, 100); FallingTrailLength = Math.Clamp(FallingTrailLength, 0, 100);
         FallingPulseRate = Math.Clamp(FallingPulseRate, 0, 100); FallingGhostAmount = Math.Clamp(FallingGhostAmount, 0, 100);
+        NoteBodyGradient = Math.Clamp(NoteBodyGradient, 0, 100);
         NoteShimmerAmount = Math.Clamp(NoteShimmerAmount, 0, 100); HaloPulseIntensity = Math.Clamp(HaloPulseIntensity, 0, 100);
         HaloPulseSpeed = Math.Clamp(HaloPulseSpeed, 0, 100);
         BackgroundMotionAmount = Math.Clamp(BackgroundMotionAmount, 0, 100); BackgroundMotionSpeed = Math.Clamp(BackgroundMotionSpeed, 0, 100);

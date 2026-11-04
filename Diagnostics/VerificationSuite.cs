@@ -6092,10 +6092,23 @@ internal static partial class VerificationSuite
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.ImpactBurst)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactMorph)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactFlashStyle)),
             "The Particles page should expose the burst style, the note morph and the flash style.");
         var headTailGradient = EffectCatalog.Falling.All.Single(e => e.Id == "falling.color-gradient");
-        Assert(EffectCatalog.AllEffects.Count == 87 && EffectCatalog.AvailableCount == 86
-            && headTailGradient.Status == EffectStatus.Planned && headTailGradient.Channel == "falling.body.gradient"
-            && EffectCatalog.Falling.All.Where(e => e.Id != headTailGradient.Id).All(e => e.Status == EffectStatus.Available),
-            "The effect inventory should keep its missing head-to-tail gradient Planned rather than equating it with the pitch palette.");
+        Assert(EffectCatalog.AllEffects.Count == 87 && EffectCatalog.AvailableCount == 87
+            && headTailGradient.Status == EffectStatus.Available && headTailGradient.Channel == "falling.body.gradient"
+            && EffectCatalog.Falling.All.All(e => e.Status == EffectStatus.Available),
+            "The head-to-tail gradient should now be an implemented falling-family effect of its own, distinct from the pitch palette.");
+        // Implemented means wired, not merely renamed: a 0-100 slider on the Notes page that starts off, the
+        // clamp every percentage gets, and the contract family naming the setting the stage reads. A pixel
+        // assertion belongs to the software-render harness, not here - this suite drives the live window.
+        var gradientSliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
+        Assert(gradientSliders.TryGetValue(nameof(PianoVisualSettings.NoteBodyGradient), out var bodyGradientSlider)
+            && bodyGradientSlider.Minimum == 0 && bodyGradientSlider.Maximum == 100
+            && new PianoVisualSettings().NoteBodyGradient == 0,
+            "The Notes page should expose the head-to-tail body gradient as a 0-100 slider that starts off.");
+        var overRange = new PianoVisualSettings { NoteBodyGradient = 400 }; overRange.Clamp();
+        Assert(overRange.NoteBodyGradient == 100, "The body gradient should clamp to 100 like every other percentage.");
+        var gradientFamily = EffectContracts.FallingFxPilot.FirstOrDefault(f => f.Id == "falling.body.gradient");
+        Assert(gradientFamily is not null && gradientFamily.Parameters.Any(p => p.SettingName == nameof(PianoVisualSettings.NoteBodyGradient)),
+            "The falling contract should carry the body-gradient family with the setting the stage reads.");
         Assert(EffectCatalog.Impact.All.All(e => e.Status == EffectStatus.Available),
             "The whole impact catalogue should be implemented in v2.");
         var wasTrail = visualSettings.FallingTrail; var wasTrailIntensity = visualSettings.FallingTrailIntensity;
