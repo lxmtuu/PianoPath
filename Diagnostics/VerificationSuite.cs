@@ -4328,8 +4328,8 @@ internal static partial class VerificationSuite
                 evidence.Add($"{fixture.FamilyId}={changed}");
             }
 
-            Assert(evidence.Count == 22,
-                $"WPF PNG capture evidence should cover exactly the 22 WPF-native families, not the two GPU-only effects (captured {evidence.Count}).");
+            Assert(evidence.Count == 23,
+                $"WPF PNG capture evidence should cover exactly the 23 WPF-native families, not the two GPU-only effects (captured {evidence.Count}).");
             Results.Add($"PASS WPF Recording family captures: {evidence.Count} individually isolated families were written and read back through real 640×360 PNG sequence files [{string.Join(", ", evidence)}]. Shooting Stars and Note Shimmer remain WPF Unsupported and are covered only by their GPU tap frames; parameter bindings stay Unverified and cost stays Unmeasured.");
         }
         finally
