@@ -259,6 +259,39 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
+
+        // The falling-FX group in isolation: the setting wiring, the contract family, and the note-body
+        // gradient measured in pixels. It needs the window's rendered layout - the dock builds the slider
+        // rows, the choice maps and the stage - so it waits for ContentRendered the same way the practice
+        // window does, rather than reaching into a half-built window.
+        if (args.Contains("--verify-falling-only"))
+        {
+            Results.Add("NOTE Isolated falling-FX review (wiring, contract family, and the note-body gradient in pixels); this does not run or certify the full regression suite.");
+            var fallingWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
+            fallingWindow.UseSoftwareForSession();
+            fallingWindow.DisableChromeMotion();
+            fallingWindow.ContentRendered += (_, _) =>
+            {
+                var delay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+                delay.Tick += (_, _) =>
+                {
+                    delay.Stop();
+                    try
+                    {
+                        var stage = (PianoStage)fallingWindow.FindName("Stage");
+                        var visualSettings = (PianoVisualSettings)Field(fallingWindow, "_visualSettings");
+                        var choices = (Dictionary<string, ComboBox>)Field(fallingWindow, "_visualChoices");
+                        Run(nameof(VerifyFallingFx), () => VerifyFallingFx(fallingWindow, stage, visualSettings, choices));
+                        Run(nameof(VerifyNoteBodyGradient), () => VerifyNoteBodyGradient(fallingWindow, stage, visualSettings));
+                        Finish(app, args, null);
+                    }
+                    catch (Exception ex) { Finish(app, args, ex); }
+                };
+                delay.Start();
+            };
+            fallingWindow.Show();
+            return;
+        }
             try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyWpfNoteDensity(); VerifyStageClock(); VerifyWpfFlameParity(); VerifyWpfEmissionParity(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) { VerifyPhase1VisualReview(reviewOutput!); VerifyOptionMatrix(reviewOutput!); VerifyOptionPose(reviewOutput!); VerifyOptionNumeric(reviewOutput!); VerifyPresetRoundTrip(reviewOutput!); VerifyRefraction(reviewOutput!); VerifyArMaterial(reviewOutput!); VerifyArEffect(reviewOutput!); VerifyArLifecycle(reviewOutput!); VerifyArValuePilot(reviewOutput!); VerifyStageValuePilot(reviewOutput!); /* stage 9 already inside VerifyArEffect; pilots isolated only */ } }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
