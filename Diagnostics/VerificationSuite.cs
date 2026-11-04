@@ -3093,6 +3093,7 @@ internal static partial class VerificationSuite
         stage.SetVisualSettings(visualSettings);
         Run(nameof(VerifyImpactFx), () => VerifyImpactFx(window, stage, visualSettings, choices));
         Run(nameof(VerifyFallingFx), () => VerifyFallingFx(window, stage, visualSettings, choices));
+        Run(nameof(VerifyNoteBodyGradient), () => VerifyNoteBodyGradient(window, stage, visualSettings));
         Run(nameof(VerifyHoldFx), () => VerifyHoldFx(window, stage, visualSettings));
         Run(nameof(VerifyReleaseFx), () => VerifyReleaseFx(window, stage, visualSettings, choices));
         Run(nameof(VerifyAmbientFx), () => VerifyAmbientFx(window, stage, visualSettings, choices));
@@ -6149,6 +6150,69 @@ internal static partial class VerificationSuite
     /// Hold phase FX (effects-redesign v3): the Notes page exposes the hold bar, breathing glow,
     /// vibration, color cycle and electric arc; sounding notes and chained keys paint real geometry.
     /// </summary>
+    /// <summary>
+    /// falling.color-gradient: the head-to-tail gradient really paints, it runs along the note's travel rather
+    /// than down the screen, and it leaves both the head's own colour and the silhouette alone. The note is
+    /// drawn through the stage's own routine into an off-screen bitmap, so this is a claim about pixels -
+    /// the wiring assertion in <see cref="VerifyFallingFx"/> only proves the setting reaches the stage.
+    /// </summary>
+    private static void VerifyNoteBodyGradient(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        var saved = visualSettings.Clone();
+        // Everything that could move a colour on its own is off, and the palette is one flat colour, so the
+        // gradient is the only thing allowed to differ between the two ends of the body.
+        visualSettings.NoteStyle = "Solid"; visualSettings.NoteGlow = 0; visualSettings.NoteHeadGlow = 0;
+        visualSettings.BloomSize = 0; visualSettings.ShowNoteLabels = false; visualSettings.FallingPulse = false;
+        visualSettings.FallingTrail = "None"; visualSettings.FallingGhost = false; visualSettings.HoldVibration = false;
+        visualSettings.HoldColorCycle = false; visualSettings.HoldBar = false; visualSettings.NoteShimmer = false;
+        visualSettings.VelocityColor = false; visualSettings.OctaveColor = false; visualSettings.ZoneSplit = false;
+        visualSettings.AudioReactive = false; visualSettings.TempoSync = false; visualSettings.PedalGlow = false;
+        visualSettings.ColorMode = "Spectrum"; visualSettings.Palette = "Custom";
+        visualSettings.NoteColorStart = "#1E5AA8"; visualSettings.NoteColorEnd = "#1E5AA8";
+        visualSettings.Saturation = 100;
+        stage.SetVisualSettings(visualSettings);
+        var color = stage.NoteColor(60, 0);
+        var body = new Rect(470, 150, 60, 300);
+
+        // Tops and bottoms, not heads and tails: the point of the fixture is which end of the screen brightens.
+        (int Top, int Bottom, int Opaque) Sample(double amount, bool rising)
+        {
+            visualSettings.NoteBodyGradient = amount;
+            stage.SetVisualSettings(visualSettings);
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+                Invoke(stage, "DrawConfiguredNote", dc, body, color, 1.0, false, 60, rising, false);
+            var bitmap = new RenderTargetBitmap(1000, 600, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            var pixels = new byte[1000 * 600 * 4];
+            bitmap.CopyPixels(pixels, 4000, 0);
+            int Offset(int x, int y) => (y * 1000 + x) * 4;
+            int Sum(int offset) => pixels[offset] + pixels[offset + 1] + pixels[offset + 2];
+            var centre = (int)(body.X + body.Width / 2);
+            var opaque = 0;
+            for (var index = 3; index < pixels.Length; index += 4) if (pixels[index] > 200) opaque++;
+            return (Sum(Offset(centre, (int)body.Top + 12)), Sum(Offset(centre, (int)body.Bottom - 12)), opaque);
+        }
+
+        var flat = Sample(0, false);
+        var falling = Sample(100, false);
+        var rising = Sample(100, true);
+        Assert(Math.Abs(flat.Top - flat.Bottom) <= 6,
+            $"With the gradient off the body should be one colour from end to end (top {flat.Top}, bottom {flat.Bottom}).");
+        Assert(falling.Top - falling.Bottom >= 90,
+            $"A falling note reaches the keys bottom-first, so its tail is the top end and that end brightens (top {falling.Top}, bottom {falling.Bottom}).");
+        Assert(rising.Bottom - rising.Top >= 90,
+            $"A rising note travels the other way, so the gradient has to flip with it (top {rising.Top}, bottom {rising.Bottom}).");
+        Assert(Math.Abs(falling.Bottom - flat.Bottom) <= 6,
+            $"The head should keep the note's own colour: only the tail lifts towards white (was {flat.Bottom}, now {falling.Bottom}).");
+        // The tolerance is a handful of anti-aliased edge pixels, which can cross the alpha threshold once the
+        // overlay is composited over them; a gradient that escaped the body would add hundreds.
+        Assert(Math.Abs(falling.Opaque - flat.Opaque) <= 24,
+            $"The gradient is an overlay clipped to the body, so the silhouette cannot change ({flat.Opaque} opaque pixels before, {falling.Opaque} after).");
+        visualSettings.CopyFrom(saved);
+        stage.SetVisualSettings(visualSettings);
+    }
+
     private static void VerifyHoldFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
     {
         var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
