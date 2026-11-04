@@ -6184,7 +6184,10 @@ internal static partial class VerificationSuite
         var body = new Rect(470, 150, 60, 300);
 
         // Tops and bottoms, not heads and tails: the point of the fixture is which end of the screen brightens.
-        (int Top, int Bottom, int Opaque) Sample(double amount, bool rising)
+        // The bounds are the box around everything the note painted, which is how the silhouette is measured -
+        // a count of "mostly opaque" pixels would swing by hundreds on the anti-aliased rim alone, because the
+        // overlay composited over a half-covered edge pixel lifts it across any threshold you care to pick.
+        (int Top, int Bottom, int Left, int Right, int TopEdge, int BottomEdge) Sample(double amount, bool rising)
         {
             visualSettings.NoteBodyGradient = amount;
             stage.SetVisualSettings(visualSettings);
@@ -6198,11 +6201,20 @@ internal static partial class VerificationSuite
             int Offset(int x, int y) => (y * 1000 + x) * 4;
             int Sum(int offset) => pixels[offset] + pixels[offset + 1] + pixels[offset + 2];
             var centre = (int)(body.X + body.Width / 2);
-            var opaque = 0;
-            for (var index = 3; index < pixels.Length; index += 4) if (pixels[index] > 200) opaque++;
+            var left = 1000; var right = -1; var topEdge = 600; var bottomEdge = -1;
+            for (var y = 0; y < 600; y++)
+                for (var x = 0; x < 1000; x++)
+                {
+                    if (pixels[Offset(x, y) + 3] <= 8) continue;
+                    if (x < left) left = x;
+                    if (x > right) right = x;
+                    if (y < topEdge) topEdge = y;
+                    if (y > bottomEdge) bottomEdge = y;
+                }
             // Four pixels in from each end: far enough to be inside the body, near enough that the
             // gradient's own ramp has not begun to lift the head end yet.
-            return (Sum(Offset(centre, (int)body.Top + 4)), Sum(Offset(centre, (int)body.Bottom - 4)), opaque);
+            return (Sum(Offset(centre, (int)body.Top + 4)), Sum(Offset(centre, (int)body.Bottom - 4)),
+                left, right, topEdge, bottomEdge);
         }
 
         var flat = Sample(0, false);
@@ -6219,10 +6231,11 @@ internal static partial class VerificationSuite
             $"The head keeps the note's own colour: only the tail lifts towards white (bottom {flat.Bottom} before, {falling.Bottom} after).");
         Assert(Math.Abs(rising.Top - flat.Top) <= 6,
             $"The same head keeps its colour when the note rises (top {flat.Top} before, {rising.Top} after).");
-        // The tolerance is a handful of anti-aliased edge pixels, which can cross the alpha threshold once the
-        // overlay is composited over them; a gradient that escaped the body would add hundreds.
-        Assert(Math.Abs(falling.Opaque - flat.Opaque) <= 24,
-            $"The gradient is an overlay clipped to the body, so the silhouette cannot change ({flat.Opaque} opaque pixels before, {falling.Opaque} after).");
+        // One pixel of slack for the anti-aliased rim, which the overlay can nudge by a fraction; an overlay
+        // that escaped the body would push an edge out by the whole gradient.
+        Assert(Math.Abs(falling.Left - flat.Left) <= 1 && Math.Abs(falling.Right - flat.Right) <= 1
+                && Math.Abs(falling.TopEdge - flat.TopEdge) <= 1 && Math.Abs(falling.BottomEdge - flat.BottomEdge) <= 1,
+            $"The gradient is an overlay clipped to the body, so the silhouette cannot move (left {flat.Left}->{falling.Left}, right {flat.Right}->{falling.Right}, top {flat.TopEdge}->{falling.TopEdge}, bottom {flat.BottomEdge}->{falling.BottomEdge}).");
         visualSettings.CopyFrom(saved);
         stage.SetVisualSettings(visualSettings);
     }
