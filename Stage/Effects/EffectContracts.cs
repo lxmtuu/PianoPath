@@ -310,11 +310,11 @@ internal static class EffectContractCatalog
     private static readonly EffectParameterBindingProfile WpfOnlyRefractionBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Ignored,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
-    // The head-to-tail gradient is drawn by the WPF stage alone: it is one overlay in DrawConfiguredNote, and
-    // neither the GPU note shader nor the AR note quads read NoteBodyGradient. Ignored is the honest state
-    // there - not Applied, and not a fallback that quietly approximates it.
-    private static readonly EffectParameterBindingProfile WpfOnlyNoteBodyGradientBindings = new(
-        EffectParameterBindingState.Applied, EffectParameterBindingState.Ignored,
+    // The head-to-tail gradient is drawn by the WPF stage and by the GPU note shader, both from the note's own
+    // colour. The AR note quads do not read it at all - Ignored is the honest state there, not Applied, and
+    // not a fallback that quietly approximates it.
+    private static readonly EffectParameterBindingProfile NoteBodyGradientBindings = new(
+        EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
     private static readonly EffectCostAssessment UnmeasuredCost = new(EffectCostState.Unmeasured);
 
@@ -578,11 +578,12 @@ internal static class EffectContractCatalog
             EffectClock.None, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Percentage("NoteBodyGradient", 0, 100, WpfOnlyNoteBodyGradientBindings),
+                Percentage("NoteBodyGradient", 0, 100, NoteBodyGradientBindings),
             }),
-            // One overlay clipped to the note body in the WPF stage. The GPU shader and the AR quads are
-            // Unsupported rather than Unverified: there is no code path to verify yet.
-            new EffectCapabilityProfile(Native, Unsupported, Unverified, Unsupported),
+            // One overlay clipped to the note body in the WPF stage, one lerp on the shared colour in the GPU
+            // note shader. The GPU is Unverified, not Native: the shader reads it and the WARP jobs draw notes
+            // through it, but no per-value matrix measures it. AR has no code path at all.
+            new EffectCapabilityProfile(Native, Unverified, Unverified, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(

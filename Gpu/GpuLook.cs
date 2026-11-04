@@ -35,6 +35,8 @@ internal sealed class GpuLook
     public float NoteHeadGlow { get; init; } = .4f;
     public float NoteRefraction { get; init; } = .35f;
     public float NoteTexture { get; init; } = .6f;
+    /// <summary>Head-to-tail lift across the note body, 0-1 (0 keeps the body flat).</summary>
+    public float NoteBodyGradient { get; init; }
     public bool NoteSatin { get; init; }
     public bool Notes3D { get; init; } = true;
     /// <summary>Note names printed inside the bars when there is room (Style → SHAPE &amp; STYLE).</summary>
@@ -396,6 +398,7 @@ internal sealed class GpuLook
             NoteWidth = P(s.NoteWidth), NoteMinLength = (float)s.NoteMinLength, NoteGap = (float)Math.Min(s.NoteGap, 12),
             NoteRoundness = P(s.NoteRoundness), NoteEdgeWidth = P(s.NoteEdgeWidth), NoteGlow = P(s.NoteGlow), NoteTint = P(s.NoteTint),
             NoteEdge = P(s.NoteEdge), NoteHeadGlow = P(s.NoteHeadGlow), NoteRefraction = P(s.NoteRefraction), NoteTexture = P(s.NoteTexture),
+            NoteBodyGradient = P(s.NoteBodyGradient),
             NoteSatin = s.NoteSatin && s.NoteStyle is "Solid" or "Glass",
             Notes3D = s.Notes3D, ShowNoteLabels = s.ShowNoteLabels,
             ShowWatermark = s.ShowWatermark,
