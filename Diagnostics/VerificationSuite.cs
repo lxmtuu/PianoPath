@@ -6204,6 +6204,10 @@ internal static partial class VerificationSuite
         // Everything that could move a colour on its own is off, and the palette is one flat colour, so the
         // gradient is the only thing allowed to differ between the two ends of the body.
         visualSettings.NoteStyle = "Solid"; visualSettings.NoteGlow = 0; visualSettings.NoteHeadGlow = 0;
+        // Notes3D off as well: its bevel already brightens one end, and a pixel that starts near white
+        // leaves the gradient almost no headroom - measured against it, the lift looked like a fifth of
+        // what it is. Flat body, so the only thing that can vary from end to end is the gradient.
+        visualSettings.Notes3D = false;
         visualSettings.BloomSize = 0; visualSettings.ShowNoteLabels = false; visualSettings.FallingPulse = false;
         visualSettings.FallingTrail = "None"; visualSettings.FallingGhost = false; visualSettings.HoldVibration = false;
         visualSettings.HoldColorCycle = false; visualSettings.HoldBar = false; visualSettings.NoteShimmer = false;
