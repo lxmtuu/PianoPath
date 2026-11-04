@@ -311,11 +311,12 @@ internal static class EffectContractCatalog
         EffectParameterBindingState.Applied, EffectParameterBindingState.Ignored,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
     // The head-to-tail gradient is drawn by the WPF stage and by the GPU note shader, both from the note's own
-    // colour. The AR note quads do not read it at all - Ignored is the honest state there, not Applied, and
-    // not a fallback that quietly approximates it.
+    // colour. AR reaches the same lerp through the shared material, so its state is Unverified rather than
+    // Ignored: read by code that has never been measured per value, not a fallback that quietly approximates
+    // it, and not a claim that AR's direction has been checked.
     private static readonly EffectParameterBindingProfile NoteBodyGradientBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
-        EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
     private static readonly EffectCostAssessment UnmeasuredCost = new(EffectCostState.Unmeasured);
 
     // Manual-review record of the physical-adapter probe (2026-10-07, AMD Radeon(TM) Graphics, iGPU):
@@ -581,9 +582,12 @@ internal static class EffectContractCatalog
                 Percentage("NoteBodyGradient", 0, 100, NoteBodyGradientBindings),
             }),
             // One overlay clipped to the note body in the WPF stage, one lerp on the shared colour in the GPU
-            // note shader. The GPU is Unverified, not Native: the shader reads it and the WARP jobs draw notes
-            // through it, but no per-value matrix measures it. AR has no code path at all.
-            new EffectCapabilityProfile(Native, Unverified, Unverified, Unsupported),
+            // note shader - and therefore on AR too, because PsArQuad shades its projected quads with the same
+            // ShadeNoteMaterial. GPU and AR stay Unverified, not Native: the shader reads it and the WARP jobs
+            // draw notes through it, but no per-value matrix measures it, and PsArQuad pins the travel
+            // direction (note.Misc.z = 1.0) instead of deriving it, so how the gradient sits on a tilted
+            // projected note has never been looked at.
+            new EffectCapabilityProfile(Native, Unverified, Unverified, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(

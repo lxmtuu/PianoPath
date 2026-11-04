@@ -364,7 +364,7 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
 | ✅ **7 · Themes** | 7 combo themes thành preset có sẵn | (không thêm setting — chỉ preset) | `VisualPresets`: Fire/Ice/Galaxy/Sakura/Electric/Ocean/Retro |
 
 Đây là lịch sử thứ tự triển khai theo nhóm: Impact → Falling → Hold → Release → Ambient → Smart → Themes.
-Catalog hiện có 87 mục và **87 `Available`**: `falling.color-gradient` đã có renderer đầu–đuôi riêng (`NoteBodyGradient`: sân khấu phần mềm và shader nốt GPU đều vẽ; AR chưa đọc), nên không còn mục `Planned` nào; các nhãn còn lại vẫn chưa chứng minh
+Catalog hiện có 87 mục và **87 `Available`**: `falling.color-gradient` đã có renderer đầu–đuôi riêng (`NoteBodyGradient`: sân khấu phần mềm, shader nốt GPU và quad AR đều vẽ qua material dùng chung; GPU/AR chưa có ma trận đo theo giá trị), nên không còn mục `Planned` nào; các nhãn còn lại vẫn chưa chứng minh
 mỗi biến thể được test riêng, đồng nhất GPU/software hoặc có đường AR. Lộ trình kiểm chứng và
 chuẩn hóa tiếp theo nằm trong [`VISUAL-EFFECTS-MASTER-ROADMAP.md`](VISUAL-EFFECTS-MASTER-ROADMAP.md).
 

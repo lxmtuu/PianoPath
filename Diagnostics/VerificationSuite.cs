@@ -729,8 +729,8 @@ internal static partial class VerificationSuite
     private static void VerifyFallingPilot()
     {
         var pilot = EffectContractCatalog.FallingFxPilot;
-        Assert(EffectContractCatalog.IsFallingPilotWellFormed && pilot.Count == 3,
-            "The falling-FX pilot should contain the three well-formed, uniquely identified families.");
+        Assert(EffectContractCatalog.IsFallingPilotWellFormed && pilot.Count == 4,
+            "The falling-FX pilot should contain the four well-formed, uniquely identified families.");
         var byId = pilot.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
         Assert(byId["falling.trail"].Capabilities.WpfStage.State == EffectBackendState.Native
                 && byId["falling.trail"].Capabilities.GpuStage.State == EffectBackendState.Native
@@ -742,6 +742,15 @@ internal static partial class VerificationSuite
                 && byId["falling.shimmer"].Parameters.All(parameter => parameter.Bindings.WpfStage == EffectParameterBindingState.Ignored
                     && parameter.Bindings.GpuStage == EffectParameterBindingState.Applied),
             "The shimmer must stay honest: GPU-native, and Unsupported/ignored on the WPF stage that never reads NoteShimmer.");
+        Assert(byId["falling.body.gradient"].Capabilities.WpfStage.State == EffectBackendState.Native
+                && byId["falling.body.gradient"].Capabilities.GpuStage.State == EffectBackendState.Unverified
+                && byId["falling.body.gradient"].Capabilities.ArOverlay.State == EffectBackendState.Unverified
+                && byId["falling.body.gradient"].Parameters.All(parameter => parameter.Bindings.WpfStage == EffectParameterBindingState.Applied
+                    && parameter.Bindings.GpuStage == EffectParameterBindingState.Applied
+                    && parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
+            "The body gradient reaches all three: a WPF overlay, and the shared note material that both the stage shader and the AR quads shade through. GPU and AR stay Unverified because no per-value matrix measures either.");
+        Assert(byId["falling.body.gradient"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation,
+            "The gradient rides the note's travel, so it holds no animation of its own for Reduced Motion to freeze.");
         Assert(byId["falling.trail"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
                 && byId["falling.pulse"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation
                 && byId["falling.shimmer"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation,
@@ -773,7 +782,7 @@ internal static partial class VerificationSuite
                 Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
             }
         }
-        Results.Add("PASS falling-FX contract metadata: trail/ghost travel-derived, pulse/shimmer own their clock and freeze under Reduced Motion, the shimmer is honestly GPU-only with WPF Unsupported, the shimmer's flash risk resolves conservatively, and no cost is invented. Metadata coherence only; no renderer changed.");
+        Results.Add("PASS falling-FX contract metadata: trail/ghost and the body gradient travel-derived, pulse/shimmer own their clock and freeze under Reduced Motion, the shimmer is honestly GPU-only with WPF Unsupported, the body gradient is drawn by all three backends and stays Unverified on GPU and AR, the shimmer's flash risk resolves conservatively, and no cost is invented. Metadata coherence only; no renderer changed.");
     }
 
     /// <summary>
