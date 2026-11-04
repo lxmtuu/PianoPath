@@ -143,7 +143,7 @@ def main() -> int:
             "ar_fall": 1.5, "ar_reach": 4.0, "ar_width": .86, "ar_release": .35, "ar_live_reach_s": 3.0, "ar_lookahead_s": 3.0,
             "wpf_ring_cap": 64, "wpf_flash_cap": 32, "gpu_ring_cap": 96, "gpu_flash_cap": 48,
             "wpf_flash_life": .38, "gpu_flash_life_0": .38, "gpu_flash_life_other": .26,
-            "ids": 87, "available": 86, "planned": 1,
+            "ids": 87, "available": 87, "planned": 0,
             "max_note_seconds": 20.0, "black_fill": .98,
             "enter_fade_share": .06, "shader_enter_share": .06,
         }
