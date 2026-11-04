@@ -583,11 +583,12 @@ internal static class EffectContractCatalog
             }),
             // One overlay clipped to the note body in the WPF stage, one lerp on the shared colour in the GPU
             // note shader - and therefore on AR too, because PsArQuad shades its projected quads with the same
-            // ShadeNoteMaterial. GPU and AR stay Unverified, not Native: the shader reads it and the WARP jobs
+            // ShadeNoteMaterial. Recording is Native: the family has its own paired GPU recording capture, which
+            // is what that state means here. GPU and AR stay Unverified: the shader reads it and the WARP jobs
             // draw notes through it, but no per-value matrix measures it, and PsArQuad pins the travel
             // direction (note.Misc.z = 1.0) instead of deriving it, so how the gradient sits on a tilted
             // projected note has never been looked at.
-            new EffectCapabilityProfile(Native, Unverified, Unverified, Unverified),
+            new EffectCapabilityProfile(Native, Unverified, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(

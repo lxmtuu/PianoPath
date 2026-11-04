@@ -4221,11 +4221,11 @@ internal static partial class VerificationSuite
     {
         var fixtures = EffectRecordingFixtures.All;
         var families = EffectContractCatalog.AllFamilies;
-        Assert(fixtures.Count == 24
+        Assert(fixtures.Count == 25
                 && fixtures.Select(fixture => fixture.FamilyId).Distinct(StringComparer.Ordinal).Count() == fixtures.Count
                 && fixtures.Select(fixture => fixture.FamilyId).OrderBy(id => id, StringComparer.Ordinal)
                     .SequenceEqual(families.Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal)),
-            "WPF recording capture fixtures must cover each of the 24 typed families exactly once before backend filtering.");
+            "WPF recording capture fixtures must cover each of the 25 typed families exactly once before backend filtering.");
         Assert(!stage.UsesGpuFrame,
             "The WPF PNG family captures must exercise the software-stage renderer, not a cached GPU preview.");
 
