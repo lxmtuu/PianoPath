@@ -6191,20 +6191,25 @@ internal static partial class VerificationSuite
             var centre = (int)(body.X + body.Width / 2);
             var opaque = 0;
             for (var index = 3; index < pixels.Length; index += 4) if (pixels[index] > 200) opaque++;
-            return (Sum(Offset(centre, (int)body.Top + 12)), Sum(Offset(centre, (int)body.Bottom - 12)), opaque);
+            // Four pixels in from each end: far enough to be inside the body, near enough that the
+            // gradient's own ramp has not begun to lift the head end yet.
+            return (Sum(Offset(centre, (int)body.Top + 4)), Sum(Offset(centre, (int)body.Bottom - 4)), opaque);
         }
 
         var flat = Sample(0, false);
         var falling = Sample(100, false);
         var rising = Sample(100, true);
-        Assert(Math.Abs(flat.Top - flat.Bottom) <= 6,
-            $"With the gradient off the body should be one colour from end to end (top {flat.Top}, bottom {flat.Bottom}).");
-        Assert(falling.Top - falling.Bottom >= 90,
-            $"A falling note reaches the keys bottom-first, so its tail is the top end and that end brightens (top {falling.Top}, bottom {falling.Bottom}).");
-        Assert(rising.Bottom - rising.Top >= 90,
-            $"A rising note travels the other way, so the gradient has to flip with it (top {rising.Top}, bottom {rising.Bottom}).");
+        // Every comparison is against the same pixel with the gradient off, never against the other end of
+        // the body: the solid style carries its own bevel gradient, so "the two ends match with the gradient
+        // off" would be a test of that bevel rather than of this effect.
+        Assert(falling.Top - flat.Top >= 90,
+            $"A falling note reaches the keys bottom-first, so its tail is the top end and that end has to lift (top {flat.Top} before, {falling.Top} after).");
+        Assert(rising.Bottom - flat.Bottom >= 90,
+            $"A rising note travels the other way, so the gradient has to flip with it (bottom {flat.Bottom} before, {rising.Bottom} after).");
         Assert(Math.Abs(falling.Bottom - flat.Bottom) <= 6,
-            $"The head should keep the note's own colour: only the tail lifts towards white (was {flat.Bottom}, now {falling.Bottom}).");
+            $"The head keeps the note's own colour: only the tail lifts towards white (bottom {flat.Bottom} before, {falling.Bottom} after).");
+        Assert(Math.Abs(rising.Top - flat.Top) <= 6,
+            $"The same head keeps its colour when the note rises (top {flat.Top} before, {rising.Top} after).");
         // The tolerance is a handful of anti-aliased edge pixels, which can cross the alpha threshold once the
         // overlay is composited over them; a gradient that escaped the body would add hundreds.
         Assert(Math.Abs(falling.Opaque - flat.Opaque) <= 24,
